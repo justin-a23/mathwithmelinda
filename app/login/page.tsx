@@ -2,16 +2,25 @@
 
 import { Authenticator } from '@aws-amplify/ui-react'
 import '@aws-amplify/ui-react/styles.css'
+import { useRouter } from 'next/navigation'
+import { useEffect } from 'react'
+import { useAuthenticator } from '@aws-amplify/ui-react'
+
+function RedirectIfAuthenticated() {
+  const { user } = useAuthenticator()
+  const router = useRouter()
+
+  useEffect(() => {
+    if (user) router.push('/dashboard')
+  }, [user, router])
+
+  return null
+}
 
 export default function LoginPage() {
   return (
     <Authenticator>
-      {({ signOut, user }) => (
-        <main>
-          <h1>Welcome, {user?.signInDetails?.loginId}</h1>
-          <button onClick={signOut}>Sign out</button>
-        </main>
-      )}
+      {() => <RedirectIfAuthenticated />}
     </Authenticator>
   )
 }

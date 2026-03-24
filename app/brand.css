@@ -1,0 +1,15 @@
+:root {
+  --plum: #7B4FA6;
+  --plum-light: #EFE6F8;
+  --plum-dark: #4E2B72;
+  --plum-mid: #A478C8;
+  --charcoal: #1E1E2E;
+  --gray-dark: #3C3C50;
+  --gray-mid: #7A7A96;
+  --gray-light: #EBEBF3;
+  --white: #FAFAFA;
+  --accent: #F2C94C;
+  --font-display: 'DM Serif Display', Georgia, serif;
+  --font-body: 'DM Sans', system-ui, sans-serif;
+  --radius: 10px;
+}
