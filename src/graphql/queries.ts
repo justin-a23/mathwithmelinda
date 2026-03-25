@@ -8,12 +8,108 @@ type GeneratedQuery<InputType, OutputType> = string & {
   __generatedQueryOutput: OutputType;
 };
 
+export const getAcademicYear = /* GraphQL */ `query GetAcademicYear($id: ID!) {
+  getAcademicYear(id: $id) {
+    id
+    year
+    semesters {
+      nextToken
+      __typename
+    }
+    createdAt
+    updatedAt
+    __typename
+  }
+}
+` as GeneratedQuery<
+  APITypes.GetAcademicYearQueryVariables,
+  APITypes.GetAcademicYearQuery
+>;
+export const listAcademicYears = /* GraphQL */ `query ListAcademicYears(
+  $filter: ModelAcademicYearFilterInput
+  $limit: Int
+  $nextToken: String
+) {
+  listAcademicYears(filter: $filter, limit: $limit, nextToken: $nextToken) {
+    items {
+      id
+      year
+      createdAt
+      updatedAt
+      __typename
+    }
+    nextToken
+    __typename
+  }
+}
+` as GeneratedQuery<
+  APITypes.ListAcademicYearsQueryVariables,
+  APITypes.ListAcademicYearsQuery
+>;
+export const getSemester = /* GraphQL */ `query GetSemester($id: ID!) {
+  getSemester(id: $id) {
+    id
+    name
+    startDate
+    endDate
+    isActive
+    academicYear {
+      id
+      year
+      createdAt
+      updatedAt
+      __typename
+    }
+    enrollments {
+      nextToken
+      __typename
+    }
+    weeklyPlans {
+      nextToken
+      __typename
+    }
+    createdAt
+    updatedAt
+    academicYearSemestersId
+    __typename
+  }
+}
+` as GeneratedQuery<
+  APITypes.GetSemesterQueryVariables,
+  APITypes.GetSemesterQuery
+>;
+export const listSemesters = /* GraphQL */ `query ListSemesters(
+  $filter: ModelSemesterFilterInput
+  $limit: Int
+  $nextToken: String
+) {
+  listSemesters(filter: $filter, limit: $limit, nextToken: $nextToken) {
+    items {
+      id
+      name
+      startDate
+      endDate
+      isActive
+      createdAt
+      updatedAt
+      academicYearSemestersId
+      __typename
+    }
+    nextToken
+    __typename
+  }
+}
+` as GeneratedQuery<
+  APITypes.ListSemestersQueryVariables,
+  APITypes.ListSemestersQuery
+>;
 export const getCourse = /* GraphQL */ `query GetCourse($id: ID!) {
   getCourse(id: $id) {
     id
     title
     description
     gradeLevel
+    isArchived
     lessons {
       nextToken
       __typename
@@ -23,6 +119,10 @@ export const getCourse = /* GraphQL */ `query GetCourse($id: ID!) {
       __typename
     }
     enrollments {
+      nextToken
+      __typename
+    }
+    weeklyPlans {
       nextToken
       __typename
     }
@@ -43,6 +143,7 @@ export const listCourses = /* GraphQL */ `query ListCourses(
       title
       description
       gradeLevel
+      isArchived
       createdAt
       updatedAt
       __typename
@@ -61,13 +162,19 @@ export const getLesson = /* GraphQL */ `query GetLesson($id: ID!) {
     title
     videoUrl
     order
+    isPublished
     course {
       id
       title
       description
       gradeLevel
+      isArchived
       createdAt
       updatedAt
+      __typename
+    }
+    weeklyPlanItems {
+      nextToken
       __typename
     }
     createdAt
@@ -88,6 +195,7 @@ export const listLessons = /* GraphQL */ `query ListLessons(
       title
       videoUrl
       order
+      isPublished
       createdAt
       updatedAt
       courseLessonsId
@@ -101,6 +209,135 @@ export const listLessons = /* GraphQL */ `query ListLessons(
   APITypes.ListLessonsQueryVariables,
   APITypes.ListLessonsQuery
 >;
+export const getWeeklyPlan = /* GraphQL */ `query GetWeeklyPlan($id: ID!) {
+  getWeeklyPlan(id: $id) {
+    id
+    weekStartDate
+    semester {
+      id
+      name
+      startDate
+      endDate
+      isActive
+      createdAt
+      updatedAt
+      academicYearSemestersId
+      __typename
+    }
+    course {
+      id
+      title
+      description
+      gradeLevel
+      isArchived
+      createdAt
+      updatedAt
+      __typename
+    }
+    items {
+      nextToken
+      __typename
+    }
+    createdAt
+    updatedAt
+    semesterWeeklyPlansId
+    courseWeeklyPlansId
+    __typename
+  }
+}
+` as GeneratedQuery<
+  APITypes.GetWeeklyPlanQueryVariables,
+  APITypes.GetWeeklyPlanQuery
+>;
+export const listWeeklyPlans = /* GraphQL */ `query ListWeeklyPlans(
+  $filter: ModelWeeklyPlanFilterInput
+  $limit: Int
+  $nextToken: String
+) {
+  listWeeklyPlans(filter: $filter, limit: $limit, nextToken: $nextToken) {
+    items {
+      id
+      weekStartDate
+      createdAt
+      updatedAt
+      semesterWeeklyPlansId
+      courseWeeklyPlansId
+      __typename
+    }
+    nextToken
+    __typename
+  }
+}
+` as GeneratedQuery<
+  APITypes.ListWeeklyPlansQueryVariables,
+  APITypes.ListWeeklyPlansQuery
+>;
+export const getWeeklyPlanItem = /* GraphQL */ `query GetWeeklyPlanItem($id: ID!) {
+  getWeeklyPlanItem(id: $id) {
+    id
+    dayOfWeek
+    dueTime
+    isPublished
+    lesson {
+      id
+      title
+      videoUrl
+      order
+      isPublished
+      createdAt
+      updatedAt
+      courseLessonsId
+      __typename
+    }
+    weeklyPlan {
+      id
+      weekStartDate
+      createdAt
+      updatedAt
+      semesterWeeklyPlansId
+      courseWeeklyPlansId
+      __typename
+    }
+    assignments {
+      nextToken
+      __typename
+    }
+    createdAt
+    updatedAt
+    lessonWeeklyPlanItemsId
+    weeklyPlanItemsId
+    __typename
+  }
+}
+` as GeneratedQuery<
+  APITypes.GetWeeklyPlanItemQueryVariables,
+  APITypes.GetWeeklyPlanItemQuery
+>;
+export const listWeeklyPlanItems = /* GraphQL */ `query ListWeeklyPlanItems(
+  $filter: ModelWeeklyPlanItemFilterInput
+  $limit: Int
+  $nextToken: String
+) {
+  listWeeklyPlanItems(filter: $filter, limit: $limit, nextToken: $nextToken) {
+    items {
+      id
+      dayOfWeek
+      dueTime
+      isPublished
+      createdAt
+      updatedAt
+      lessonWeeklyPlanItemsId
+      weeklyPlanItemsId
+      __typename
+    }
+    nextToken
+    __typename
+  }
+}
+` as GeneratedQuery<
+  APITypes.ListWeeklyPlanItemsQueryVariables,
+  APITypes.ListWeeklyPlanItemsQuery
+>;
 export const getAssignment = /* GraphQL */ `query GetAssignment($id: ID!) {
   getAssignment(id: $id) {
     id
@@ -112,6 +349,7 @@ export const getAssignment = /* GraphQL */ `query GetAssignment($id: ID!) {
       title
       description
       gradeLevel
+      isArchived
       createdAt
       updatedAt
       __typename
@@ -123,6 +361,7 @@ export const getAssignment = /* GraphQL */ `query GetAssignment($id: ID!) {
     createdAt
     updatedAt
     courseAssignmentsId
+    weeklyPlanItemAssignmentsId
     __typename
   }
 }
@@ -144,6 +383,7 @@ export const listAssignments = /* GraphQL */ `query ListAssignments(
       createdAt
       updatedAt
       courseAssignmentsId
+      weeklyPlanItemAssignmentsId
       __typename
     }
     nextToken
@@ -161,6 +401,7 @@ export const getSubmission = /* GraphQL */ `query GetSubmission($id: ID!) {
     content
     grade
     submittedAt
+    teacherComment
     assignment {
       id
       title
@@ -169,6 +410,7 @@ export const getSubmission = /* GraphQL */ `query GetSubmission($id: ID!) {
       createdAt
       updatedAt
       courseAssignmentsId
+      weeklyPlanItemAssignmentsId
       __typename
     }
     createdAt
@@ -193,6 +435,7 @@ export const listSubmissions = /* GraphQL */ `query ListSubmissions(
       content
       grade
       submittedAt
+      teacherComment
       createdAt
       updatedAt
       assignmentSubmissionsId
@@ -210,17 +453,31 @@ export const getEnrollment = /* GraphQL */ `query GetEnrollment($id: ID!) {
   getEnrollment(id: $id) {
     id
     studentId
+    planType
     course {
       id
       title
       description
       gradeLevel
+      isArchived
       createdAt
       updatedAt
       __typename
     }
+    semester {
+      id
+      name
+      startDate
+      endDate
+      isActive
+      createdAt
+      updatedAt
+      academicYearSemestersId
+      __typename
+    }
     createdAt
     updatedAt
+    semesterEnrollmentsId
     courseEnrollmentsId
     __typename
   }
@@ -238,8 +495,10 @@ export const listEnrollments = /* GraphQL */ `query ListEnrollments(
     items {
       id
       studentId
+      planType
       createdAt
       updatedAt
+      semesterEnrollmentsId
       courseEnrollmentsId
       __typename
     }

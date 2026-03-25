@@ -1,13 +1,32 @@
 input AMPLIFY { globalAuthRule: AuthRule = { allow: public } }
 
+type AcademicYear @model {
+  id: ID!
+  year: String!
+  semesters: [Semester] @hasMany
+}
+
+type Semester @model {
+  id: ID!
+  name: String!
+  startDate: String!
+  endDate: String!
+  isActive: Boolean
+  academicYear: AcademicYear @belongsTo
+  enrollments: [Enrollment] @hasMany
+  weeklyPlans: [WeeklyPlan] @hasMany
+}
+
 type Course @model {
   id: ID!
   title: String!
   description: String
   gradeLevel: String
+  isArchived: Boolean
   lessons: [Lesson] @hasMany
   assignments: [Assignment] @hasMany
   enrollments: [Enrollment] @hasMany
+  weeklyPlans: [WeeklyPlan] @hasMany
 }
 
 type Lesson @model {
@@ -15,7 +34,27 @@ type Lesson @model {
   title: String!
   videoUrl: String
   order: Int
+  isPublished: Boolean
   course: Course @belongsTo
+  weeklyPlanItems: [WeeklyPlanItem] @hasMany
+}
+
+type WeeklyPlan @model {
+  id: ID!
+  weekStartDate: String!
+  semester: Semester @belongsTo
+  course: Course @belongsTo
+  items: [WeeklyPlanItem] @hasMany
+}
+
+type WeeklyPlanItem @model {
+  id: ID!
+  dayOfWeek: String!
+  dueTime: String
+  isPublished: Boolean
+  lesson: Lesson @belongsTo
+  weeklyPlan: WeeklyPlan @belongsTo
+  assignments: [Assignment] @hasMany
 }
 
 type Assignment @model {
@@ -33,11 +72,14 @@ type Submission @model {
   content: String
   grade: String
   submittedAt: String
+  teacherComment: String
   assignment: Assignment @belongsTo
 }
 
 type Enrollment @model {
   id: ID!
   studentId: String!
+  planType: String
   course: Course @belongsTo
+  semester: Semester @belongsTo
 }

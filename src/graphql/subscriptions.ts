@@ -8,12 +8,166 @@ type GeneratedSubscription<InputType, OutputType> = string & {
   __generatedSubscriptionOutput: OutputType;
 };
 
+export const onCreateAcademicYear = /* GraphQL */ `subscription OnCreateAcademicYear(
+  $filter: ModelSubscriptionAcademicYearFilterInput
+) {
+  onCreateAcademicYear(filter: $filter) {
+    id
+    year
+    semesters {
+      nextToken
+      __typename
+    }
+    createdAt
+    updatedAt
+    __typename
+  }
+}
+` as GeneratedSubscription<
+  APITypes.OnCreateAcademicYearSubscriptionVariables,
+  APITypes.OnCreateAcademicYearSubscription
+>;
+export const onUpdateAcademicYear = /* GraphQL */ `subscription OnUpdateAcademicYear(
+  $filter: ModelSubscriptionAcademicYearFilterInput
+) {
+  onUpdateAcademicYear(filter: $filter) {
+    id
+    year
+    semesters {
+      nextToken
+      __typename
+    }
+    createdAt
+    updatedAt
+    __typename
+  }
+}
+` as GeneratedSubscription<
+  APITypes.OnUpdateAcademicYearSubscriptionVariables,
+  APITypes.OnUpdateAcademicYearSubscription
+>;
+export const onDeleteAcademicYear = /* GraphQL */ `subscription OnDeleteAcademicYear(
+  $filter: ModelSubscriptionAcademicYearFilterInput
+) {
+  onDeleteAcademicYear(filter: $filter) {
+    id
+    year
+    semesters {
+      nextToken
+      __typename
+    }
+    createdAt
+    updatedAt
+    __typename
+  }
+}
+` as GeneratedSubscription<
+  APITypes.OnDeleteAcademicYearSubscriptionVariables,
+  APITypes.OnDeleteAcademicYearSubscription
+>;
+export const onCreateSemester = /* GraphQL */ `subscription OnCreateSemester($filter: ModelSubscriptionSemesterFilterInput) {
+  onCreateSemester(filter: $filter) {
+    id
+    name
+    startDate
+    endDate
+    isActive
+    academicYear {
+      id
+      year
+      createdAt
+      updatedAt
+      __typename
+    }
+    enrollments {
+      nextToken
+      __typename
+    }
+    weeklyPlans {
+      nextToken
+      __typename
+    }
+    createdAt
+    updatedAt
+    academicYearSemestersId
+    __typename
+  }
+}
+` as GeneratedSubscription<
+  APITypes.OnCreateSemesterSubscriptionVariables,
+  APITypes.OnCreateSemesterSubscription
+>;
+export const onUpdateSemester = /* GraphQL */ `subscription OnUpdateSemester($filter: ModelSubscriptionSemesterFilterInput) {
+  onUpdateSemester(filter: $filter) {
+    id
+    name
+    startDate
+    endDate
+    isActive
+    academicYear {
+      id
+      year
+      createdAt
+      updatedAt
+      __typename
+    }
+    enrollments {
+      nextToken
+      __typename
+    }
+    weeklyPlans {
+      nextToken
+      __typename
+    }
+    createdAt
+    updatedAt
+    academicYearSemestersId
+    __typename
+  }
+}
+` as GeneratedSubscription<
+  APITypes.OnUpdateSemesterSubscriptionVariables,
+  APITypes.OnUpdateSemesterSubscription
+>;
+export const onDeleteSemester = /* GraphQL */ `subscription OnDeleteSemester($filter: ModelSubscriptionSemesterFilterInput) {
+  onDeleteSemester(filter: $filter) {
+    id
+    name
+    startDate
+    endDate
+    isActive
+    academicYear {
+      id
+      year
+      createdAt
+      updatedAt
+      __typename
+    }
+    enrollments {
+      nextToken
+      __typename
+    }
+    weeklyPlans {
+      nextToken
+      __typename
+    }
+    createdAt
+    updatedAt
+    academicYearSemestersId
+    __typename
+  }
+}
+` as GeneratedSubscription<
+  APITypes.OnDeleteSemesterSubscriptionVariables,
+  APITypes.OnDeleteSemesterSubscription
+>;
 export const onCreateCourse = /* GraphQL */ `subscription OnCreateCourse($filter: ModelSubscriptionCourseFilterInput) {
   onCreateCourse(filter: $filter) {
     id
     title
     description
     gradeLevel
+    isArchived
     lessons {
       nextToken
       __typename
@@ -23,6 +177,10 @@ export const onCreateCourse = /* GraphQL */ `subscription OnCreateCourse($filter
       __typename
     }
     enrollments {
+      nextToken
+      __typename
+    }
+    weeklyPlans {
       nextToken
       __typename
     }
@@ -41,6 +199,7 @@ export const onUpdateCourse = /* GraphQL */ `subscription OnUpdateCourse($filter
     title
     description
     gradeLevel
+    isArchived
     lessons {
       nextToken
       __typename
@@ -50,6 +209,10 @@ export const onUpdateCourse = /* GraphQL */ `subscription OnUpdateCourse($filter
       __typename
     }
     enrollments {
+      nextToken
+      __typename
+    }
+    weeklyPlans {
       nextToken
       __typename
     }
@@ -68,6 +231,7 @@ export const onDeleteCourse = /* GraphQL */ `subscription OnDeleteCourse($filter
     title
     description
     gradeLevel
+    isArchived
     lessons {
       nextToken
       __typename
@@ -77,6 +241,10 @@ export const onDeleteCourse = /* GraphQL */ `subscription OnDeleteCourse($filter
       __typename
     }
     enrollments {
+      nextToken
+      __typename
+    }
+    weeklyPlans {
       nextToken
       __typename
     }
@@ -95,13 +263,19 @@ export const onCreateLesson = /* GraphQL */ `subscription OnCreateLesson($filter
     title
     videoUrl
     order
+    isPublished
     course {
       id
       title
       description
       gradeLevel
+      isArchived
       createdAt
       updatedAt
+      __typename
+    }
+    weeklyPlanItems {
+      nextToken
       __typename
     }
     createdAt
@@ -120,13 +294,19 @@ export const onUpdateLesson = /* GraphQL */ `subscription OnUpdateLesson($filter
     title
     videoUrl
     order
+    isPublished
     course {
       id
       title
       description
       gradeLevel
+      isArchived
       createdAt
       updatedAt
+      __typename
+    }
+    weeklyPlanItems {
+      nextToken
       __typename
     }
     createdAt
@@ -145,13 +325,19 @@ export const onDeleteLesson = /* GraphQL */ `subscription OnDeleteLesson($filter
     title
     videoUrl
     order
+    isPublished
     course {
       id
       title
       description
       gradeLevel
+      isArchived
       createdAt
       updatedAt
+      __typename
+    }
+    weeklyPlanItems {
+      nextToken
       __typename
     }
     createdAt
@@ -163,6 +349,261 @@ export const onDeleteLesson = /* GraphQL */ `subscription OnDeleteLesson($filter
 ` as GeneratedSubscription<
   APITypes.OnDeleteLessonSubscriptionVariables,
   APITypes.OnDeleteLessonSubscription
+>;
+export const onCreateWeeklyPlan = /* GraphQL */ `subscription OnCreateWeeklyPlan(
+  $filter: ModelSubscriptionWeeklyPlanFilterInput
+) {
+  onCreateWeeklyPlan(filter: $filter) {
+    id
+    weekStartDate
+    semester {
+      id
+      name
+      startDate
+      endDate
+      isActive
+      createdAt
+      updatedAt
+      academicYearSemestersId
+      __typename
+    }
+    course {
+      id
+      title
+      description
+      gradeLevel
+      isArchived
+      createdAt
+      updatedAt
+      __typename
+    }
+    items {
+      nextToken
+      __typename
+    }
+    createdAt
+    updatedAt
+    semesterWeeklyPlansId
+    courseWeeklyPlansId
+    __typename
+  }
+}
+` as GeneratedSubscription<
+  APITypes.OnCreateWeeklyPlanSubscriptionVariables,
+  APITypes.OnCreateWeeklyPlanSubscription
+>;
+export const onUpdateWeeklyPlan = /* GraphQL */ `subscription OnUpdateWeeklyPlan(
+  $filter: ModelSubscriptionWeeklyPlanFilterInput
+) {
+  onUpdateWeeklyPlan(filter: $filter) {
+    id
+    weekStartDate
+    semester {
+      id
+      name
+      startDate
+      endDate
+      isActive
+      createdAt
+      updatedAt
+      academicYearSemestersId
+      __typename
+    }
+    course {
+      id
+      title
+      description
+      gradeLevel
+      isArchived
+      createdAt
+      updatedAt
+      __typename
+    }
+    items {
+      nextToken
+      __typename
+    }
+    createdAt
+    updatedAt
+    semesterWeeklyPlansId
+    courseWeeklyPlansId
+    __typename
+  }
+}
+` as GeneratedSubscription<
+  APITypes.OnUpdateWeeklyPlanSubscriptionVariables,
+  APITypes.OnUpdateWeeklyPlanSubscription
+>;
+export const onDeleteWeeklyPlan = /* GraphQL */ `subscription OnDeleteWeeklyPlan(
+  $filter: ModelSubscriptionWeeklyPlanFilterInput
+) {
+  onDeleteWeeklyPlan(filter: $filter) {
+    id
+    weekStartDate
+    semester {
+      id
+      name
+      startDate
+      endDate
+      isActive
+      createdAt
+      updatedAt
+      academicYearSemestersId
+      __typename
+    }
+    course {
+      id
+      title
+      description
+      gradeLevel
+      isArchived
+      createdAt
+      updatedAt
+      __typename
+    }
+    items {
+      nextToken
+      __typename
+    }
+    createdAt
+    updatedAt
+    semesterWeeklyPlansId
+    courseWeeklyPlansId
+    __typename
+  }
+}
+` as GeneratedSubscription<
+  APITypes.OnDeleteWeeklyPlanSubscriptionVariables,
+  APITypes.OnDeleteWeeklyPlanSubscription
+>;
+export const onCreateWeeklyPlanItem = /* GraphQL */ `subscription OnCreateWeeklyPlanItem(
+  $filter: ModelSubscriptionWeeklyPlanItemFilterInput
+) {
+  onCreateWeeklyPlanItem(filter: $filter) {
+    id
+    dayOfWeek
+    dueTime
+    isPublished
+    lesson {
+      id
+      title
+      videoUrl
+      order
+      isPublished
+      createdAt
+      updatedAt
+      courseLessonsId
+      __typename
+    }
+    weeklyPlan {
+      id
+      weekStartDate
+      createdAt
+      updatedAt
+      semesterWeeklyPlansId
+      courseWeeklyPlansId
+      __typename
+    }
+    assignments {
+      nextToken
+      __typename
+    }
+    createdAt
+    updatedAt
+    lessonWeeklyPlanItemsId
+    weeklyPlanItemsId
+    __typename
+  }
+}
+` as GeneratedSubscription<
+  APITypes.OnCreateWeeklyPlanItemSubscriptionVariables,
+  APITypes.OnCreateWeeklyPlanItemSubscription
+>;
+export const onUpdateWeeklyPlanItem = /* GraphQL */ `subscription OnUpdateWeeklyPlanItem(
+  $filter: ModelSubscriptionWeeklyPlanItemFilterInput
+) {
+  onUpdateWeeklyPlanItem(filter: $filter) {
+    id
+    dayOfWeek
+    dueTime
+    isPublished
+    lesson {
+      id
+      title
+      videoUrl
+      order
+      isPublished
+      createdAt
+      updatedAt
+      courseLessonsId
+      __typename
+    }
+    weeklyPlan {
+      id
+      weekStartDate
+      createdAt
+      updatedAt
+      semesterWeeklyPlansId
+      courseWeeklyPlansId
+      __typename
+    }
+    assignments {
+      nextToken
+      __typename
+    }
+    createdAt
+    updatedAt
+    lessonWeeklyPlanItemsId
+    weeklyPlanItemsId
+    __typename
+  }
+}
+` as GeneratedSubscription<
+  APITypes.OnUpdateWeeklyPlanItemSubscriptionVariables,
+  APITypes.OnUpdateWeeklyPlanItemSubscription
+>;
+export const onDeleteWeeklyPlanItem = /* GraphQL */ `subscription OnDeleteWeeklyPlanItem(
+  $filter: ModelSubscriptionWeeklyPlanItemFilterInput
+) {
+  onDeleteWeeklyPlanItem(filter: $filter) {
+    id
+    dayOfWeek
+    dueTime
+    isPublished
+    lesson {
+      id
+      title
+      videoUrl
+      order
+      isPublished
+      createdAt
+      updatedAt
+      courseLessonsId
+      __typename
+    }
+    weeklyPlan {
+      id
+      weekStartDate
+      createdAt
+      updatedAt
+      semesterWeeklyPlansId
+      courseWeeklyPlansId
+      __typename
+    }
+    assignments {
+      nextToken
+      __typename
+    }
+    createdAt
+    updatedAt
+    lessonWeeklyPlanItemsId
+    weeklyPlanItemsId
+    __typename
+  }
+}
+` as GeneratedSubscription<
+  APITypes.OnDeleteWeeklyPlanItemSubscriptionVariables,
+  APITypes.OnDeleteWeeklyPlanItemSubscription
 >;
 export const onCreateAssignment = /* GraphQL */ `subscription OnCreateAssignment(
   $filter: ModelSubscriptionAssignmentFilterInput
@@ -177,6 +618,7 @@ export const onCreateAssignment = /* GraphQL */ `subscription OnCreateAssignment
       title
       description
       gradeLevel
+      isArchived
       createdAt
       updatedAt
       __typename
@@ -188,6 +630,7 @@ export const onCreateAssignment = /* GraphQL */ `subscription OnCreateAssignment
     createdAt
     updatedAt
     courseAssignmentsId
+    weeklyPlanItemAssignmentsId
     __typename
   }
 }
@@ -208,6 +651,7 @@ export const onUpdateAssignment = /* GraphQL */ `subscription OnUpdateAssignment
       title
       description
       gradeLevel
+      isArchived
       createdAt
       updatedAt
       __typename
@@ -219,6 +663,7 @@ export const onUpdateAssignment = /* GraphQL */ `subscription OnUpdateAssignment
     createdAt
     updatedAt
     courseAssignmentsId
+    weeklyPlanItemAssignmentsId
     __typename
   }
 }
@@ -239,6 +684,7 @@ export const onDeleteAssignment = /* GraphQL */ `subscription OnDeleteAssignment
       title
       description
       gradeLevel
+      isArchived
       createdAt
       updatedAt
       __typename
@@ -250,6 +696,7 @@ export const onDeleteAssignment = /* GraphQL */ `subscription OnDeleteAssignment
     createdAt
     updatedAt
     courseAssignmentsId
+    weeklyPlanItemAssignmentsId
     __typename
   }
 }
@@ -266,6 +713,7 @@ export const onCreateSubmission = /* GraphQL */ `subscription OnCreateSubmission
     content
     grade
     submittedAt
+    teacherComment
     assignment {
       id
       title
@@ -274,6 +722,7 @@ export const onCreateSubmission = /* GraphQL */ `subscription OnCreateSubmission
       createdAt
       updatedAt
       courseAssignmentsId
+      weeklyPlanItemAssignmentsId
       __typename
     }
     createdAt
@@ -295,6 +744,7 @@ export const onUpdateSubmission = /* GraphQL */ `subscription OnUpdateSubmission
     content
     grade
     submittedAt
+    teacherComment
     assignment {
       id
       title
@@ -303,6 +753,7 @@ export const onUpdateSubmission = /* GraphQL */ `subscription OnUpdateSubmission
       createdAt
       updatedAt
       courseAssignmentsId
+      weeklyPlanItemAssignmentsId
       __typename
     }
     createdAt
@@ -324,6 +775,7 @@ export const onDeleteSubmission = /* GraphQL */ `subscription OnDeleteSubmission
     content
     grade
     submittedAt
+    teacherComment
     assignment {
       id
       title
@@ -332,6 +784,7 @@ export const onDeleteSubmission = /* GraphQL */ `subscription OnDeleteSubmission
       createdAt
       updatedAt
       courseAssignmentsId
+      weeklyPlanItemAssignmentsId
       __typename
     }
     createdAt
@@ -350,17 +803,31 @@ export const onCreateEnrollment = /* GraphQL */ `subscription OnCreateEnrollment
   onCreateEnrollment(filter: $filter) {
     id
     studentId
+    planType
     course {
       id
       title
       description
       gradeLevel
+      isArchived
       createdAt
       updatedAt
       __typename
     }
+    semester {
+      id
+      name
+      startDate
+      endDate
+      isActive
+      createdAt
+      updatedAt
+      academicYearSemestersId
+      __typename
+    }
     createdAt
     updatedAt
+    semesterEnrollmentsId
     courseEnrollmentsId
     __typename
   }
@@ -375,17 +842,31 @@ export const onUpdateEnrollment = /* GraphQL */ `subscription OnUpdateEnrollment
   onUpdateEnrollment(filter: $filter) {
     id
     studentId
+    planType
     course {
       id
       title
       description
       gradeLevel
+      isArchived
       createdAt
       updatedAt
       __typename
     }
+    semester {
+      id
+      name
+      startDate
+      endDate
+      isActive
+      createdAt
+      updatedAt
+      academicYearSemestersId
+      __typename
+    }
     createdAt
     updatedAt
+    semesterEnrollmentsId
     courseEnrollmentsId
     __typename
   }
@@ -400,17 +881,31 @@ export const onDeleteEnrollment = /* GraphQL */ `subscription OnDeleteEnrollment
   onDeleteEnrollment(filter: $filter) {
     id
     studentId
+    planType
     course {
       id
       title
       description
       gradeLevel
+      isArchived
       createdAt
       updatedAt
       __typename
     }
+    semester {
+      id
+      name
+      startDate
+      endDate
+      isActive
+      createdAt
+      updatedAt
+      academicYearSemestersId
+      __typename
+    }
     createdAt
     updatedAt
+    semesterEnrollmentsId
     courseEnrollmentsId
     __typename
   }
