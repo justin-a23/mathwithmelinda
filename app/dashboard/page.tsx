@@ -2,22 +2,42 @@
 
 import { useAuthenticator } from '@aws-amplify/ui-react'
 import { useRouter } from 'next/navigation'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import { generateClient } from 'aws-amplify/api'
+import { listCourses } from '../../src/graphql/queries'
+
+const client = generateClient()
+
+type Course = {
+  id: string
+  title: string
+  description: string | null
+  gradeLevel: string | null
+}
 
 export default function Dashboard() {
   const { user, signOut } = useAuthenticator()
   const router = useRouter()
+  const [courses, setCourses] = useState<Course[]>([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     if (!user) router.push('/login')
   }, [user, router])
 
-  const courses = [
-    { title: 'Arithmetic 6', lessons: 12, due: 3 },
-    { title: 'Middle School Math', lessons: 15, due: 0 },
-    { title: 'Pre-Algebra', lessons: 18, due: 1 },
-    { title: 'Algebra 1', lessons: 24, due: 0 },
-  ]
+  useEffect(() => {
+    async function fetchCourses() {
+      try {
+        const result = await client.graphql({ query: listCourses })
+        setCourses(result.data.listCourses.items as Course[])
+      } catch (err) {
+        console.error('Error fetching courses:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchCourses()
+  }, [])
 
   return (
     <div style={{ fontFamily: 'var(--font-body)', background: 'var(--white)', minHeight: '100vh' }}>
@@ -49,28 +69,28 @@ export default function Dashboard() {
           Your Courses
         </h2>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '16px' }}>
-          {courses.map((course) => (
-            <div key={course.title} style={{ background: 'white', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', padding: '24px', cursor: 'pointer', transition: 'box-shadow 0.2s' }}
-              onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 4px 16px rgba(123,79,166,0.12)')}
-              onMouseLeave={e => (e.currentTarget.style.boxShadow = 'none')}>
-              <div style={{ width: '40px', height: '40px', background: 'var(--plum-light)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px' }}>
-                <svg width="20" height="20" viewBox="0 0 40 40" fill="none">
-                  <rect x="17" y="6" width="6" height="28" rx="3" fill="var(--plum)"/>
-                  <rect x="6" y="17" width="28" height="6" rx="3" fill="var(--plum)"/>
-                </svg>
+        {loading ? (
+          <p style={{ color: 'var(--gray-mid)' }}>Loading courses...</p>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '16px' }}>
+            {courses.map((course) => (
+              <div key={course.id} style={{ background: 'white', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', padding: '24px', cursor: 'pointer', transition: 'box-shadow 0.2s' }}
+                onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 4px 16px rgba(123,79,166,0.12)')}
+                onMouseLeave={e => (e.currentTarget.style.boxShadow = 'none')}>
+                <div style={{ width: '40px', height: '40px', background: 'var(--plum-light)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px' }}>
+                  <svg width="20" height="20" viewBox="0 0 40 40" fill="none">
+                    <rect x="17" y="6" width="6" height="28" rx="3" fill="var(--plum)"/>
+                    <rect x="6" y="17" width="28" height="6" rx="3" fill="var(--plum)"/>
+                  </svg>
+                </div>
+                <div style={{ fontFamily: 'var(--font-display)', fontSize: '18px', color: 'var(--charcoal)', marginBottom: '8px' }}>{course.title}</div>
+                <div style={{ fontSize: '13px', color: 'var(--gray-mid)', marginBottom: '12px' }}>{course.description}</div>
+                <div style={{ fontSize: '11px', color: 'var(--gray-mid)', marginBottom: '12px' }}>Grade {course.gradeLevel}</div>
+                <div style={{ marginTop: '16px', color: 'var(--plum)', fontSize: '13px', fontWeight: 500 }}>Continue →</div>
               </div>
-              <div style={{ fontFamily: 'var(--font-display)', fontSize: '18px', color: 'var(--charcoal)', marginBottom: '8px' }}>{course.title}</div>
-              <div style={{ fontSize: '13px', color: 'var(--gray-mid)', marginBottom: '12px' }}>{course.lessons} lessons</div>
-              {course.due > 0 && (
-                <span style={{ background: 'var(--accent)', color: 'var(--charcoal)', fontSize: '11px', fontWeight: 500, padding: '4px 10px', borderRadius: '20px' }}>
-                  {course.due} due
-                </span>
-              )}
-              <div style={{ marginTop: '16px', color: 'var(--plum)', fontSize: '13px', fontWeight: 500 }}>Continue →</div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </main>
     </div>
   )

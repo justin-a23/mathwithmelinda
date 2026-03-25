@@ -15,6 +15,9 @@
       "auth": {
         "mathwithmelindab546c8eb": {},
         "userPoolGroups": {}
+      },
+      "api": {
+        "mathwithmelinda": {}
       }
     }
   }
