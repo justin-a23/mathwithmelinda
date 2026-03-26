@@ -116,6 +116,7 @@ export type Course = {
   assignments?: ModelAssignmentConnection | null,
   enrollments?: ModelEnrollmentConnection | null,
   weeklyPlans?: ModelWeeklyPlanConnection | null,
+  lessonTemplates?: ModelLessonTemplateConnection | null,
   createdAt: string,
   updatedAt: string,
 };
@@ -218,6 +219,26 @@ export type ModelWeeklyPlanConnection = {
   __typename: "ModelWeeklyPlanConnection",
   items:  Array<WeeklyPlan | null >,
   nextToken?: string | null,
+};
+
+export type ModelLessonTemplateConnection = {
+  __typename: "ModelLessonTemplateConnection",
+  items:  Array<LessonTemplate | null >,
+  nextToken?: string | null,
+};
+
+export type LessonTemplate = {
+  __typename: "LessonTemplate",
+  id: string,
+  lessonNumber: number,
+  title: string,
+  instructions?: string | null,
+  worksheetUrl?: string | null,
+  videoUrl?: string | null,
+  course?: Course | null,
+  createdAt: string,
+  updatedAt: string,
+  courseLessonTemplatesId?: string | null,
 };
 
 export type UpdateAcademicYearInput = {
@@ -535,6 +556,44 @@ export type DeleteEnrollmentInput = {
   id: string,
 };
 
+export type CreateLessonTemplateInput = {
+  id?: string | null,
+  lessonNumber: number,
+  title: string,
+  instructions?: string | null,
+  worksheetUrl?: string | null,
+  videoUrl?: string | null,
+  courseLessonTemplatesId?: string | null,
+};
+
+export type ModelLessonTemplateConditionInput = {
+  lessonNumber?: ModelIntInput | null,
+  title?: ModelStringInput | null,
+  instructions?: ModelStringInput | null,
+  worksheetUrl?: ModelStringInput | null,
+  videoUrl?: ModelStringInput | null,
+  and?: Array< ModelLessonTemplateConditionInput | null > | null,
+  or?: Array< ModelLessonTemplateConditionInput | null > | null,
+  not?: ModelLessonTemplateConditionInput | null,
+  createdAt?: ModelStringInput | null,
+  updatedAt?: ModelStringInput | null,
+  courseLessonTemplatesId?: ModelIDInput | null,
+};
+
+export type UpdateLessonTemplateInput = {
+  id: string,
+  lessonNumber?: number | null,
+  title?: string | null,
+  instructions?: string | null,
+  worksheetUrl?: string | null,
+  videoUrl?: string | null,
+  courseLessonTemplatesId?: string | null,
+};
+
+export type DeleteLessonTemplateInput = {
+  id: string,
+};
+
 export type ModelAcademicYearFilterInput = {
   id?: ModelIDInput | null,
   year?: ModelStringInput | null,
@@ -666,6 +725,21 @@ export type ModelEnrollmentFilterInput = {
   courseEnrollmentsId?: ModelIDInput | null,
 };
 
+export type ModelLessonTemplateFilterInput = {
+  id?: ModelIDInput | null,
+  lessonNumber?: ModelIntInput | null,
+  title?: ModelStringInput | null,
+  instructions?: ModelStringInput | null,
+  worksheetUrl?: ModelStringInput | null,
+  videoUrl?: ModelStringInput | null,
+  createdAt?: ModelStringInput | null,
+  updatedAt?: ModelStringInput | null,
+  and?: Array< ModelLessonTemplateFilterInput | null > | null,
+  or?: Array< ModelLessonTemplateFilterInput | null > | null,
+  not?: ModelLessonTemplateFilterInput | null,
+  courseLessonTemplatesId?: ModelIDInput | null,
+};
+
 export type ModelSubscriptionAcademicYearFilterInput = {
   id?: ModelSubscriptionIDInput | null,
   year?: ModelSubscriptionStringInput | null,
@@ -739,6 +813,7 @@ export type ModelSubscriptionCourseFilterInput = {
   courseAssignmentsId?: ModelSubscriptionIDInput | null,
   courseEnrollmentsId?: ModelSubscriptionIDInput | null,
   courseWeeklyPlansId?: ModelSubscriptionIDInput | null,
+  courseLessonTemplatesId?: ModelSubscriptionIDInput | null,
 };
 
 export type ModelSubscriptionLessonFilterInput = {
@@ -821,6 +896,19 @@ export type ModelSubscriptionEnrollmentFilterInput = {
   updatedAt?: ModelSubscriptionStringInput | null,
   and?: Array< ModelSubscriptionEnrollmentFilterInput | null > | null,
   or?: Array< ModelSubscriptionEnrollmentFilterInput | null > | null,
+};
+
+export type ModelSubscriptionLessonTemplateFilterInput = {
+  id?: ModelSubscriptionIDInput | null,
+  lessonNumber?: ModelSubscriptionIntInput | null,
+  title?: ModelSubscriptionStringInput | null,
+  instructions?: ModelSubscriptionStringInput | null,
+  worksheetUrl?: ModelSubscriptionStringInput | null,
+  videoUrl?: ModelSubscriptionStringInput | null,
+  createdAt?: ModelSubscriptionStringInput | null,
+  updatedAt?: ModelSubscriptionStringInput | null,
+  and?: Array< ModelSubscriptionLessonTemplateFilterInput | null > | null,
+  or?: Array< ModelSubscriptionLessonTemplateFilterInput | null > | null,
 };
 
 export type CreateAcademicYearMutationVariables = {
@@ -1011,6 +1099,10 @@ export type CreateCourseMutation = {
       __typename: "ModelWeeklyPlanConnection",
       nextToken?: string | null,
     } | null,
+    lessonTemplates?:  {
+      __typename: "ModelLessonTemplateConnection",
+      nextToken?: string | null,
+    } | null,
     createdAt: string,
     updatedAt: string,
   } | null,
@@ -1045,6 +1137,10 @@ export type UpdateCourseMutation = {
       __typename: "ModelWeeklyPlanConnection",
       nextToken?: string | null,
     } | null,
+    lessonTemplates?:  {
+      __typename: "ModelLessonTemplateConnection",
+      nextToken?: string | null,
+    } | null,
     createdAt: string,
     updatedAt: string,
   } | null,
@@ -1077,6 +1173,10 @@ export type DeleteCourseMutation = {
     } | null,
     weeklyPlans?:  {
       __typename: "ModelWeeklyPlanConnection",
+      nextToken?: string | null,
+    } | null,
+    lessonTemplates?:  {
+      __typename: "ModelLessonTemplateConnection",
       nextToken?: string | null,
     } | null,
     createdAt: string,
@@ -1747,6 +1847,96 @@ export type DeleteEnrollmentMutation = {
   } | null,
 };
 
+export type CreateLessonTemplateMutationVariables = {
+  input: CreateLessonTemplateInput,
+  condition?: ModelLessonTemplateConditionInput | null,
+};
+
+export type CreateLessonTemplateMutation = {
+  createLessonTemplate?:  {
+    __typename: "LessonTemplate",
+    id: string,
+    lessonNumber: number,
+    title: string,
+    instructions?: string | null,
+    worksheetUrl?: string | null,
+    videoUrl?: string | null,
+    course?:  {
+      __typename: "Course",
+      id: string,
+      title: string,
+      description?: string | null,
+      gradeLevel?: string | null,
+      isArchived?: boolean | null,
+      createdAt: string,
+      updatedAt: string,
+    } | null,
+    createdAt: string,
+    updatedAt: string,
+    courseLessonTemplatesId?: string | null,
+  } | null,
+};
+
+export type UpdateLessonTemplateMutationVariables = {
+  input: UpdateLessonTemplateInput,
+  condition?: ModelLessonTemplateConditionInput | null,
+};
+
+export type UpdateLessonTemplateMutation = {
+  updateLessonTemplate?:  {
+    __typename: "LessonTemplate",
+    id: string,
+    lessonNumber: number,
+    title: string,
+    instructions?: string | null,
+    worksheetUrl?: string | null,
+    videoUrl?: string | null,
+    course?:  {
+      __typename: "Course",
+      id: string,
+      title: string,
+      description?: string | null,
+      gradeLevel?: string | null,
+      isArchived?: boolean | null,
+      createdAt: string,
+      updatedAt: string,
+    } | null,
+    createdAt: string,
+    updatedAt: string,
+    courseLessonTemplatesId?: string | null,
+  } | null,
+};
+
+export type DeleteLessonTemplateMutationVariables = {
+  input: DeleteLessonTemplateInput,
+  condition?: ModelLessonTemplateConditionInput | null,
+};
+
+export type DeleteLessonTemplateMutation = {
+  deleteLessonTemplate?:  {
+    __typename: "LessonTemplate",
+    id: string,
+    lessonNumber: number,
+    title: string,
+    instructions?: string | null,
+    worksheetUrl?: string | null,
+    videoUrl?: string | null,
+    course?:  {
+      __typename: "Course",
+      id: string,
+      title: string,
+      description?: string | null,
+      gradeLevel?: string | null,
+      isArchived?: boolean | null,
+      createdAt: string,
+      updatedAt: string,
+    } | null,
+    createdAt: string,
+    updatedAt: string,
+    courseLessonTemplatesId?: string | null,
+  } | null,
+};
+
 export type GetAcademicYearQueryVariables = {
   id: string,
 };
@@ -1868,6 +2058,10 @@ export type GetCourseQuery = {
     } | null,
     weeklyPlans?:  {
       __typename: "ModelWeeklyPlanConnection",
+      nextToken?: string | null,
+    } | null,
+    lessonTemplates?:  {
+      __typename: "ModelLessonTemplateConnection",
       nextToken?: string | null,
     } | null,
     createdAt: string,
@@ -2255,6 +2449,60 @@ export type ListEnrollmentsQuery = {
   } | null,
 };
 
+export type GetLessonTemplateQueryVariables = {
+  id: string,
+};
+
+export type GetLessonTemplateQuery = {
+  getLessonTemplate?:  {
+    __typename: "LessonTemplate",
+    id: string,
+    lessonNumber: number,
+    title: string,
+    instructions?: string | null,
+    worksheetUrl?: string | null,
+    videoUrl?: string | null,
+    course?:  {
+      __typename: "Course",
+      id: string,
+      title: string,
+      description?: string | null,
+      gradeLevel?: string | null,
+      isArchived?: boolean | null,
+      createdAt: string,
+      updatedAt: string,
+    } | null,
+    createdAt: string,
+    updatedAt: string,
+    courseLessonTemplatesId?: string | null,
+  } | null,
+};
+
+export type ListLessonTemplatesQueryVariables = {
+  filter?: ModelLessonTemplateFilterInput | null,
+  limit?: number | null,
+  nextToken?: string | null,
+};
+
+export type ListLessonTemplatesQuery = {
+  listLessonTemplates?:  {
+    __typename: "ModelLessonTemplateConnection",
+    items:  Array< {
+      __typename: "LessonTemplate",
+      id: string,
+      lessonNumber: number,
+      title: string,
+      instructions?: string | null,
+      worksheetUrl?: string | null,
+      videoUrl?: string | null,
+      createdAt: string,
+      updatedAt: string,
+      courseLessonTemplatesId?: string | null,
+    } | null >,
+    nextToken?: string | null,
+  } | null,
+};
+
 export type OnCreateAcademicYearSubscriptionVariables = {
   filter?: ModelSubscriptionAcademicYearFilterInput | null,
 };
@@ -2436,6 +2684,10 @@ export type OnCreateCourseSubscription = {
       __typename: "ModelWeeklyPlanConnection",
       nextToken?: string | null,
     } | null,
+    lessonTemplates?:  {
+      __typename: "ModelLessonTemplateConnection",
+      nextToken?: string | null,
+    } | null,
     createdAt: string,
     updatedAt: string,
   } | null,
@@ -2469,6 +2721,10 @@ export type OnUpdateCourseSubscription = {
       __typename: "ModelWeeklyPlanConnection",
       nextToken?: string | null,
     } | null,
+    lessonTemplates?:  {
+      __typename: "ModelLessonTemplateConnection",
+      nextToken?: string | null,
+    } | null,
     createdAt: string,
     updatedAt: string,
   } | null,
@@ -2500,6 +2756,10 @@ export type OnDeleteCourseSubscription = {
     } | null,
     weeklyPlans?:  {
       __typename: "ModelWeeklyPlanConnection",
+      nextToken?: string | null,
+    } | null,
+    lessonTemplates?:  {
+      __typename: "ModelLessonTemplateConnection",
       nextToken?: string | null,
     } | null,
     createdAt: string,
@@ -3149,5 +3409,92 @@ export type OnDeleteEnrollmentSubscription = {
     updatedAt: string,
     semesterEnrollmentsId?: string | null,
     courseEnrollmentsId?: string | null,
+  } | null,
+};
+
+export type OnCreateLessonTemplateSubscriptionVariables = {
+  filter?: ModelSubscriptionLessonTemplateFilterInput | null,
+};
+
+export type OnCreateLessonTemplateSubscription = {
+  onCreateLessonTemplate?:  {
+    __typename: "LessonTemplate",
+    id: string,
+    lessonNumber: number,
+    title: string,
+    instructions?: string | null,
+    worksheetUrl?: string | null,
+    videoUrl?: string | null,
+    course?:  {
+      __typename: "Course",
+      id: string,
+      title: string,
+      description?: string | null,
+      gradeLevel?: string | null,
+      isArchived?: boolean | null,
+      createdAt: string,
+      updatedAt: string,
+    } | null,
+    createdAt: string,
+    updatedAt: string,
+    courseLessonTemplatesId?: string | null,
+  } | null,
+};
+
+export type OnUpdateLessonTemplateSubscriptionVariables = {
+  filter?: ModelSubscriptionLessonTemplateFilterInput | null,
+};
+
+export type OnUpdateLessonTemplateSubscription = {
+  onUpdateLessonTemplate?:  {
+    __typename: "LessonTemplate",
+    id: string,
+    lessonNumber: number,
+    title: string,
+    instructions?: string | null,
+    worksheetUrl?: string | null,
+    videoUrl?: string | null,
+    course?:  {
+      __typename: "Course",
+      id: string,
+      title: string,
+      description?: string | null,
+      gradeLevel?: string | null,
+      isArchived?: boolean | null,
+      createdAt: string,
+      updatedAt: string,
+    } | null,
+    createdAt: string,
+    updatedAt: string,
+    courseLessonTemplatesId?: string | null,
+  } | null,
+};
+
+export type OnDeleteLessonTemplateSubscriptionVariables = {
+  filter?: ModelSubscriptionLessonTemplateFilterInput | null,
+};
+
+export type OnDeleteLessonTemplateSubscription = {
+  onDeleteLessonTemplate?:  {
+    __typename: "LessonTemplate",
+    id: string,
+    lessonNumber: number,
+    title: string,
+    instructions?: string | null,
+    worksheetUrl?: string | null,
+    videoUrl?: string | null,
+    course?:  {
+      __typename: "Course",
+      id: string,
+      title: string,
+      description?: string | null,
+      gradeLevel?: string | null,
+      isArchived?: boolean | null,
+      createdAt: string,
+      updatedAt: string,
+    } | null,
+    createdAt: string,
+    updatedAt: string,
+    courseLessonTemplatesId?: string | null,
   } | null,
 };

@@ -199,6 +199,10 @@ export const createCourse = /* GraphQL */ `mutation CreateCourse(
       nextToken
       __typename
     }
+    lessonTemplates {
+      nextToken
+      __typename
+    }
     createdAt
     updatedAt
     __typename
@@ -234,6 +238,10 @@ export const updateCourse = /* GraphQL */ `mutation UpdateCourse(
       nextToken
       __typename
     }
+    lessonTemplates {
+      nextToken
+      __typename
+    }
     createdAt
     updatedAt
     __typename
@@ -266,6 +274,10 @@ export const deleteCourse = /* GraphQL */ `mutation DeleteCourse(
       __typename
     }
     weeklyPlans {
+      nextToken
+      __typename
+    }
+    lessonTemplates {
       nextToken
       __typename
     }
@@ -958,4 +970,97 @@ export const deleteEnrollment = /* GraphQL */ `mutation DeleteEnrollment(
 ` as GeneratedMutation<
   APITypes.DeleteEnrollmentMutationVariables,
   APITypes.DeleteEnrollmentMutation
+>;
+export const createLessonTemplate = /* GraphQL */ `mutation CreateLessonTemplate(
+  $input: CreateLessonTemplateInput!
+  $condition: ModelLessonTemplateConditionInput
+) {
+  createLessonTemplate(input: $input, condition: $condition) {
+    id
+    lessonNumber
+    title
+    instructions
+    worksheetUrl
+    videoUrl
+    course {
+      id
+      title
+      description
+      gradeLevel
+      isArchived
+      createdAt
+      updatedAt
+      __typename
+    }
+    createdAt
+    updatedAt
+    courseLessonTemplatesId
+    __typename
+  }
+}
+` as GeneratedMutation<
+  APITypes.CreateLessonTemplateMutationVariables,
+  APITypes.CreateLessonTemplateMutation
+>;
+export const updateLessonTemplate = /* GraphQL */ `mutation UpdateLessonTemplate(
+  $input: UpdateLessonTemplateInput!
+  $condition: ModelLessonTemplateConditionInput
+) {
+  updateLessonTemplate(input: $input, condition: $condition) {
+    id
+    lessonNumber
+    title
+    instructions
+    worksheetUrl
+    videoUrl
+    course {
+      id
+      title
+      description
+      gradeLevel
+      isArchived
+      createdAt
+      updatedAt
+      __typename
+    }
+    createdAt
+    updatedAt
+    courseLessonTemplatesId
+    __typename
+  }
+}
+` as GeneratedMutation<
+  APITypes.UpdateLessonTemplateMutationVariables,
+  APITypes.UpdateLessonTemplateMutation
+>;
+export const deleteLessonTemplate = /* GraphQL */ `mutation DeleteLessonTemplate(
+  $input: DeleteLessonTemplateInput!
+  $condition: ModelLessonTemplateConditionInput
+) {
+  deleteLessonTemplate(input: $input, condition: $condition) {
+    id
+    lessonNumber
+    title
+    instructions
+    worksheetUrl
+    videoUrl
+    course {
+      id
+      title
+      description
+      gradeLevel
+      isArchived
+      createdAt
+      updatedAt
+      __typename
+    }
+    createdAt
+    updatedAt
+    courseLessonTemplatesId
+    __typename
+  }
+}
+` as GeneratedMutation<
+  APITypes.DeleteLessonTemplateMutationVariables,
+  APITypes.DeleteLessonTemplateMutation
 >;

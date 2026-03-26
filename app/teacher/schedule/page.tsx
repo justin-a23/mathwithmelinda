@@ -107,7 +107,7 @@ export default function ScheduleWeek() {
   }
 
   return (
-    <div style={{ fontFamily: 'var(--font-body)', background: 'var(--white)', minHeight: '100vh' }}>
+    <div style={{ fontFamily: 'var(--font-body)', background: 'var(--background)', minHeight: '100vh' }}>
       <nav style={{ background: 'var(--charcoal)', padding: '0 48px', height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div style={{ width: '36px', height: '36px', background: 'var(--plum)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -125,7 +125,7 @@ export default function ScheduleWeek() {
       </nav>
 
       <main style={{ maxWidth: '900px', margin: '0 auto', padding: '48px 24px' }}>
-        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '32px', color: 'var(--charcoal)', marginBottom: '8px' }}>Schedule a Week</h1>
+        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '32px', color: 'var(--foreground)', marginBottom: '8px' }}>Schedule a Week</h1>
         <p style={{ color: 'var(--gray-mid)', marginBottom: '40px' }}>Plan lessons for each day of the week.</p>
 
         {/* Course + Week selector */}
@@ -154,9 +154,9 @@ export default function ScheduleWeek() {
         {/* Day rows */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '32px' }}>
           {days.map((day, i) => (
-            <div key={day.day} style={{ background: 'white', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', padding: '20px' }}>
+            <div key={day.day} style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', padding: '20px' }}>
               <div style={{ display: 'grid', gridTemplateColumns: '100px 120px 1fr 120px 100px', gap: '12px', alignItems: 'center' }}>
-                <div style={{ fontFamily: 'var(--font-display)', fontSize: '16px', color: 'var(--charcoal)' }}>{day.day}</div>
+                <div style={{ fontFamily: 'var(--font-display)', fontSize: '16px', color: 'var(--foreground)' }}>{day.day}</div>
                 <input
                   type="text"
                   placeholder="Lesson #"

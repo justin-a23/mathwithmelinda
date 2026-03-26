@@ -27,6 +27,7 @@ type Course @model {
   assignments: [Assignment] @hasMany
   enrollments: [Enrollment] @hasMany
   weeklyPlans: [WeeklyPlan] @hasMany
+  lessonTemplates: [LessonTemplate] @hasMany
 }
 
 type Lesson @model {
@@ -82,4 +83,14 @@ type Enrollment @model {
   planType: String
   course: Course @belongsTo
   semester: Semester @belongsTo
+}
+
+type LessonTemplate @model {
+  id: ID!
+  lessonNumber: Int!
+  title: String!
+  instructions: String
+  worksheetUrl: String
+  videoUrl: String
+  course: Course @belongsTo
 }

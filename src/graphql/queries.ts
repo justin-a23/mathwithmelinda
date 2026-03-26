@@ -126,6 +126,10 @@ export const getCourse = /* GraphQL */ `query GetCourse($id: ID!) {
       nextToken
       __typename
     }
+    lessonTemplates {
+      nextToken
+      __typename
+    }
     createdAt
     updatedAt
     __typename
@@ -509,4 +513,58 @@ export const listEnrollments = /* GraphQL */ `query ListEnrollments(
 ` as GeneratedQuery<
   APITypes.ListEnrollmentsQueryVariables,
   APITypes.ListEnrollmentsQuery
+>;
+export const getLessonTemplate = /* GraphQL */ `query GetLessonTemplate($id: ID!) {
+  getLessonTemplate(id: $id) {
+    id
+    lessonNumber
+    title
+    instructions
+    worksheetUrl
+    videoUrl
+    course {
+      id
+      title
+      description
+      gradeLevel
+      isArchived
+      createdAt
+      updatedAt
+      __typename
+    }
+    createdAt
+    updatedAt
+    courseLessonTemplatesId
+    __typename
+  }
+}
+` as GeneratedQuery<
+  APITypes.GetLessonTemplateQueryVariables,
+  APITypes.GetLessonTemplateQuery
+>;
+export const listLessonTemplates = /* GraphQL */ `query ListLessonTemplates(
+  $filter: ModelLessonTemplateFilterInput
+  $limit: Int
+  $nextToken: String
+) {
+  listLessonTemplates(filter: $filter, limit: $limit, nextToken: $nextToken) {
+    items {
+      id
+      lessonNumber
+      title
+      instructions
+      worksheetUrl
+      videoUrl
+      createdAt
+      updatedAt
+      courseLessonTemplatesId
+      __typename
+    }
+    nextToken
+    __typename
+  }
+}
+` as GeneratedQuery<
+  APITypes.ListLessonTemplatesQueryVariables,
+  APITypes.ListLessonTemplatesQuery
 >;

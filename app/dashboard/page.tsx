@@ -4,6 +4,7 @@ import { useAuthenticator } from '@aws-amplify/ui-react'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { generateClient } from 'aws-amplify/api'
+import { useTheme } from '../ThemeProvider'
 const listWeeklyPlansWithItems = /* GraphQL */`
   query ListWeeklyPlansWithItems {
     listWeeklyPlans {
@@ -65,6 +66,7 @@ export default function Dashboard() {
   const router = useRouter()
   const [weeklyPlans, setWeeklyPlans] = useState<WeeklyPlan[]>([])
   const [loading, setLoading] = useState(true)
+  const { theme, toggleTheme } = useTheme()
 
   useEffect(() => {
     if (user === null) router.replace('/login')
@@ -93,7 +95,7 @@ export default function Dashboard() {
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long' })
 
   return (
-    <div style={{ fontFamily: 'var(--font-body)', background: 'var(--white)', minHeight: '100vh' }}>
+    <div style={{ fontFamily: 'var(--font-body)', background: 'var(--background)', minHeight: '100vh' }}>
       <nav style={{ background: 'var(--charcoal)', padding: '0 48px', height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div style={{ width: '36px', height: '36px', background: 'var(--plum)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -104,16 +106,21 @@ export default function Dashboard() {
           </div>
           <span style={{ fontFamily: 'var(--font-display)', color: 'white', fontSize: '20px' }}>Math with Melinda</span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
           <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '14px' }}>{user?.signInDetails?.loginId}</span>
-          <button onClick={signOut} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'white', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '14px' }}>
-            Sign out
-          </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <button onClick={toggleTheme} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'white', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '14px' }}>
+                {theme === 'light' ? '🌙 Dark' : '☀️ Light'}
+              </button>
+              <button onClick={signOut} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'white', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '14px' }}>
+                 Sign out
+               </button>
+            </div>
         </div>
       </nav>
 
       <main style={{ maxWidth: '960px', margin: '0 auto', padding: '48px 24px' }}>
-        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '32px', color: 'var(--charcoal)', marginBottom: '8px' }}>
+        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '32px', color: 'var(--foreground)', marginBottom: '8px' }}>
           Welcome back!
         </h1>
         <p style={{ color: 'var(--gray-mid)', marginBottom: '40px' }}>Today is {today}. Here are your lessons.</p>
@@ -138,12 +145,12 @@ export default function Dashboard() {
                   .map((item) => (
                     <div key={item.id}
                       onClick={() => router.push('/lessons')}
-                      style={{ background: item.dayOfWeek === today ? 'var(--plum-light)' : 'white', border: `1px solid ${item.dayOfWeek === today ? 'var(--plum-mid)' : 'var(--gray-light)'}`, borderRadius: 'var(--radius)', padding: '20px 24px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                      style={{ background: item.dayOfWeek === today ? 'var(--plum-light)' : 'var(--background)', border: `1px solid ${item.dayOfWeek === today ? 'var(--plum-mid)' : 'var(--gray-light)'}`, borderRadius: 'var(--radius)', padding: '20px 24px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
                       onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 4px 16px rgba(123,79,166,0.12)')}
                       onMouseLeave={e => (e.currentTarget.style.boxShadow = 'none')}>
                       <div>
                         <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--plum)', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '1px' }}>{item.dayOfWeek}</div>
-                        <div style={{ fontFamily: 'var(--font-display)', fontSize: '18px', color: 'var(--charcoal)' }}>
+                        <div style={{ fontFamily: 'var(--font-display)', fontSize: '18px', color: 'var(--foreground)' }}>
                           {item.lesson?.title || 'Lesson'}
                         </div>
                       </div>

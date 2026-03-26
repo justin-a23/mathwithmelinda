@@ -64,7 +64,7 @@ export default function TeacherDashboard() {
   }
 
   return (
-    <div style={{ fontFamily: 'var(--font-body)', background: 'var(--white)', minHeight: '100vh' }}>
+    <div style={{ fontFamily: 'var(--font-body)', background: 'var(--background)', minHeight: '100vh' }}>
       <nav style={{ background: 'var(--charcoal)', padding: '0 48px', height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div style={{ width: '36px', height: '36px', background: 'var(--plum)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -82,7 +82,7 @@ export default function TeacherDashboard() {
       <main style={{ maxWidth: '1100px', margin: '0 auto', padding: '48px 24px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '40px' }}>
           <div>
-            <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '32px', color: 'var(--charcoal)', marginBottom: '8px' }}>Teacher Dashboard</h1>
+            <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '32px', color: 'var(--foreground)', marginBottom: '8px' }}>Teacher Dashboard</h1>
             <p style={{ color: 'var(--gray-mid)' }}>Manage your courses, lessons and students.</p>
           </div>
           <button
@@ -137,7 +137,7 @@ export default function TeacherDashboard() {
                 <div style={{ fontSize: '13px', color: 'var(--gray-mid)', marginBottom: '4px' }}>{course.description}</div>
                 <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginBottom: '16px' }}>Grade {course.gradeLevel}</div>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                  <button style={{ background: 'var(--plum-light)', color: 'var(--plum-dark)', padding: '6px 14px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: 500 }}>
+                <button style={{ background: 'var(--plum)', color: 'white', padding: '6px 14px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: 500 }}>
                     Manage Lessons
                   </button>
                   <button style={{ background: 'var(--gray-light)', color: 'var(--gray-dark)', padding: '6px 14px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '12px' }}>

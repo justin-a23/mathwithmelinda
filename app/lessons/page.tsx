@@ -15,7 +15,7 @@ export default function LessonPage() {
   }, [user, router])
 
   return (
-    <div style={{ fontFamily: 'var(--font-body)', background: 'var(--white)', minHeight: '100vh' }}>
+    <div style={{ fontFamily: 'var(--font-body)', background: 'var(--background)', minHeight: '100vh' }}>
       
       {/* Nav */}
       <nav style={{ background: 'var(--charcoal)', padding: '0 48px', height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -38,7 +38,7 @@ export default function LessonPage() {
         <p style={{ fontSize: '12px', fontWeight: 500, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--plum)', marginBottom: '8px' }}>
           Algebra 1
         </p>
-        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '28px', color: 'var(--charcoal)', marginBottom: '24px' }}>
+        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '28px', color: 'var(--foreground)', marginBottom: '24px' }}>
           Lesson 143 — Introduction to Rational Expressions
         </h1>
 

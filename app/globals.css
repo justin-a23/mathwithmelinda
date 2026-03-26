@@ -19,3 +19,33 @@ body {
   color: var(--foreground);
   font-family: var(--font-body);
 }
+
+[data-theme="dark"] body,
+[data-theme="dark"] main,
+[data-theme="dark"] div {
+  background-color: inherit;
+  color: inherit;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+[data-theme="dark"] {
+  --background: #1E1E2E;
+  --foreground: #FAFAFA;
+  --white: #1E1E2E;
+  --charcoal: #FAFAFA;
+  --gray-light: #2E2E42;
+  --gray-mid: #9090A8;
+  --gray-dark: #C0C0D0;
+  --plum-light: #2D1F42;
+  --plum-mid: #5A3A82;
+  --accent: #F2C94C;
+}
+
+[data-theme="light"] {
+  --background: #FAFAFA;
+  --foreground: #1E1E2E;
+  --charcoal: #1E1E2E;
+}
