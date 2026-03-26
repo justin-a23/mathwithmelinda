@@ -36,6 +36,7 @@ body {
   --foreground: #FAFAFA;
   --white: #1E1E2E;
   --charcoal: #FAFAFA;
+  --nav-bg: #0F0F1A;
   --gray-light: #2E2E42;
   --gray-mid: #9090A8;
   --gray-dark: #C0C0D0;
@@ -48,4 +49,5 @@ body {
   --background: #FAFAFA;
   --foreground: #1E1E2E;
   --charcoal: #1E1E2E;
+  --nav-bg: #1E1E2E;
 }

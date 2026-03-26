@@ -34,14 +34,36 @@ export default function ImportLessons() {
   function parseCSV(text: string): LessonRow[] {
     const lines = text.trim().split('\n')
     const rows: LessonRow[] = []
+    
+    function parseLine(line: string): string[] {
+      const cols: string[] = []
+      let current = ''
+      let inQuotes = false
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i]
+        if (char === '"') {
+          if (inQuotes && line[i+1] === '"') { current += '"'; i++ }
+          else inQuotes = !inQuotes
+        } else if (char === ',' && !inQuotes) {
+          cols.push(current.trim())
+          current = ''
+        } else {
+          current += char
+        }
+      }
+      cols.push(current.trim())
+      return cols
+    }
+  
     for (let i = 1; i < lines.length; i++) {
-      const cols = lines[i].split(',')
-      if (cols.length >= 2) {
+      if (!lines[i].trim()) continue
+      const cols = parseLine(lines[i])
+      if (cols.length >= 3) {
         rows.push({
-          lessonNumber: cols[0]?.trim() || '',
-          title: cols[1]?.trim() || '',
-          instructions: cols[2]?.trim() || '',
-          worksheetUrl: cols[3]?.trim() || '',
+          lessonNumber: cols[1]?.trim() || '',
+          title: cols[2]?.trim() || '',
+          instructions: cols[3]?.trim() || '',
+          worksheetUrl: cols[4]?.trim() || '',
         })
       }
     }
@@ -71,7 +93,7 @@ export default function ImportLessons() {
           query: createLessonTemplate,
           variables: {
             input: {
-              lessonNumber: parseInt(row.lessonNumber),
+              lessonNumber: parseFloat(row.lessonNumber) || 0,
               title: row.title,
               instructions: row.instructions || '',
               worksheetUrl: row.worksheetUrl || '',
