@@ -252,15 +252,11 @@ function LessonPageInner() {
                 : `${planItem.dayOfWeek}`}
             </p>
 
-            {videoSrc ? (
+            {videoSrc && (
               <div style={{ background: '#000', borderRadius: 'var(--radius)', overflow: 'hidden', marginBottom: '32px', aspectRatio: '16/9' }}>
                 <video controls style={{ width: '100%', height: '100%' }} src={videoSrc}>
                   Your browser does not support the video tag.
                 </video>
-              </div>
-            ) : (
-              <div style={{ background: 'var(--gray-light)', borderRadius: 'var(--radius)', marginBottom: '32px', aspectRatio: '16/9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <p style={{ color: 'var(--gray-mid)' }}>No video available for this lesson.</p>
               </div>
             )}
 
