@@ -85,11 +85,23 @@ export default function TeacherDashboard() {
             <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '32px', color: 'var(--foreground)', marginBottom: '8px' }}>Teacher Dashboard</h1>
             <p style={{ color: 'var(--gray-mid)' }}>Manage your courses, lessons and students.</p>
           </div>
-          <button
-            onClick={() => setShowAddCourse(true)}
-            style={{ background: 'var(--plum)', color: 'white', padding: '12px 24px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '14px', fontWeight: 500 }}>
-            + Add Course
-          </button>
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <button
+              onClick={() => router.push('/teacher/grades')}
+              style={{ background: 'transparent', color: 'var(--plum)', padding: '12px 24px', borderRadius: '8px', border: '1px solid var(--plum)', cursor: 'pointer', fontSize: '14px', fontWeight: 500 }}>
+              Grade Work
+            </button>
+            <button
+              onClick={() => router.push('/teacher/upload')}
+              style={{ background: 'transparent', color: 'var(--plum)', padding: '12px 24px', borderRadius: '8px', border: '1px solid var(--plum)', cursor: 'pointer', fontSize: '14px', fontWeight: 500 }}>
+              Upload Video
+            </button>
+            <button
+               onClick={() => setShowAddCourse(true)}
+               style={{ background: 'var(--plum)', color: 'white', padding: '12px 24px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '14px', fontWeight: 500 }}>
+               + Add Course
+            </button>
+          </div>
         </div>
 
         {showAddCourse && (
