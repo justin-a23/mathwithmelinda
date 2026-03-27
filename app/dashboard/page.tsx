@@ -155,7 +155,7 @@ export default function Dashboard() {
                         </div>
                       </div>
                       <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginBottom: '8px' }}>Due by {item.dueTime ? new Date(`2000-01-01T${item.dueTime}`).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '5:00 PM'}</div>
+                        <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginBottom: '8px' }}>Due by {item.dueTime ? (() => { const t = item.dueTime!.includes('T') ? item.dueTime!.split('T')[1] : item.dueTime!; const d = new Date(`2000-01-01T${t}`); return isNaN(d.getTime()) ? '5:00 PM' : d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) })() : '5:00 PM'}</div>
                         <span style={{ background: 'var(--plum)', color: 'white', fontSize: '12px', padding: '4px 12px', borderRadius: '20px' }}>Watch →</span>
                       </div>
                     </div>
