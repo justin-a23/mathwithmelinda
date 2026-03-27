@@ -154,10 +154,10 @@ export default function TeacherDashboard() {
                 <div style={{ fontSize: '13px', color: 'var(--gray-mid)', marginBottom: '4px' }}>{course.description}</div>
                 <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginBottom: '16px' }}>Grade {course.gradeLevel}</div>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                <button style={{ background: 'var(--plum)', color: 'white', padding: '6px 14px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: 500 }}>
+                <button onClick={() => router.push(`/teacher/library/${course.id}`)} style={{ background: 'var(--plum)', color: 'white', padding: '6px 14px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: 500 }}>
                     Manage Lessons
                   </button>
-                  <button style={{ background: 'var(--gray-light)', color: 'var(--gray-dark)', padding: '6px 14px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '12px' }}>
+                  <button onClick={() => router.push('/teacher/schedule')} style={{ background: 'var(--gray-light)', color: 'var(--gray-dark)', padding: '6px 14px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '12px' }}>
                     Schedule Week
                   </button>
                 </div>
