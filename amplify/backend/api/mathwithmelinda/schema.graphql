@@ -110,3 +110,14 @@ type ParentStudent @model {
   studentEmail: String!
   studentName: String!
 }
+
+type StudentProfile @model {
+  id: ID!
+  userId: String!
+  email: String!
+  firstName: String!
+  lastName: String!
+  gradeLevel: String
+  courseId: String
+  planType: String
+}

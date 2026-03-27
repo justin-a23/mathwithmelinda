@@ -32,6 +32,19 @@ const listSubmissionsWithDetails = /* GraphQL */`
   }
 `
 
+const listStudentProfilesQuery = /* GraphQL */`
+  query ListStudentProfiles {
+    listStudentProfiles(limit: 500) {
+      items {
+        id
+        email
+        firstName
+        lastName
+      }
+    }
+  }
+`
+
 type Submission = {
   id: string
   studentId: string
@@ -61,6 +74,7 @@ export default function GradingPage() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [imageUrls, setImageUrls] = useState<string[]>([])
+  const [studentNameMap, setStudentNameMap] = useState<Record<string, string>>({})
   const { theme } = useTheme()
 
   useEffect(() => {
@@ -69,7 +83,22 @@ export default function GradingPage() {
 
   useEffect(() => {
     fetchSubmissions()
+    fetchStudentProfiles()
   }, [])
+
+  async function fetchStudentProfiles() {
+    try {
+      const result = await client.graphql({ query: listStudentProfilesQuery }) as any
+      const items = result.data.listStudentProfiles.items as { id: string; email: string; firstName: string; lastName: string }[]
+      const map: Record<string, string> = {}
+      for (const p of items) {
+        map[p.email] = `${p.firstName} ${p.lastName}`
+      }
+      setStudentNameMap(map)
+    } catch (err) {
+      console.error('Error fetching student profiles:', err)
+    }
+  }
 
   async function fetchSubmissions() {
     try {
@@ -180,10 +209,12 @@ export default function GradingPage() {
                       onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 2px 8px rgba(123,79,166,0.12)')}
                       onMouseLeave={e => (e.currentTarget.style.boxShadow = 'none')}>
                       <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--foreground)', marginBottom: '4px' }}>
-                        {s.assignment?.course?.title || 'Unknown course'}
+                        {studentNameMap[s.studentId] ? (
+                          <><strong>{studentNameMap[s.studentId]}</strong> ({s.studentId})</>
+                        ) : s.studentId}
                       </div>
                       <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginBottom: '4px' }}>
-                        {s.assignment?.title || 'Unknown lesson'}
+                        {s.assignment?.course?.title || 'Unknown course'} &mdash; {s.assignment?.title || 'Unknown lesson'}
                       </div>
                       <div style={{ fontSize: '11px', color: 'var(--gray-mid)' }}>
                         Submitted {s.submittedAt ? new Date(s.submittedAt).toLocaleDateString() : 'Unknown'}
@@ -204,12 +235,14 @@ export default function GradingPage() {
                       style={{ background: selectedSubmission?.id === s.id ? 'var(--plum-light)' : 'var(--background)', border: `1px solid ${selectedSubmission?.id === s.id ? 'var(--plum-mid)' : 'var(--gray-light)'}`, borderRadius: 'var(--radius)', padding: '14px 16px', marginBottom: '8px', cursor: 'pointer', opacity: 0.7 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
                         <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--foreground)' }}>
-                          {s.assignment?.course?.title || 'Unknown course'}
+                          {studentNameMap[s.studentId] ? (
+                            <strong>{studentNameMap[s.studentId]}</strong>
+                          ) : s.studentId}
                         </div>
                         <span style={{ background: 'var(--plum)', color: 'white', fontSize: '11px', padding: '2px 8px', borderRadius: '20px' }}>{s.grade}</span>
                       </div>
                       <div style={{ fontSize: '12px', color: 'var(--gray-mid)' }}>
-                        {s.assignment?.title || 'Unknown lesson'}
+                        {s.assignment?.course?.title || 'Unknown course'} &mdash; {s.assignment?.title || 'Unknown lesson'}
                       </div>
                     </div>
                   ))}
