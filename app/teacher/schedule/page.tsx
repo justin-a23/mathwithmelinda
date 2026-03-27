@@ -233,6 +233,11 @@ export default function ScheduleWeek() {
                     <option value="">Select lesson...</option>
                     {lessonTemplates.map(t => <option key={t.id} value={t.id}>Lesson {t.lessonNumber} — {t.title}</option>)}
                   </select>
+                  {day.lessonTemplateId && (
+                    <div style={{ marginTop: '6px', fontSize: '12px', fontWeight: 500, color: day.videoUrl ? '#059669' : '#B45309', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      {day.videoUrl ? '✓ Video attached' : '⚠ No video for this lesson'}
+                    </div>
+                  )}
                   {day.instructions !== undefined && (
                    <textarea
                     value={day.instructions}

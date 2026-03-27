@@ -151,7 +151,7 @@ export default function Dashboard() {
                       <div>
                         <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--plum)', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '1px' }}>{item.dayOfWeek}</div>
                         <div style={{ fontFamily: 'var(--font-display)', fontSize: '18px', color: 'var(--foreground)' }}>
-                          {item.lesson?.title || 'Lesson'}
+                          {item.lesson?.order ? `Lesson ${item.lesson.order} — ` : ''}{item.lesson?.title || 'Lesson'}
                         </div>
                       </div>
                       <div style={{ textAlign: 'right' }}>
