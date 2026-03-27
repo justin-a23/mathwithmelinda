@@ -94,3 +94,18 @@ type LessonTemplate @model {
   videoUrl: String
   course: Course @belongsTo
 }
+
+type ParentInvite @model {
+  id: ID!
+  token: String!
+  studentEmail: String!
+  studentName: String!
+  used: Boolean
+}
+
+type ParentStudent @model {
+  id: ID!
+  parentId: String!
+  studentEmail: String!
+  studentName: String!
+}

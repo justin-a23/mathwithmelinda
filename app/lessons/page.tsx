@@ -42,7 +42,7 @@ export default function LessonPage() {
     try {
       const formData = new FormData()
       formData.append('file', file)
-      formData.append('studentId', user?.userId || 'unknown')
+      formData.append('studentId', user?.signInDetails?.loginId || user?.userId || 'unknown')
       formData.append('lessonId', 'lesson-143')
 
       const res = await fetch('/api/submit', {
@@ -82,7 +82,7 @@ export default function LessonPage() {
         query: createSubmission,
         variables: {
           input: {
-            studentId: user?.userId || 'unknown',
+            studentId: user?.signInDetails?.loginId || user?.userId || 'unknown',
             content: JSON.stringify({
               notes,
               files: files.filter(f => f.status === 'done').map(f => f.key)

@@ -97,6 +97,11 @@ export default function TeacherDashboard() {
               Upload Video
             </button>
             <button
+              onClick={() => router.push('/teacher/students')}
+              style={{ background: 'transparent', color: 'var(--plum)', padding: '12px 24px', borderRadius: '8px', border: '1px solid var(--plum)', cursor: 'pointer', fontSize: '14px', fontWeight: 500 }}>
+              Students
+            </button>
+            <button
                onClick={() => setShowAddCourse(true)}
                style={{ background: 'var(--plum)', color: 'white', padding: '12px 24px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '14px', fontWeight: 500 }}>
                + Add Course
