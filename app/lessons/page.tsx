@@ -40,42 +40,20 @@ export default function LessonPage() {
     const index = files.length
 
     try {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('studentId', user?.userId || 'unknown')
+      formData.append('lessonId', 'lesson-143')
+
       const res = await fetch('/api/submit', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          filename: file.name,
-          contentType: file.type,
-          studentId: user?.userId || 'unknown',
-          lessonId: 'lesson-143'
-        })
+        body: formData
       })
-      const { signedUrl, key } = await res.json()
 
-      const xhr = new XMLHttpRequest()
-      xhr.open('PUT', signedUrl)
-      xhr.setRequestHeader('Content-Type', file.type)
+      if (!res.ok) throw new Error('Upload failed')
 
-      xhr.upload.onprogress = (e) => {
-        if (e.lengthComputable) {
-          const progress = Math.round((e.loaded / e.total) * 100)
-          setFiles(prev => prev.map((f, i) => i === index ? { ...f, progress } : f))
-        }
-      }
-
-      xhr.onload = () => {
-        if (xhr.status === 200) {
-          setFiles(prev => prev.map((f, i) => i === index ? { ...f, key, status: 'done', progress: 100 } : f))
-        } else {
-          setFiles(prev => prev.map((f, i) => i === index ? { ...f, status: 'error' } : f))
-        }
-      }
-
-      xhr.onerror = () => {
-        setFiles(prev => prev.map((f, i) => i === index ? { ...f, status: 'error' } : f))
-      }
-
-      xhr.send(file)
+      const { key } = await res.json()
+      setFiles(prev => prev.map((f, i) => i === index ? { ...f, key, status: 'done', progress: 100 } : f))
     } catch (err) {
       console.error(err)
       setFiles(prev => prev.map((f, i) => i === index ? { ...f, status: 'error' } : f))
@@ -145,8 +123,6 @@ export default function LessonPage() {
       </nav>
 
       <main style={{ maxWidth: '860px', margin: '0 auto', padding: '48px 24px' }}>
-        
-        {/* Lesson header */}
         <p style={{ fontSize: '12px', fontWeight: 500, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--plum)', marginBottom: '8px' }}>
           Algebra 1
         </p>
@@ -155,7 +131,6 @@ export default function LessonPage() {
         </h1>
         <p style={{ fontSize: '13px', color: 'var(--gray-mid)', marginBottom: '32px' }}>Due Tuesday by 5:00 PM</p>
 
-        {/* Video */}
         <div style={{ background: '#000', borderRadius: 'var(--radius)', overflow: 'hidden', marginBottom: '32px', aspectRatio: '16/9' }}>
           <video controls style={{ width: '100%', height: '100%' }}
             src={`${CLOUDFRONT_URL}/algebra1/Algebra 1 - Lesson 143 - Introduction to Rational Expressions.mp4`}>
@@ -163,7 +138,6 @@ export default function LessonPage() {
           </video>
         </div>
 
-        {/* Instructions */}
         <div style={{ background: 'var(--plum-light)', border: '1px solid var(--plum-mid)', borderRadius: 'var(--radius)', padding: '20px 24px', marginBottom: '32px' }}>
           <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '16px', color: 'var(--plum)', marginBottom: '8px' }}>Instructions</h2>
           <p style={{ fontSize: '14px', color: 'var(--foreground)', lineHeight: '1.7' }}>
@@ -171,7 +145,6 @@ export default function LessonPage() {
           </p>
         </div>
 
-        {/* Submission form */}
         {submitted ? (
           <div style={{ background: 'var(--plum-light)', border: '1px solid var(--plum-mid)', borderRadius: 'var(--radius)', padding: '32px', textAlign: 'center' }}>
             <div style={{ fontFamily: 'var(--font-display)', fontSize: '24px', color: 'var(--plum)', marginBottom: '8px' }}>Submitted!</div>
@@ -184,7 +157,6 @@ export default function LessonPage() {
           <div style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', padding: '24px' }}>
             <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '20px', color: 'var(--foreground)', marginBottom: '20px' }}>Submit Your Work</h2>
 
-            {/* Notes */}
             <div style={{ marginBottom: '20px' }}>
               <label style={{ fontSize: '12px', fontWeight: 500, color: 'var(--gray-dark)', display: 'block', marginBottom: '6px' }}>Notes (optional)</label>
               <textarea
@@ -196,38 +168,29 @@ export default function LessonPage() {
               />
             </div>
 
-            {/* Photo upload */}
             <div style={{ marginBottom: '24px' }}>
               <label style={{ fontSize: '12px', fontWeight: 500, color: 'var(--gray-dark)', display: 'block', marginBottom: '6px' }}>Photos of your work</label>
-              
               <div
                 onClick={() => fileInputRef.current?.click()}
                 onDragOver={e => e.preventDefault()}
                 onDrop={e => { e.preventDefault(); Array.from(e.dataTransfer.files).forEach(uploadFile) }}
                 style={{ border: '2px dashed var(--gray-light)', borderRadius: 'var(--radius)', padding: '24px', textAlign: 'center', cursor: 'pointer', marginBottom: '12px' }}>
-                <input ref={fileInputRef} type="file" accept="image/*" multiple style={{ display: 'none' }}
+                <input ref={fileInputRef} type="file" accept="image/*,.heic,.heif" multiple style={{ display: 'none' }}
                   onChange={e => { if (e.target.files) Array.from(e.target.files).forEach(uploadFile) }}/>
                 <div style={{ fontSize: '24px', marginBottom: '8px' }}>+</div>
                 <div style={{ color: 'var(--gray-mid)', fontSize: '14px' }}>Click or drag photos here</div>
-                <div style={{ color: 'var(--gray-mid)', fontSize: '12px', marginTop: '4px' }}>You can add as many photos as needed</div>
+                <div style={{ color: 'var(--gray-mid)', fontSize: '12px', marginTop: '4px' }}>Supports JPG, PNG, HEIC and more</div>
               </div>
 
-              {/* Uploaded files list */}
               {files.length > 0 && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {files.map((f, i) => (
                     <div key={i} style={{ background: 'var(--gray-light)', borderRadius: '6px', padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <span style={{ fontSize: '13px', color: 'var(--foreground)' }}>{f.name}</span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        {f.status === 'uploading' && (
-                          <span style={{ fontSize: '12px', color: 'var(--gray-mid)' }}>{f.progress}%</span>
-                        )}
-                        {f.status === 'done' && (
-                          <span style={{ fontSize: '12px', color: 'var(--plum)', fontWeight: 500 }}>✓ Ready</span>
-                        )}
-                        {f.status === 'error' && (
-                          <span style={{ fontSize: '12px', color: 'red' }}>Failed</span>
-                        )}
+                        {f.status === 'uploading' && <span style={{ fontSize: '12px', color: 'var(--gray-mid)' }}>Converting...</span>}
+                        {f.status === 'done' && <span style={{ fontSize: '12px', color: 'var(--plum)', fontWeight: 500 }}>✓ Ready</span>}
+                        {f.status === 'error' && <span style={{ fontSize: '12px', color: 'red' }}>Failed</span>}
                         <button onClick={() => setFiles(prev => prev.filter((_, idx) => idx !== i))}
                           style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--gray-mid)', fontSize: '16px' }}>×</button>
                       </div>

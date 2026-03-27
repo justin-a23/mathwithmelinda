@@ -1,6 +1,6 @@
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { NextRequest, NextResponse } from 'next/server'
+import sharp from 'sharp'
 
 const s3 = new S3Client({
   region: 'us-east-1',
@@ -10,23 +10,47 @@ const s3 = new S3Client({
   }
 })
 
+async function convertToJpeg(buffer: Buffer, contentType: string): Promise<Buffer> {
+  if (contentType === 'image/heic' || contentType === 'image/heif') {
+    const heicConvert = (await import('heic-convert')).default
+    const converted = await heicConvert({
+      buffer: buffer,
+      format: 'JPEG',
+      quality: 0.9
+    })
+    return Buffer.from(converted)
+  }
+  return sharp(buffer).jpeg({ quality: 90 }).toBuffer()
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const { filename, contentType, studentId, lessonId } = await request.json()
-    
+    const formData = await request.formData()
+    const file = formData.get('file') as File
+    const studentId = formData.get('studentId') as string
+    const lessonId = formData.get('lessonId') as string
+
+    if (!file) {
+      return NextResponse.json({ error: 'No file provided' }, { status: 400 })
+    }
+
+    const arrayBuffer = await file.arrayBuffer()
+    const buffer = Buffer.from(arrayBuffer)
+    const jpegBuffer = await convertToJpeg(buffer, file.type)
+
+    const filename = file.name.replace(/\.[^.]+$/, '.jpg')
     const key = `submissions/${studentId}/${lessonId}/${Date.now()}-${filename}`
-    
-    const command = new PutObjectCommand({
+
+    await s3.send(new PutObjectCommand({
       Bucket: 'mathwithmelinda-submissions',
       Key: key,
-      ContentType: contentType,
-    })
+      Body: jpegBuffer,
+      ContentType: 'image/jpeg',
+    }))
 
-    const signedUrl = await getSignedUrl(s3, command, { expiresIn: 3600 })
-
-    return NextResponse.json({ signedUrl, key })
+    return NextResponse.json({ key, url: `https://mathwithmelinda-submissions.s3.us-east-1.amazonaws.com/${key}` })
   } catch (err) {
-    console.error('Error generating signed URL:', err)
-    return NextResponse.json({ error: 'Failed to generate upload URL' }, { status: 500 })
+    console.error('Error processing submission:', err)
+    return NextResponse.json({ error: 'Failed to process upload' }, { status: 500 })
   }
 }
