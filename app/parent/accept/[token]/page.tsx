@@ -87,7 +87,7 @@ export default function AcceptInvitePage() {
       const result = await client.graphql({
         query: findInviteByToken,
         variables: { filter: { token: { eq: token } } }
-      })
+      }) as any
       const items = (result.data as { listParentInvites: { items: Invite[] } }).listParentInvites.items
 
       if (items.length === 0) {
@@ -103,7 +103,7 @@ export default function AcceptInvitePage() {
         const linkResult = await client.graphql({
           query: listParentStudentLinks,
           variables: { filter: { parentId: { eq: user?.userId }, studentEmail: { eq: found.studentEmail } } }
-        })
+        }) as any
         const links = (linkResult.data as { listParentStudents: { items: { id: string }[] } }).listParentStudents.items
         setState(links.length > 0 ? 'already-linked' : 'already-used')
         return

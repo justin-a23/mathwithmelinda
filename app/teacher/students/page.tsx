@@ -77,7 +77,7 @@ export default function StudentsPage() {
 
   async function fetchInvites() {
     try {
-      const result = await client.graphql({ query: listParentInvites })
+      const result = await client.graphql({ query: listParentInvites }) as any
       const items = (result.data as { listParentInvites: { items: Invite[] } }).listParentInvites.items
       setInvites(items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()))
     } catch (err) {
@@ -95,7 +95,7 @@ export default function StudentsPage() {
       const result = await client.graphql({
         query: createParentInvite,
         variables: { input: { token, studentName: studentName.trim(), studentEmail: studentEmail.trim().toLowerCase(), used: false } }
-      })
+      }) as any
       const newInvite = (result.data as { createParentInvite: Invite }).createParentInvite
       setInvites(prev => [newInvite, ...prev])
       setStudentName('')

@@ -98,7 +98,7 @@ export default function ParentDashboard() {
       const result = await client.graphql({
         query: listParentStudents,
         variables: { filter: { parentId: { eq: user?.userId } } }
-      })
+      }) as any
       const items = (result.data as { listParentStudents: { items: Child[] } }).listParentStudents.items
       setChildren(items)
       if (items.length === 1) setSelectedChild(items[0])
@@ -117,7 +117,7 @@ export default function ParentDashboard() {
       const result = await client.graphql({
         query: listSubmissionsByStudent,
         variables: { filter: { studentId: { eq: studentEmail } } }
-      })
+      }) as any
       const items = (result.data as { listSubmissions: { items: Submission[] } }).listSubmissions.items
       const sorted = items.sort((a, b) => {
         if (!a.submittedAt) return 1

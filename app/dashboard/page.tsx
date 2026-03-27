@@ -81,7 +81,7 @@ export default function Dashboard() {
       const result = await client.graphql({
         query: listWeeklyPlansWithItems,
         variables: {}
-      })
+      }) as any
       const plans = result.data.listWeeklyPlans.items as WeeklyPlan[]
       const sorted = plans.sort((a, b) => new Date(b.weekStartDate).getTime() - new Date(a.weekStartDate).getTime())
       setWeeklyPlans(sorted.slice(0, 2))

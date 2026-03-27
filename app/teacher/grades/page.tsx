@@ -73,7 +73,7 @@ export default function GradingPage() {
 
   async function fetchSubmissions() {
     try {
-      const result = await client.graphql({ query: listSubmissionsWithDetails })
+      const result = await client.graphql({ query: listSubmissionsWithDetails }) as any
       setSubmissions(result.data.listSubmissions.items as Submission[])
     } catch (err) {
       console.error(err)
