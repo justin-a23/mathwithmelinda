@@ -55,6 +55,7 @@ type WeeklyPlanItem @model {
   dueTime: String
   isPublished: Boolean
   lesson: Lesson @belongsTo
+  lessonTemplateId: ID
   weeklyPlan: WeeklyPlan @belongsTo
   assignments: [Assignment] @hasMany
 }
@@ -72,10 +73,23 @@ type Submission @model {
   id: ID!
   studentId: String!
   content: String
+  answers: String
+  imageUrls: String
+  lessonTemplateId: String
   grade: String
   submittedAt: String
   teacherComment: String
   assignment: Assignment @belongsTo
+  messages: [SubmissionMessage] @hasMany
+}
+
+type SubmissionMessage @model {
+  id: ID!
+  senderId: String!
+  senderType: String!
+  message: String!
+  isRead: Boolean
+  submission: Submission @belongsTo
 }
 
 type Enrollment @model {
@@ -93,7 +107,19 @@ type LessonTemplate @model {
   instructions: String
   worksheetUrl: String
   videoUrl: String
+  assignmentType: String
   course: Course @belongsTo
+  questions: [AssignmentQuestion] @hasMany
+}
+
+type AssignmentQuestion @model {
+  id: ID!
+  order: Int!
+  questionText: String!
+  questionType: String!
+  choices: String
+  correctAnswer: String
+  lessonTemplate: LessonTemplate @belongsTo
 }
 
 type ParentInvite @model {

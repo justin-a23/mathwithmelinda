@@ -165,6 +165,7 @@ export const getLesson = /* GraphQL */ `query GetLesson($id: ID!) {
     id
     title
     videoUrl
+    instructions
     order
     isPublished
     course {
@@ -198,6 +199,7 @@ export const listLessons = /* GraphQL */ `query ListLessons(
       id
       title
       videoUrl
+      instructions
       order
       isPublished
       createdAt
@@ -286,6 +288,7 @@ export const getWeeklyPlanItem = /* GraphQL */ `query GetWeeklyPlanItem($id: ID!
       id
       title
       videoUrl
+      instructions
       order
       isPublished
       createdAt
@@ -293,6 +296,7 @@ export const getWeeklyPlanItem = /* GraphQL */ `query GetWeeklyPlanItem($id: ID!
       courseLessonsId
       __typename
     }
+    lessonTemplateId
     weeklyPlan {
       id
       weekStartDate
@@ -328,6 +332,7 @@ export const listWeeklyPlanItems = /* GraphQL */ `query ListWeeklyPlanItems(
       dayOfWeek
       dueTime
       isPublished
+      lessonTemplateId
       createdAt
       updatedAt
       lessonWeeklyPlanItemsId
@@ -403,6 +408,9 @@ export const getSubmission = /* GraphQL */ `query GetSubmission($id: ID!) {
     id
     studentId
     content
+    answers
+    imageUrls
+    lessonTemplateId
     grade
     submittedAt
     teacherComment
@@ -415,6 +423,10 @@ export const getSubmission = /* GraphQL */ `query GetSubmission($id: ID!) {
       updatedAt
       courseAssignmentsId
       weeklyPlanItemAssignmentsId
+      __typename
+    }
+    messages {
+      nextToken
       __typename
     }
     createdAt
@@ -437,6 +449,9 @@ export const listSubmissions = /* GraphQL */ `query ListSubmissions(
       id
       studentId
       content
+      answers
+      imageUrls
+      lessonTemplateId
       grade
       submittedAt
       teacherComment
@@ -452,6 +467,67 @@ export const listSubmissions = /* GraphQL */ `query ListSubmissions(
 ` as GeneratedQuery<
   APITypes.ListSubmissionsQueryVariables,
   APITypes.ListSubmissionsQuery
+>;
+export const getSubmissionMessage = /* GraphQL */ `query GetSubmissionMessage($id: ID!) {
+  getSubmissionMessage(id: $id) {
+    id
+    senderId
+    senderType
+    message
+    isRead
+    submission {
+      id
+      studentId
+      content
+      answers
+      imageUrls
+      lessonTemplateId
+      grade
+      submittedAt
+      teacherComment
+      createdAt
+      updatedAt
+      assignmentSubmissionsId
+      __typename
+    }
+    createdAt
+    updatedAt
+    submissionMessagesId
+    __typename
+  }
+}
+` as GeneratedQuery<
+  APITypes.GetSubmissionMessageQueryVariables,
+  APITypes.GetSubmissionMessageQuery
+>;
+export const listSubmissionMessages = /* GraphQL */ `query ListSubmissionMessages(
+  $filter: ModelSubmissionMessageFilterInput
+  $limit: Int
+  $nextToken: String
+) {
+  listSubmissionMessages(
+    filter: $filter
+    limit: $limit
+    nextToken: $nextToken
+  ) {
+    items {
+      id
+      senderId
+      senderType
+      message
+      isRead
+      createdAt
+      updatedAt
+      submissionMessagesId
+      __typename
+    }
+    nextToken
+    __typename
+  }
+}
+` as GeneratedQuery<
+  APITypes.ListSubmissionMessagesQueryVariables,
+  APITypes.ListSubmissionMessagesQuery
 >;
 export const getEnrollment = /* GraphQL */ `query GetEnrollment($id: ID!) {
   getEnrollment(id: $id) {
@@ -522,6 +598,7 @@ export const getLessonTemplate = /* GraphQL */ `query GetLessonTemplate($id: ID!
     instructions
     worksheetUrl
     videoUrl
+    assignmentType
     course {
       id
       title
@@ -530,6 +607,10 @@ export const getLessonTemplate = /* GraphQL */ `query GetLessonTemplate($id: ID!
       isArchived
       createdAt
       updatedAt
+      __typename
+    }
+    questions {
+      nextToken
       __typename
     }
     createdAt
@@ -555,6 +636,7 @@ export const listLessonTemplates = /* GraphQL */ `query ListLessonTemplates(
       instructions
       worksheetUrl
       videoUrl
+      assignmentType
       createdAt
       updatedAt
       courseLessonTemplatesId
@@ -567,4 +649,189 @@ export const listLessonTemplates = /* GraphQL */ `query ListLessonTemplates(
 ` as GeneratedQuery<
   APITypes.ListLessonTemplatesQueryVariables,
   APITypes.ListLessonTemplatesQuery
+>;
+export const getAssignmentQuestion = /* GraphQL */ `query GetAssignmentQuestion($id: ID!) {
+  getAssignmentQuestion(id: $id) {
+    id
+    order
+    questionText
+    questionType
+    choices
+    correctAnswer
+    lessonTemplate {
+      id
+      lessonNumber
+      title
+      instructions
+      worksheetUrl
+      videoUrl
+      assignmentType
+      createdAt
+      updatedAt
+      courseLessonTemplatesId
+      __typename
+    }
+    createdAt
+    updatedAt
+    lessonTemplateQuestionsId
+    __typename
+  }
+}
+` as GeneratedQuery<
+  APITypes.GetAssignmentQuestionQueryVariables,
+  APITypes.GetAssignmentQuestionQuery
+>;
+export const listAssignmentQuestions = /* GraphQL */ `query ListAssignmentQuestions(
+  $filter: ModelAssignmentQuestionFilterInput
+  $limit: Int
+  $nextToken: String
+) {
+  listAssignmentQuestions(
+    filter: $filter
+    limit: $limit
+    nextToken: $nextToken
+  ) {
+    items {
+      id
+      order
+      questionText
+      questionType
+      choices
+      correctAnswer
+      createdAt
+      updatedAt
+      lessonTemplateQuestionsId
+      __typename
+    }
+    nextToken
+    __typename
+  }
+}
+` as GeneratedQuery<
+  APITypes.ListAssignmentQuestionsQueryVariables,
+  APITypes.ListAssignmentQuestionsQuery
+>;
+export const getParentInvite = /* GraphQL */ `query GetParentInvite($id: ID!) {
+  getParentInvite(id: $id) {
+    id
+    token
+    studentEmail
+    studentName
+    used
+    createdAt
+    updatedAt
+    __typename
+  }
+}
+` as GeneratedQuery<
+  APITypes.GetParentInviteQueryVariables,
+  APITypes.GetParentInviteQuery
+>;
+export const listParentInvites = /* GraphQL */ `query ListParentInvites(
+  $filter: ModelParentInviteFilterInput
+  $limit: Int
+  $nextToken: String
+) {
+  listParentInvites(filter: $filter, limit: $limit, nextToken: $nextToken) {
+    items {
+      id
+      token
+      studentEmail
+      studentName
+      used
+      createdAt
+      updatedAt
+      __typename
+    }
+    nextToken
+    __typename
+  }
+}
+` as GeneratedQuery<
+  APITypes.ListParentInvitesQueryVariables,
+  APITypes.ListParentInvitesQuery
+>;
+export const getParentStudent = /* GraphQL */ `query GetParentStudent($id: ID!) {
+  getParentStudent(id: $id) {
+    id
+    parentId
+    studentEmail
+    studentName
+    createdAt
+    updatedAt
+    __typename
+  }
+}
+` as GeneratedQuery<
+  APITypes.GetParentStudentQueryVariables,
+  APITypes.GetParentStudentQuery
+>;
+export const listParentStudents = /* GraphQL */ `query ListParentStudents(
+  $filter: ModelParentStudentFilterInput
+  $limit: Int
+  $nextToken: String
+) {
+  listParentStudents(filter: $filter, limit: $limit, nextToken: $nextToken) {
+    items {
+      id
+      parentId
+      studentEmail
+      studentName
+      createdAt
+      updatedAt
+      __typename
+    }
+    nextToken
+    __typename
+  }
+}
+` as GeneratedQuery<
+  APITypes.ListParentStudentsQueryVariables,
+  APITypes.ListParentStudentsQuery
+>;
+export const getStudentProfile = /* GraphQL */ `query GetStudentProfile($id: ID!) {
+  getStudentProfile(id: $id) {
+    id
+    userId
+    email
+    firstName
+    lastName
+    gradeLevel
+    courseId
+    planType
+    createdAt
+    updatedAt
+    __typename
+  }
+}
+` as GeneratedQuery<
+  APITypes.GetStudentProfileQueryVariables,
+  APITypes.GetStudentProfileQuery
+>;
+export const listStudentProfiles = /* GraphQL */ `query ListStudentProfiles(
+  $filter: ModelStudentProfileFilterInput
+  $limit: Int
+  $nextToken: String
+) {
+  listStudentProfiles(filter: $filter, limit: $limit, nextToken: $nextToken) {
+    items {
+      id
+      userId
+      email
+      firstName
+      lastName
+      gradeLevel
+      courseId
+      planType
+      createdAt
+      updatedAt
+      __typename
+    }
+    nextToken
+    __typename
+  }
+}
+` as GeneratedQuery<
+  APITypes.ListStudentProfilesQueryVariables,
+  APITypes.ListStudentProfilesQuery
 >;

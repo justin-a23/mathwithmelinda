@@ -158,7 +158,8 @@ export default function ScheduleWeek() {
             dueTime: `${day.dueDate}T${day.dueTime}`,
             isPublished: day.isPublished,
             weeklyPlanItemsId: planId,
-            lessonWeeklyPlanItemsId: lessonResult.data.createLesson.id
+            lessonWeeklyPlanItemsId: lessonResult.data.createLesson.id,
+            lessonTemplateId: day.lessonTemplateId || null
           }}
         })
       }

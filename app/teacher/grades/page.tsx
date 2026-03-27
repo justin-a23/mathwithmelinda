@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { generateClient } from 'aws-amplify/api'
 import { useTheme } from '../../ThemeProvider'
+import MathRenderer from '../../components/MathRenderer'
 
 const client = generateClient()
 
@@ -46,6 +47,21 @@ const listStudentProfilesQuery = /* GraphQL */`
   }
 `
 
+const getLessonTemplateQuestions = /* GraphQL */`
+  query GetLessonTemplate($id: ID!) {
+    getLessonTemplate(id: $id) {
+      questions {
+        items {
+          id
+          order
+          questionText
+          questionType
+        }
+      }
+    }
+  }
+`
+
 type Submission = {
   id: string
   studentId: string
@@ -57,11 +73,15 @@ type Submission = {
     id: string
     title: string
     dueDate: string | null
-    course?: {
-      id: string
-      title: string
-    } | null
+    course?: { id: string; title: string } | null
   } | null
+}
+
+type Question = { id: string; order: number; questionText: string; questionType: string }
+
+function getSubmissionLabel(s: Submission): string {
+  try { const c = JSON.parse(s.content || '{}'); return s.assignment?.course?.title || c.lessonTitle || 'No lesson info' }
+  catch { return s.assignment?.course?.title || 'No lesson info' }
 }
 
 export default function GradingPage() {
@@ -76,6 +96,8 @@ export default function GradingPage() {
   const [saved, setSaved] = useState(false)
   const [imageUrls, setImageUrls] = useState<string[]>([])
   const [studentNameMap, setStudentNameMap] = useState<Record<string, string>>({})
+  const [questions, setQuestions] = useState<Question[]>([])
+  const [showWorkImageUrls, setShowWorkImageUrls] = useState<Record<string, string[]>>({})
   const { theme } = useTheme()
 
   useEffect(() => {
@@ -114,35 +136,56 @@ export default function GradingPage() {
     }
   }
 
+  async function fetchPresignedUrl(key: string): Promise<string> {
+    const res = await fetch('/api/view-submission', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key })
+    })
+    const { url } = await res.json()
+    return url
+  }
+
   async function openSubmission(submission: Submission) {
     setSelectedSubmission(submission)
     setGrade(submission.grade || '')
     setComment(submission.teacherComment || '')
     setSaved(false)
+    setImageUrls([])
+    setQuestions([])
+    setShowWorkImageUrls({})
 
-    if (submission.content) {
-      try {
-        const parsed = JSON.parse(submission.content)
-        if (parsed.files && parsed.files.length > 0) {
-          const urls = await Promise.all(
-            parsed.files.map(async (key: string) => {
-              const res = await fetch('/api/view-submission', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ key })
-              })
-              const { url } = await res.json()
-              return url
-            })
-          )
-          setImageUrls(urls)
-        } else {
-          setImageUrls([])
-        }
-      } catch {
-        setImageUrls([])
+    if (!submission.content) return
+    try {
+      const parsed = JSON.parse(submission.content)
+
+      if (parsed.files && parsed.files.length > 0) {
+        const urls = await Promise.all(parsed.files.map(fetchPresignedUrl))
+        setImageUrls(urls)
       }
-    }
+
+      if (parsed.lessonTemplateId) {
+        try {
+          const result = await (client.graphql({
+            query: getLessonTemplateQuestions,
+            variables: { id: parsed.lessonTemplateId }
+          }) as any)
+          const items: Question[] = result.data.getLessonTemplate?.questions?.items || []
+          setQuestions(items.sort((a, b) => a.order - b.order))
+        } catch { /* no questions */ }
+      }
+
+      if (parsed.showWorkFiles) {
+        const entries = Object.entries(parsed.showWorkFiles) as [string, string[]][]
+        const resolved = await Promise.all(
+          entries.map(async ([qId, keys]) => {
+            const urls = await Promise.all(keys.map(fetchPresignedUrl))
+            return [qId, urls] as [string, string[]]
+          })
+        )
+        setShowWorkImageUrls(Object.fromEntries(resolved))
+      }
+    } catch { /* content not parseable */ }
   }
 
   async function saveGrade() {
@@ -152,13 +195,7 @@ export default function GradingPage() {
       const { updateSubmission } = await import('../../../src/graphql/mutations')
       await client.graphql({
         query: updateSubmission,
-        variables: {
-          input: {
-            id: selectedSubmission.id,
-            grade,
-            teacherComment: comment
-          }
-        }
+        variables: { input: { id: selectedSubmission.id, grade, teacherComment: comment } }
       })
       setSaved(true)
       setSubmissions(prev => prev.map(s => s.id === selectedSubmission.id ? { ...s, grade, teacherComment: comment } : s))
@@ -191,8 +228,7 @@ export default function GradingPage() {
       </nav>
 
       <div style={{ display: 'flex', maxWidth: '1200px', margin: '0 auto', padding: '48px 24px', gap: '32px' }}>
-        
-        {/* Left panel - submission list */}
+
         <div style={{ width: '340px', flexShrink: 0 }}>
           <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '28px', color: 'var(--foreground)', marginBottom: '24px' }}>Grade Work</h1>
 
@@ -202,26 +238,17 @@ export default function GradingPage() {
             <>
               {ungraded.length > 0 && (
                 <div style={{ marginBottom: '32px' }}>
-                  <div style={{ fontSize: '11px', fontWeight: 500, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--plum)', marginBottom: '12px' }}>
-                    Needs grading ({ungraded.length})
-                  </div>
+                  <div style={{ fontSize: '11px', fontWeight: 500, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--plum)', marginBottom: '12px' }}>Needs grading ({ungraded.length})</div>
                   {ungraded.map(s => (
-                    <div key={s.id}
-                      onClick={() => openSubmission(s)}
+                    <div key={s.id} onClick={() => openSubmission(s)}
                       style={{ background: selectedSubmission?.id === s.id ? 'var(--plum-light)' : 'var(--background)', border: `1px solid ${selectedSubmission?.id === s.id ? 'var(--plum-mid)' : 'var(--gray-light)'}`, borderRadius: 'var(--radius)', padding: '14px 16px', marginBottom: '8px', cursor: 'pointer' }}
                       onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 2px 8px rgba(123,79,166,0.12)')}
                       onMouseLeave={e => (e.currentTarget.style.boxShadow = 'none')}>
                       <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--foreground)', marginBottom: '4px' }}>
-                        {studentNameMap[s.studentId] ? (
-                          <><strong>{studentNameMap[s.studentId]}</strong> ({s.studentId})</>
-                        ) : s.studentId}
+                        {studentNameMap[s.studentId] ? <><strong>{studentNameMap[s.studentId]}</strong> ({s.studentId})</> : s.studentId}
                       </div>
-                      <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginBottom: '4px' }}>
-                        {(() => { try { const c = JSON.parse(s.content || '{}'); return s.assignment?.course?.title || c.lessonTitle || 'No lesson info' } catch { return s.assignment?.course?.title || 'No lesson info' } })()}
-                      </div>
-                      <div style={{ fontSize: '11px', color: 'var(--gray-mid)' }}>
-                        Submitted {s.submittedAt ? new Date(s.submittedAt).toLocaleDateString() : 'Unknown'}
-                      </div>
+                      <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginBottom: '4px' }}>{getSubmissionLabel(s)}</div>
+                      <div style={{ fontSize: '11px', color: 'var(--gray-mid)' }}>Submitted {s.submittedAt ? new Date(s.submittedAt).toLocaleDateString() : 'Unknown'}</div>
                     </div>
                   ))}
                 </div>
@@ -229,49 +256,88 @@ export default function GradingPage() {
 
               {graded.length > 0 && (
                 <div>
-                  <div style={{ fontSize: '11px', fontWeight: 500, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--gray-mid)', marginBottom: '12px' }}>
-                    Graded ({graded.length})
-                  </div>
+                  <div style={{ fontSize: '11px', fontWeight: 500, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--gray-mid)', marginBottom: '12px' }}>Graded ({graded.length})</div>
                   {graded.map(s => (
-                    <div key={s.id}
-                      onClick={() => openSubmission(s)}
+                    <div key={s.id} onClick={() => openSubmission(s)}
                       style={{ background: selectedSubmission?.id === s.id ? 'var(--plum-light)' : 'var(--background)', border: `1px solid ${selectedSubmission?.id === s.id ? 'var(--plum-mid)' : 'var(--gray-light)'}`, borderRadius: 'var(--radius)', padding: '14px 16px', marginBottom: '8px', cursor: 'pointer', opacity: 0.7 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
                         <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--foreground)' }}>
-                          {studentNameMap[s.studentId] ? (
-                            <strong>{studentNameMap[s.studentId]}</strong>
-                          ) : s.studentId}
+                          {studentNameMap[s.studentId] ? <strong>{studentNameMap[s.studentId]}</strong> : s.studentId}
                         </div>
                         <span style={{ background: 'var(--plum)', color: 'white', fontSize: '11px', padding: '2px 8px', borderRadius: '20px' }}>{s.grade}</span>
                       </div>
-                      <div style={{ fontSize: '12px', color: 'var(--gray-mid)' }}>
-                        {(() => { try { const c = JSON.parse(s.content || '{}'); return s.assignment?.course?.title || c.lessonTitle || 'No lesson info' } catch { return s.assignment?.course?.title || 'No lesson info' } })()}
-                      </div>
+                      <div style={{ fontSize: '12px', color: 'var(--gray-mid)' }}>{getSubmissionLabel(s)}</div>
                     </div>
                   ))}
                 </div>
               )}
 
-              {submissions.length === 0 && (
-                <p style={{ color: 'var(--gray-mid)', fontSize: '14px' }}>No submissions yet.</p>
-              )}
+              {submissions.length === 0 && <p style={{ color: 'var(--gray-mid)', fontSize: '14px' }}>No submissions yet.</p>}
             </>
           )}
         </div>
 
-        {/* Right panel - grading area */}
         {selectedSubmission ? (
           <div style={{ flex: 1 }}>
             <div style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', padding: '32px' }}>
-              
+
               <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', color: 'var(--foreground)', marginBottom: '4px' }}>
-                {selectedSubmission.assignment?.title || 'Submission'}
+                {selectedSubmission.assignment?.title || (() => { try { return JSON.parse(selectedSubmission.content || '{}').lessonTitle || 'Submission' } catch { return 'Submission' } })()}
               </h2>
               <p style={{ color: 'var(--gray-mid)', fontSize: '13px', marginBottom: '24px' }}>
-                {selectedSubmission.assignment?.course?.title} · Submitted {selectedSubmission.submittedAt ? new Date(selectedSubmission.submittedAt).toLocaleDateString() : ''}
+                {studentNameMap[selectedSubmission.studentId] || selectedSubmission.studentId} · Submitted {selectedSubmission.submittedAt ? new Date(selectedSubmission.submittedAt).toLocaleDateString() : ''}
               </p>
 
-              {/* Student notes */}
+              {questions.length > 0 && (() => {
+                let answers: Record<string, string> = {}
+                try { answers = JSON.parse(selectedSubmission.content || '{}').answers || {} } catch {}
+                return (
+                  <div style={{ marginBottom: '24px' }}>
+                    <div style={{ fontSize: '11px', fontWeight: 500, color: 'var(--gray-mid)', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '1px' }}>Student answers</div>
+                    {questions.map((q, idx) => {
+                      const answer = answers[q.id]
+                      const swUrls = showWorkImageUrls[q.id] || []
+                      return (
+                        <div key={q.id} style={{ marginBottom: '16px', paddingBottom: '16px', borderBottom: idx < questions.length - 1 ? '1px solid var(--gray-light)' : 'none' }}>
+                          <div style={{ display: 'flex', gap: '10px', marginBottom: '8px' }}>
+                            <span style={{ fontWeight: 700, color: 'var(--plum)', fontSize: '14px', minWidth: '24px' }}>{idx + 1}.</span>
+                            <span style={{ fontSize: '14px', color: 'var(--gray-dark)' }}><MathRenderer text={q.questionText} /></span>
+                          </div>
+                          {q.questionType === 'show_work' ? (
+                            swUrls.length > 0 ? (
+                              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', paddingLeft: '34px' }}>
+                                {swUrls.map((url, i) => (
+                                  <a key={i} href={url} target="_blank" rel="noopener noreferrer">
+                                    <img src={url} alt="Show work" style={{ width: '120px', height: '90px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--gray-light)' }} onError={e => (e.currentTarget.style.display = 'none')} />
+                                  </a>
+                                ))}
+                              </div>
+                            ) : <p style={{ paddingLeft: '34px', fontSize: '13px', color: 'var(--gray-mid)', fontStyle: 'italic' }}>No photo uploaded</p>
+                          ) : (
+                            <div style={{ paddingLeft: '34px', background: answer ? 'var(--plum-light)' : 'var(--gray-light)', borderRadius: '6px', padding: '8px 12px', fontSize: '14px', color: answer ? 'var(--foreground)' : 'var(--gray-mid)', fontStyle: answer ? 'normal' : 'italic' }}>
+                              {answer || 'No answer provided'}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )
+              })()}
+
+              {imageUrls.length > 0 && (
+                <div style={{ marginBottom: '24px' }}>
+                  <div style={{ fontSize: '11px', fontWeight: 500, color: 'var(--gray-mid)', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '1px' }}>Submitted photos ({imageUrls.length})</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 200px))', gap: '12px' }}>
+                    {imageUrls.map((url, i) => (
+                      <a key={i} href={url} target="_blank" rel="noopener noreferrer">
+                        <img src={url} alt={`Submission ${i + 1}`} style={{ width: '100%', minHeight: '150px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--gray-light)', cursor: 'pointer' }} onError={e => (e.currentTarget.style.display = 'none')} />
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {selectedSubmission.content && (() => {
                 try {
                   const parsed = JSON.parse(selectedSubmission.content)
@@ -284,52 +350,16 @@ export default function GradingPage() {
                 } catch { return null }
               })()}
 
-              {/* Submitted photos */}
-              {imageUrls.length > 0 && (
-                <div style={{ marginBottom: '24px' }}>
-                  <div style={{ fontSize: '11px', fontWeight: 500, color: 'var(--gray-mid)', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '1px' }}>
-                    Submitted photos ({imageUrls.length})
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 200px))', gap: '12px' }}>
-                    {imageUrls.map((url, i) => (
-                      <a key={i} href={url} target="_blank" rel="noopener noreferrer">
-                        <img src={url} alt={`Submission ${i + 1}`} 
-                          style={{ width: '100%', minHeight: '150px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--gray-light)', cursor: 'pointer' }}
-                          onError={e => (e.currentTarget.style.display = 'none')}
-                        />
-                      </a>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {imageUrls.length === 0 && (
-                <div style={{ background: 'var(--gray-light)', borderRadius: '6px', padding: '20px', textAlign: 'center', marginBottom: '24px' }}>
-                  <p style={{ color: 'var(--gray-mid)', fontSize: '14px' }}>No photos submitted — loading...</p>
-                </div>
-              )}
-
-              {/* Grade */}
               <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '16px', marginBottom: '20px' }}>
                 <div>
                   <label style={{ fontSize: '12px', fontWeight: 500, color: 'var(--gray-dark)', display: 'block', marginBottom: '6px' }}>Grade</label>
-                  <input
-                    type="text"
-                    value={grade}
-                    onChange={e => setGrade(e.target.value)}
-                    placeholder="e.g. 95"
-                    style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--gray-light)', borderRadius: '6px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)' }}
-                  />
+                  <input type="text" value={grade} onChange={e => setGrade(e.target.value)} placeholder="e.g. 95"
+                    style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--gray-light)', borderRadius: '6px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)' }} />
                 </div>
                 <div>
                   <label style={{ fontSize: '12px', fontWeight: 500, color: 'var(--gray-dark)', display: 'block', marginBottom: '6px' }}>Comments for student</label>
-                  <textarea
-                    value={comment}
-                    onChange={e => setComment(e.target.value)}
-                    placeholder="Great work! On problem 3, remember to..."
-                    rows={3}
-                    style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--gray-light)', borderRadius: '6px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)', resize: 'vertical' }}
-                  />
+                  <textarea value={comment} onChange={e => setComment(e.target.value)} placeholder="Great work! On problem 3, remember to..." rows={3}
+                    style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--gray-light)', borderRadius: '6px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)', resize: 'vertical' }} />
                 </div>
               </div>
 

@@ -132,6 +132,7 @@ export type Lesson = {
   id: string,
   title: string,
   videoUrl?: string | null,
+  instructions?: string | null,
   order?: number | null,
   isPublished?: boolean | null,
   course?: Course | null,
@@ -154,6 +155,7 @@ export type WeeklyPlanItem = {
   dueTime?: string | null,
   isPublished?: boolean | null,
   lesson?: Lesson | null,
+  lessonTemplateId?: string | null,
   weeklyPlan?: WeeklyPlan | null,
   assignments?: ModelAssignmentConnection | null,
   createdAt: string,
@@ -206,13 +208,36 @@ export type Submission = {
   id: string,
   studentId: string,
   content?: string | null,
+  answers?: string | null,
+  imageUrls?: string | null,
+  lessonTemplateId?: string | null,
   grade?: string | null,
   submittedAt?: string | null,
   teacherComment?: string | null,
   assignment?: Assignment | null,
+  messages?: ModelSubmissionMessageConnection | null,
   createdAt: string,
   updatedAt: string,
   assignmentSubmissionsId?: string | null,
+};
+
+export type ModelSubmissionMessageConnection = {
+  __typename: "ModelSubmissionMessageConnection",
+  items:  Array<SubmissionMessage | null >,
+  nextToken?: string | null,
+};
+
+export type SubmissionMessage = {
+  __typename: "SubmissionMessage",
+  id: string,
+  senderId: string,
+  senderType: string,
+  message: string,
+  isRead?: boolean | null,
+  submission?: Submission | null,
+  createdAt: string,
+  updatedAt: string,
+  submissionMessagesId?: string | null,
 };
 
 export type ModelWeeklyPlanConnection = {
@@ -235,10 +260,32 @@ export type LessonTemplate = {
   instructions?: string | null,
   worksheetUrl?: string | null,
   videoUrl?: string | null,
+  assignmentType?: string | null,
   course?: Course | null,
+  questions?: ModelAssignmentQuestionConnection | null,
   createdAt: string,
   updatedAt: string,
   courseLessonTemplatesId?: string | null,
+};
+
+export type ModelAssignmentQuestionConnection = {
+  __typename: "ModelAssignmentQuestionConnection",
+  items:  Array<AssignmentQuestion | null >,
+  nextToken?: string | null,
+};
+
+export type AssignmentQuestion = {
+  __typename: "AssignmentQuestion",
+  id: string,
+  order: number,
+  questionText: string,
+  questionType: string,
+  choices?: string | null,
+  correctAnswer?: string | null,
+  lessonTemplate?: LessonTemplate | null,
+  createdAt: string,
+  updatedAt: string,
+  lessonTemplateQuestionsId?: string | null,
 };
 
 export type UpdateAcademicYearInput = {
@@ -344,6 +391,7 @@ export type CreateLessonInput = {
   id?: string | null,
   title: string,
   videoUrl?: string | null,
+  instructions?: string | null,
   order?: number | null,
   isPublished?: boolean | null,
   courseLessonsId?: string | null,
@@ -352,6 +400,7 @@ export type CreateLessonInput = {
 export type ModelLessonConditionInput = {
   title?: ModelStringInput | null,
   videoUrl?: ModelStringInput | null,
+  instructions?: ModelStringInput | null,
   order?: ModelIntInput | null,
   isPublished?: ModelBooleanInput | null,
   and?: Array< ModelLessonConditionInput | null > | null,
@@ -378,6 +427,7 @@ export type UpdateLessonInput = {
   id: string,
   title?: string | null,
   videoUrl?: string | null,
+  instructions?: string | null,
   order?: number | null,
   isPublished?: boolean | null,
   courseLessonsId?: string | null,
@@ -421,6 +471,7 @@ export type CreateWeeklyPlanItemInput = {
   dayOfWeek: string,
   dueTime?: string | null,
   isPublished?: boolean | null,
+  lessonTemplateId?: string | null,
   lessonWeeklyPlanItemsId?: string | null,
   weeklyPlanItemsId?: string | null,
 };
@@ -429,6 +480,7 @@ export type ModelWeeklyPlanItemConditionInput = {
   dayOfWeek?: ModelStringInput | null,
   dueTime?: ModelStringInput | null,
   isPublished?: ModelBooleanInput | null,
+  lessonTemplateId?: ModelIDInput | null,
   and?: Array< ModelWeeklyPlanItemConditionInput | null > | null,
   or?: Array< ModelWeeklyPlanItemConditionInput | null > | null,
   not?: ModelWeeklyPlanItemConditionInput | null,
@@ -443,6 +495,7 @@ export type UpdateWeeklyPlanItemInput = {
   dayOfWeek?: string | null,
   dueTime?: string | null,
   isPublished?: boolean | null,
+  lessonTemplateId?: string | null,
   lessonWeeklyPlanItemsId?: string | null,
   weeklyPlanItemsId?: string | null,
 };
@@ -490,6 +543,9 @@ export type CreateSubmissionInput = {
   id?: string | null,
   studentId: string,
   content?: string | null,
+  answers?: string | null,
+  imageUrls?: string | null,
+  lessonTemplateId?: string | null,
   grade?: string | null,
   submittedAt?: string | null,
   teacherComment?: string | null,
@@ -499,6 +555,9 @@ export type CreateSubmissionInput = {
 export type ModelSubmissionConditionInput = {
   studentId?: ModelStringInput | null,
   content?: ModelStringInput | null,
+  answers?: ModelStringInput | null,
+  imageUrls?: ModelStringInput | null,
+  lessonTemplateId?: ModelStringInput | null,
   grade?: ModelStringInput | null,
   submittedAt?: ModelStringInput | null,
   teacherComment?: ModelStringInput | null,
@@ -514,6 +573,9 @@ export type UpdateSubmissionInput = {
   id: string,
   studentId?: string | null,
   content?: string | null,
+  answers?: string | null,
+  imageUrls?: string | null,
+  lessonTemplateId?: string | null,
   grade?: string | null,
   submittedAt?: string | null,
   teacherComment?: string | null,
@@ -521,6 +583,41 @@ export type UpdateSubmissionInput = {
 };
 
 export type DeleteSubmissionInput = {
+  id: string,
+};
+
+export type CreateSubmissionMessageInput = {
+  id?: string | null,
+  senderId: string,
+  senderType: string,
+  message: string,
+  isRead?: boolean | null,
+  submissionMessagesId?: string | null,
+};
+
+export type ModelSubmissionMessageConditionInput = {
+  senderId?: ModelStringInput | null,
+  senderType?: ModelStringInput | null,
+  message?: ModelStringInput | null,
+  isRead?: ModelBooleanInput | null,
+  and?: Array< ModelSubmissionMessageConditionInput | null > | null,
+  or?: Array< ModelSubmissionMessageConditionInput | null > | null,
+  not?: ModelSubmissionMessageConditionInput | null,
+  createdAt?: ModelStringInput | null,
+  updatedAt?: ModelStringInput | null,
+  submissionMessagesId?: ModelIDInput | null,
+};
+
+export type UpdateSubmissionMessageInput = {
+  id: string,
+  senderId?: string | null,
+  senderType?: string | null,
+  message?: string | null,
+  isRead?: boolean | null,
+  submissionMessagesId?: string | null,
+};
+
+export type DeleteSubmissionMessageInput = {
   id: string,
 };
 
@@ -563,6 +660,7 @@ export type CreateLessonTemplateInput = {
   instructions?: string | null,
   worksheetUrl?: string | null,
   videoUrl?: string | null,
+  assignmentType?: string | null,
   courseLessonTemplatesId?: string | null,
 };
 
@@ -572,6 +670,7 @@ export type ModelLessonTemplateConditionInput = {
   instructions?: ModelStringInput | null,
   worksheetUrl?: ModelStringInput | null,
   videoUrl?: ModelStringInput | null,
+  assignmentType?: ModelStringInput | null,
   and?: Array< ModelLessonTemplateConditionInput | null > | null,
   or?: Array< ModelLessonTemplateConditionInput | null > | null,
   not?: ModelLessonTemplateConditionInput | null,
@@ -587,10 +686,186 @@ export type UpdateLessonTemplateInput = {
   instructions?: string | null,
   worksheetUrl?: string | null,
   videoUrl?: string | null,
+  assignmentType?: string | null,
   courseLessonTemplatesId?: string | null,
 };
 
 export type DeleteLessonTemplateInput = {
+  id: string,
+};
+
+export type CreateAssignmentQuestionInput = {
+  id?: string | null,
+  order: number,
+  questionText: string,
+  questionType: string,
+  choices?: string | null,
+  correctAnswer?: string | null,
+  lessonTemplateQuestionsId?: string | null,
+};
+
+export type ModelAssignmentQuestionConditionInput = {
+  order?: ModelIntInput | null,
+  questionText?: ModelStringInput | null,
+  questionType?: ModelStringInput | null,
+  choices?: ModelStringInput | null,
+  correctAnswer?: ModelStringInput | null,
+  and?: Array< ModelAssignmentQuestionConditionInput | null > | null,
+  or?: Array< ModelAssignmentQuestionConditionInput | null > | null,
+  not?: ModelAssignmentQuestionConditionInput | null,
+  createdAt?: ModelStringInput | null,
+  updatedAt?: ModelStringInput | null,
+  lessonTemplateQuestionsId?: ModelIDInput | null,
+};
+
+export type UpdateAssignmentQuestionInput = {
+  id: string,
+  order?: number | null,
+  questionText?: string | null,
+  questionType?: string | null,
+  choices?: string | null,
+  correctAnswer?: string | null,
+  lessonTemplateQuestionsId?: string | null,
+};
+
+export type DeleteAssignmentQuestionInput = {
+  id: string,
+};
+
+export type CreateParentInviteInput = {
+  id?: string | null,
+  token: string,
+  studentEmail: string,
+  studentName: string,
+  used?: boolean | null,
+};
+
+export type ModelParentInviteConditionInput = {
+  token?: ModelStringInput | null,
+  studentEmail?: ModelStringInput | null,
+  studentName?: ModelStringInput | null,
+  used?: ModelBooleanInput | null,
+  and?: Array< ModelParentInviteConditionInput | null > | null,
+  or?: Array< ModelParentInviteConditionInput | null > | null,
+  not?: ModelParentInviteConditionInput | null,
+  createdAt?: ModelStringInput | null,
+  updatedAt?: ModelStringInput | null,
+};
+
+export type ParentInvite = {
+  __typename: "ParentInvite",
+  id: string,
+  token: string,
+  studentEmail: string,
+  studentName: string,
+  used?: boolean | null,
+  createdAt: string,
+  updatedAt: string,
+};
+
+export type UpdateParentInviteInput = {
+  id: string,
+  token?: string | null,
+  studentEmail?: string | null,
+  studentName?: string | null,
+  used?: boolean | null,
+};
+
+export type DeleteParentInviteInput = {
+  id: string,
+};
+
+export type CreateParentStudentInput = {
+  id?: string | null,
+  parentId: string,
+  studentEmail: string,
+  studentName: string,
+};
+
+export type ModelParentStudentConditionInput = {
+  parentId?: ModelStringInput | null,
+  studentEmail?: ModelStringInput | null,
+  studentName?: ModelStringInput | null,
+  and?: Array< ModelParentStudentConditionInput | null > | null,
+  or?: Array< ModelParentStudentConditionInput | null > | null,
+  not?: ModelParentStudentConditionInput | null,
+  createdAt?: ModelStringInput | null,
+  updatedAt?: ModelStringInput | null,
+};
+
+export type ParentStudent = {
+  __typename: "ParentStudent",
+  id: string,
+  parentId: string,
+  studentEmail: string,
+  studentName: string,
+  createdAt: string,
+  updatedAt: string,
+};
+
+export type UpdateParentStudentInput = {
+  id: string,
+  parentId?: string | null,
+  studentEmail?: string | null,
+  studentName?: string | null,
+};
+
+export type DeleteParentStudentInput = {
+  id: string,
+};
+
+export type CreateStudentProfileInput = {
+  id?: string | null,
+  userId: string,
+  email: string,
+  firstName: string,
+  lastName: string,
+  gradeLevel?: string | null,
+  courseId?: string | null,
+  planType?: string | null,
+};
+
+export type ModelStudentProfileConditionInput = {
+  userId?: ModelStringInput | null,
+  email?: ModelStringInput | null,
+  firstName?: ModelStringInput | null,
+  lastName?: ModelStringInput | null,
+  gradeLevel?: ModelStringInput | null,
+  courseId?: ModelStringInput | null,
+  planType?: ModelStringInput | null,
+  and?: Array< ModelStudentProfileConditionInput | null > | null,
+  or?: Array< ModelStudentProfileConditionInput | null > | null,
+  not?: ModelStudentProfileConditionInput | null,
+  createdAt?: ModelStringInput | null,
+  updatedAt?: ModelStringInput | null,
+};
+
+export type StudentProfile = {
+  __typename: "StudentProfile",
+  id: string,
+  userId: string,
+  email: string,
+  firstName: string,
+  lastName: string,
+  gradeLevel?: string | null,
+  courseId?: string | null,
+  planType?: string | null,
+  createdAt: string,
+  updatedAt: string,
+};
+
+export type UpdateStudentProfileInput = {
+  id: string,
+  userId?: string | null,
+  email?: string | null,
+  firstName?: string | null,
+  lastName?: string | null,
+  gradeLevel?: string | null,
+  courseId?: string | null,
+  planType?: string | null,
+};
+
+export type DeleteStudentProfileInput = {
   id: string,
 };
 
@@ -647,6 +922,7 @@ export type ModelLessonFilterInput = {
   id?: ModelIDInput | null,
   title?: ModelStringInput | null,
   videoUrl?: ModelStringInput | null,
+  instructions?: ModelStringInput | null,
   order?: ModelIntInput | null,
   isPublished?: ModelBooleanInput | null,
   createdAt?: ModelStringInput | null,
@@ -674,6 +950,7 @@ export type ModelWeeklyPlanItemFilterInput = {
   dayOfWeek?: ModelStringInput | null,
   dueTime?: ModelStringInput | null,
   isPublished?: ModelBooleanInput | null,
+  lessonTemplateId?: ModelIDInput | null,
   createdAt?: ModelStringInput | null,
   updatedAt?: ModelStringInput | null,
   and?: Array< ModelWeeklyPlanItemFilterInput | null > | null,
@@ -701,6 +978,9 @@ export type ModelSubmissionFilterInput = {
   id?: ModelIDInput | null,
   studentId?: ModelStringInput | null,
   content?: ModelStringInput | null,
+  answers?: ModelStringInput | null,
+  imageUrls?: ModelStringInput | null,
+  lessonTemplateId?: ModelStringInput | null,
   grade?: ModelStringInput | null,
   submittedAt?: ModelStringInput | null,
   teacherComment?: ModelStringInput | null,
@@ -710,6 +990,20 @@ export type ModelSubmissionFilterInput = {
   or?: Array< ModelSubmissionFilterInput | null > | null,
   not?: ModelSubmissionFilterInput | null,
   assignmentSubmissionsId?: ModelIDInput | null,
+};
+
+export type ModelSubmissionMessageFilterInput = {
+  id?: ModelIDInput | null,
+  senderId?: ModelStringInput | null,
+  senderType?: ModelStringInput | null,
+  message?: ModelStringInput | null,
+  isRead?: ModelBooleanInput | null,
+  createdAt?: ModelStringInput | null,
+  updatedAt?: ModelStringInput | null,
+  and?: Array< ModelSubmissionMessageFilterInput | null > | null,
+  or?: Array< ModelSubmissionMessageFilterInput | null > | null,
+  not?: ModelSubmissionMessageFilterInput | null,
+  submissionMessagesId?: ModelIDInput | null,
 };
 
 export type ModelEnrollmentFilterInput = {
@@ -732,12 +1026,87 @@ export type ModelLessonTemplateFilterInput = {
   instructions?: ModelStringInput | null,
   worksheetUrl?: ModelStringInput | null,
   videoUrl?: ModelStringInput | null,
+  assignmentType?: ModelStringInput | null,
   createdAt?: ModelStringInput | null,
   updatedAt?: ModelStringInput | null,
   and?: Array< ModelLessonTemplateFilterInput | null > | null,
   or?: Array< ModelLessonTemplateFilterInput | null > | null,
   not?: ModelLessonTemplateFilterInput | null,
   courseLessonTemplatesId?: ModelIDInput | null,
+};
+
+export type ModelAssignmentQuestionFilterInput = {
+  id?: ModelIDInput | null,
+  order?: ModelIntInput | null,
+  questionText?: ModelStringInput | null,
+  questionType?: ModelStringInput | null,
+  choices?: ModelStringInput | null,
+  correctAnswer?: ModelStringInput | null,
+  createdAt?: ModelStringInput | null,
+  updatedAt?: ModelStringInput | null,
+  and?: Array< ModelAssignmentQuestionFilterInput | null > | null,
+  or?: Array< ModelAssignmentQuestionFilterInput | null > | null,
+  not?: ModelAssignmentQuestionFilterInput | null,
+  lessonTemplateQuestionsId?: ModelIDInput | null,
+};
+
+export type ModelParentInviteFilterInput = {
+  id?: ModelIDInput | null,
+  token?: ModelStringInput | null,
+  studentEmail?: ModelStringInput | null,
+  studentName?: ModelStringInput | null,
+  used?: ModelBooleanInput | null,
+  createdAt?: ModelStringInput | null,
+  updatedAt?: ModelStringInput | null,
+  and?: Array< ModelParentInviteFilterInput | null > | null,
+  or?: Array< ModelParentInviteFilterInput | null > | null,
+  not?: ModelParentInviteFilterInput | null,
+};
+
+export type ModelParentInviteConnection = {
+  __typename: "ModelParentInviteConnection",
+  items:  Array<ParentInvite | null >,
+  nextToken?: string | null,
+};
+
+export type ModelParentStudentFilterInput = {
+  id?: ModelIDInput | null,
+  parentId?: ModelStringInput | null,
+  studentEmail?: ModelStringInput | null,
+  studentName?: ModelStringInput | null,
+  createdAt?: ModelStringInput | null,
+  updatedAt?: ModelStringInput | null,
+  and?: Array< ModelParentStudentFilterInput | null > | null,
+  or?: Array< ModelParentStudentFilterInput | null > | null,
+  not?: ModelParentStudentFilterInput | null,
+};
+
+export type ModelParentStudentConnection = {
+  __typename: "ModelParentStudentConnection",
+  items:  Array<ParentStudent | null >,
+  nextToken?: string | null,
+};
+
+export type ModelStudentProfileFilterInput = {
+  id?: ModelIDInput | null,
+  userId?: ModelStringInput | null,
+  email?: ModelStringInput | null,
+  firstName?: ModelStringInput | null,
+  lastName?: ModelStringInput | null,
+  gradeLevel?: ModelStringInput | null,
+  courseId?: ModelStringInput | null,
+  planType?: ModelStringInput | null,
+  createdAt?: ModelStringInput | null,
+  updatedAt?: ModelStringInput | null,
+  and?: Array< ModelStudentProfileFilterInput | null > | null,
+  or?: Array< ModelStudentProfileFilterInput | null > | null,
+  not?: ModelStudentProfileFilterInput | null,
+};
+
+export type ModelStudentProfileConnection = {
+  __typename: "ModelStudentProfileConnection",
+  items:  Array<StudentProfile | null >,
+  nextToken?: string | null,
 };
 
 export type ModelSubscriptionAcademicYearFilterInput = {
@@ -820,6 +1189,7 @@ export type ModelSubscriptionLessonFilterInput = {
   id?: ModelSubscriptionIDInput | null,
   title?: ModelSubscriptionStringInput | null,
   videoUrl?: ModelSubscriptionStringInput | null,
+  instructions?: ModelSubscriptionStringInput | null,
   order?: ModelSubscriptionIntInput | null,
   isPublished?: ModelSubscriptionBooleanInput | null,
   createdAt?: ModelSubscriptionStringInput | null,
@@ -856,6 +1226,7 @@ export type ModelSubscriptionWeeklyPlanItemFilterInput = {
   dayOfWeek?: ModelSubscriptionStringInput | null,
   dueTime?: ModelSubscriptionStringInput | null,
   isPublished?: ModelSubscriptionBooleanInput | null,
+  lessonTemplateId?: ModelSubscriptionIDInput | null,
   createdAt?: ModelSubscriptionStringInput | null,
   updatedAt?: ModelSubscriptionStringInput | null,
   and?: Array< ModelSubscriptionWeeklyPlanItemFilterInput | null > | null,
@@ -879,6 +1250,9 @@ export type ModelSubscriptionSubmissionFilterInput = {
   id?: ModelSubscriptionIDInput | null,
   studentId?: ModelSubscriptionStringInput | null,
   content?: ModelSubscriptionStringInput | null,
+  answers?: ModelSubscriptionStringInput | null,
+  imageUrls?: ModelSubscriptionStringInput | null,
+  lessonTemplateId?: ModelSubscriptionStringInput | null,
   grade?: ModelSubscriptionStringInput | null,
   submittedAt?: ModelSubscriptionStringInput | null,
   teacherComment?: ModelSubscriptionStringInput | null,
@@ -886,6 +1260,19 @@ export type ModelSubscriptionSubmissionFilterInput = {
   updatedAt?: ModelSubscriptionStringInput | null,
   and?: Array< ModelSubscriptionSubmissionFilterInput | null > | null,
   or?: Array< ModelSubscriptionSubmissionFilterInput | null > | null,
+  submissionMessagesId?: ModelSubscriptionIDInput | null,
+};
+
+export type ModelSubscriptionSubmissionMessageFilterInput = {
+  id?: ModelSubscriptionIDInput | null,
+  senderId?: ModelSubscriptionStringInput | null,
+  senderType?: ModelSubscriptionStringInput | null,
+  message?: ModelSubscriptionStringInput | null,
+  isRead?: ModelSubscriptionBooleanInput | null,
+  createdAt?: ModelSubscriptionStringInput | null,
+  updatedAt?: ModelSubscriptionStringInput | null,
+  and?: Array< ModelSubscriptionSubmissionMessageFilterInput | null > | null,
+  or?: Array< ModelSubscriptionSubmissionMessageFilterInput | null > | null,
 };
 
 export type ModelSubscriptionEnrollmentFilterInput = {
@@ -905,10 +1292,63 @@ export type ModelSubscriptionLessonTemplateFilterInput = {
   instructions?: ModelSubscriptionStringInput | null,
   worksheetUrl?: ModelSubscriptionStringInput | null,
   videoUrl?: ModelSubscriptionStringInput | null,
+  assignmentType?: ModelSubscriptionStringInput | null,
   createdAt?: ModelSubscriptionStringInput | null,
   updatedAt?: ModelSubscriptionStringInput | null,
   and?: Array< ModelSubscriptionLessonTemplateFilterInput | null > | null,
   or?: Array< ModelSubscriptionLessonTemplateFilterInput | null > | null,
+  lessonTemplateQuestionsId?: ModelSubscriptionIDInput | null,
+};
+
+export type ModelSubscriptionAssignmentQuestionFilterInput = {
+  id?: ModelSubscriptionIDInput | null,
+  order?: ModelSubscriptionIntInput | null,
+  questionText?: ModelSubscriptionStringInput | null,
+  questionType?: ModelSubscriptionStringInput | null,
+  choices?: ModelSubscriptionStringInput | null,
+  correctAnswer?: ModelSubscriptionStringInput | null,
+  createdAt?: ModelSubscriptionStringInput | null,
+  updatedAt?: ModelSubscriptionStringInput | null,
+  and?: Array< ModelSubscriptionAssignmentQuestionFilterInput | null > | null,
+  or?: Array< ModelSubscriptionAssignmentQuestionFilterInput | null > | null,
+};
+
+export type ModelSubscriptionParentInviteFilterInput = {
+  id?: ModelSubscriptionIDInput | null,
+  token?: ModelSubscriptionStringInput | null,
+  studentEmail?: ModelSubscriptionStringInput | null,
+  studentName?: ModelSubscriptionStringInput | null,
+  used?: ModelSubscriptionBooleanInput | null,
+  createdAt?: ModelSubscriptionStringInput | null,
+  updatedAt?: ModelSubscriptionStringInput | null,
+  and?: Array< ModelSubscriptionParentInviteFilterInput | null > | null,
+  or?: Array< ModelSubscriptionParentInviteFilterInput | null > | null,
+};
+
+export type ModelSubscriptionParentStudentFilterInput = {
+  id?: ModelSubscriptionIDInput | null,
+  parentId?: ModelSubscriptionStringInput | null,
+  studentEmail?: ModelSubscriptionStringInput | null,
+  studentName?: ModelSubscriptionStringInput | null,
+  createdAt?: ModelSubscriptionStringInput | null,
+  updatedAt?: ModelSubscriptionStringInput | null,
+  and?: Array< ModelSubscriptionParentStudentFilterInput | null > | null,
+  or?: Array< ModelSubscriptionParentStudentFilterInput | null > | null,
+};
+
+export type ModelSubscriptionStudentProfileFilterInput = {
+  id?: ModelSubscriptionIDInput | null,
+  userId?: ModelSubscriptionStringInput | null,
+  email?: ModelSubscriptionStringInput | null,
+  firstName?: ModelSubscriptionStringInput | null,
+  lastName?: ModelSubscriptionStringInput | null,
+  gradeLevel?: ModelSubscriptionStringInput | null,
+  courseId?: ModelSubscriptionStringInput | null,
+  planType?: ModelSubscriptionStringInput | null,
+  createdAt?: ModelSubscriptionStringInput | null,
+  updatedAt?: ModelSubscriptionStringInput | null,
+  and?: Array< ModelSubscriptionStudentProfileFilterInput | null > | null,
+  or?: Array< ModelSubscriptionStudentProfileFilterInput | null > | null,
 };
 
 export type CreateAcademicYearMutationVariables = {
@@ -1195,6 +1635,7 @@ export type CreateLessonMutation = {
     id: string,
     title: string,
     videoUrl?: string | null,
+    instructions?: string | null,
     order?: number | null,
     isPublished?: boolean | null,
     course?:  {
@@ -1228,6 +1669,7 @@ export type UpdateLessonMutation = {
     id: string,
     title: string,
     videoUrl?: string | null,
+    instructions?: string | null,
     order?: number | null,
     isPublished?: boolean | null,
     course?:  {
@@ -1261,6 +1703,7 @@ export type DeleteLessonMutation = {
     id: string,
     title: string,
     videoUrl?: string | null,
+    instructions?: string | null,
     order?: number | null,
     isPublished?: boolean | null,
     course?:  {
@@ -1426,12 +1869,14 @@ export type CreateWeeklyPlanItemMutation = {
       id: string,
       title: string,
       videoUrl?: string | null,
+      instructions?: string | null,
       order?: number | null,
       isPublished?: boolean | null,
       createdAt: string,
       updatedAt: string,
       courseLessonsId?: string | null,
     } | null,
+    lessonTemplateId?: string | null,
     weeklyPlan?:  {
       __typename: "WeeklyPlan",
       id: string,
@@ -1469,12 +1914,14 @@ export type UpdateWeeklyPlanItemMutation = {
       id: string,
       title: string,
       videoUrl?: string | null,
+      instructions?: string | null,
       order?: number | null,
       isPublished?: boolean | null,
       createdAt: string,
       updatedAt: string,
       courseLessonsId?: string | null,
     } | null,
+    lessonTemplateId?: string | null,
     weeklyPlan?:  {
       __typename: "WeeklyPlan",
       id: string,
@@ -1512,12 +1959,14 @@ export type DeleteWeeklyPlanItemMutation = {
       id: string,
       title: string,
       videoUrl?: string | null,
+      instructions?: string | null,
       order?: number | null,
       isPublished?: boolean | null,
       createdAt: string,
       updatedAt: string,
       courseLessonsId?: string | null,
     } | null,
+    lessonTemplateId?: string | null,
     weeklyPlan?:  {
       __typename: "WeeklyPlan",
       id: string,
@@ -1648,6 +2097,9 @@ export type CreateSubmissionMutation = {
     id: string,
     studentId: string,
     content?: string | null,
+    answers?: string | null,
+    imageUrls?: string | null,
+    lessonTemplateId?: string | null,
     grade?: string | null,
     submittedAt?: string | null,
     teacherComment?: string | null,
@@ -1661,6 +2113,10 @@ export type CreateSubmissionMutation = {
       updatedAt: string,
       courseAssignmentsId?: string | null,
       weeklyPlanItemAssignmentsId?: string | null,
+    } | null,
+    messages?:  {
+      __typename: "ModelSubmissionMessageConnection",
+      nextToken?: string | null,
     } | null,
     createdAt: string,
     updatedAt: string,
@@ -1679,6 +2135,9 @@ export type UpdateSubmissionMutation = {
     id: string,
     studentId: string,
     content?: string | null,
+    answers?: string | null,
+    imageUrls?: string | null,
+    lessonTemplateId?: string | null,
     grade?: string | null,
     submittedAt?: string | null,
     teacherComment?: string | null,
@@ -1692,6 +2151,10 @@ export type UpdateSubmissionMutation = {
       updatedAt: string,
       courseAssignmentsId?: string | null,
       weeklyPlanItemAssignmentsId?: string | null,
+    } | null,
+    messages?:  {
+      __typename: "ModelSubmissionMessageConnection",
+      nextToken?: string | null,
     } | null,
     createdAt: string,
     updatedAt: string,
@@ -1710,6 +2173,9 @@ export type DeleteSubmissionMutation = {
     id: string,
     studentId: string,
     content?: string | null,
+    answers?: string | null,
+    imageUrls?: string | null,
+    lessonTemplateId?: string | null,
     grade?: string | null,
     submittedAt?: string | null,
     teacherComment?: string | null,
@@ -1724,9 +2190,115 @@ export type DeleteSubmissionMutation = {
       courseAssignmentsId?: string | null,
       weeklyPlanItemAssignmentsId?: string | null,
     } | null,
+    messages?:  {
+      __typename: "ModelSubmissionMessageConnection",
+      nextToken?: string | null,
+    } | null,
     createdAt: string,
     updatedAt: string,
     assignmentSubmissionsId?: string | null,
+  } | null,
+};
+
+export type CreateSubmissionMessageMutationVariables = {
+  input: CreateSubmissionMessageInput,
+  condition?: ModelSubmissionMessageConditionInput | null,
+};
+
+export type CreateSubmissionMessageMutation = {
+  createSubmissionMessage?:  {
+    __typename: "SubmissionMessage",
+    id: string,
+    senderId: string,
+    senderType: string,
+    message: string,
+    isRead?: boolean | null,
+    submission?:  {
+      __typename: "Submission",
+      id: string,
+      studentId: string,
+      content?: string | null,
+      answers?: string | null,
+      imageUrls?: string | null,
+      lessonTemplateId?: string | null,
+      grade?: string | null,
+      submittedAt?: string | null,
+      teacherComment?: string | null,
+      createdAt: string,
+      updatedAt: string,
+      assignmentSubmissionsId?: string | null,
+    } | null,
+    createdAt: string,
+    updatedAt: string,
+    submissionMessagesId?: string | null,
+  } | null,
+};
+
+export type UpdateSubmissionMessageMutationVariables = {
+  input: UpdateSubmissionMessageInput,
+  condition?: ModelSubmissionMessageConditionInput | null,
+};
+
+export type UpdateSubmissionMessageMutation = {
+  updateSubmissionMessage?:  {
+    __typename: "SubmissionMessage",
+    id: string,
+    senderId: string,
+    senderType: string,
+    message: string,
+    isRead?: boolean | null,
+    submission?:  {
+      __typename: "Submission",
+      id: string,
+      studentId: string,
+      content?: string | null,
+      answers?: string | null,
+      imageUrls?: string | null,
+      lessonTemplateId?: string | null,
+      grade?: string | null,
+      submittedAt?: string | null,
+      teacherComment?: string | null,
+      createdAt: string,
+      updatedAt: string,
+      assignmentSubmissionsId?: string | null,
+    } | null,
+    createdAt: string,
+    updatedAt: string,
+    submissionMessagesId?: string | null,
+  } | null,
+};
+
+export type DeleteSubmissionMessageMutationVariables = {
+  input: DeleteSubmissionMessageInput,
+  condition?: ModelSubmissionMessageConditionInput | null,
+};
+
+export type DeleteSubmissionMessageMutation = {
+  deleteSubmissionMessage?:  {
+    __typename: "SubmissionMessage",
+    id: string,
+    senderId: string,
+    senderType: string,
+    message: string,
+    isRead?: boolean | null,
+    submission?:  {
+      __typename: "Submission",
+      id: string,
+      studentId: string,
+      content?: string | null,
+      answers?: string | null,
+      imageUrls?: string | null,
+      lessonTemplateId?: string | null,
+      grade?: string | null,
+      submittedAt?: string | null,
+      teacherComment?: string | null,
+      createdAt: string,
+      updatedAt: string,
+      assignmentSubmissionsId?: string | null,
+    } | null,
+    createdAt: string,
+    updatedAt: string,
+    submissionMessagesId?: string | null,
   } | null,
 };
 
@@ -1861,6 +2433,7 @@ export type CreateLessonTemplateMutation = {
     instructions?: string | null,
     worksheetUrl?: string | null,
     videoUrl?: string | null,
+    assignmentType?: string | null,
     course?:  {
       __typename: "Course",
       id: string,
@@ -1870,6 +2443,10 @@ export type CreateLessonTemplateMutation = {
       isArchived?: boolean | null,
       createdAt: string,
       updatedAt: string,
+    } | null,
+    questions?:  {
+      __typename: "ModelAssignmentQuestionConnection",
+      nextToken?: string | null,
     } | null,
     createdAt: string,
     updatedAt: string,
@@ -1891,6 +2468,7 @@ export type UpdateLessonTemplateMutation = {
     instructions?: string | null,
     worksheetUrl?: string | null,
     videoUrl?: string | null,
+    assignmentType?: string | null,
     course?:  {
       __typename: "Course",
       id: string,
@@ -1900,6 +2478,10 @@ export type UpdateLessonTemplateMutation = {
       isArchived?: boolean | null,
       createdAt: string,
       updatedAt: string,
+    } | null,
+    questions?:  {
+      __typename: "ModelAssignmentQuestionConnection",
+      nextToken?: string | null,
     } | null,
     createdAt: string,
     updatedAt: string,
@@ -1921,6 +2503,7 @@ export type DeleteLessonTemplateMutation = {
     instructions?: string | null,
     worksheetUrl?: string | null,
     videoUrl?: string | null,
+    assignmentType?: string | null,
     course?:  {
       __typename: "Course",
       id: string,
@@ -1931,9 +2514,280 @@ export type DeleteLessonTemplateMutation = {
       createdAt: string,
       updatedAt: string,
     } | null,
+    questions?:  {
+      __typename: "ModelAssignmentQuestionConnection",
+      nextToken?: string | null,
+    } | null,
     createdAt: string,
     updatedAt: string,
     courseLessonTemplatesId?: string | null,
+  } | null,
+};
+
+export type CreateAssignmentQuestionMutationVariables = {
+  input: CreateAssignmentQuestionInput,
+  condition?: ModelAssignmentQuestionConditionInput | null,
+};
+
+export type CreateAssignmentQuestionMutation = {
+  createAssignmentQuestion?:  {
+    __typename: "AssignmentQuestion",
+    id: string,
+    order: number,
+    questionText: string,
+    questionType: string,
+    choices?: string | null,
+    correctAnswer?: string | null,
+    lessonTemplate?:  {
+      __typename: "LessonTemplate",
+      id: string,
+      lessonNumber: number,
+      title: string,
+      instructions?: string | null,
+      worksheetUrl?: string | null,
+      videoUrl?: string | null,
+      assignmentType?: string | null,
+      createdAt: string,
+      updatedAt: string,
+      courseLessonTemplatesId?: string | null,
+    } | null,
+    createdAt: string,
+    updatedAt: string,
+    lessonTemplateQuestionsId?: string | null,
+  } | null,
+};
+
+export type UpdateAssignmentQuestionMutationVariables = {
+  input: UpdateAssignmentQuestionInput,
+  condition?: ModelAssignmentQuestionConditionInput | null,
+};
+
+export type UpdateAssignmentQuestionMutation = {
+  updateAssignmentQuestion?:  {
+    __typename: "AssignmentQuestion",
+    id: string,
+    order: number,
+    questionText: string,
+    questionType: string,
+    choices?: string | null,
+    correctAnswer?: string | null,
+    lessonTemplate?:  {
+      __typename: "LessonTemplate",
+      id: string,
+      lessonNumber: number,
+      title: string,
+      instructions?: string | null,
+      worksheetUrl?: string | null,
+      videoUrl?: string | null,
+      assignmentType?: string | null,
+      createdAt: string,
+      updatedAt: string,
+      courseLessonTemplatesId?: string | null,
+    } | null,
+    createdAt: string,
+    updatedAt: string,
+    lessonTemplateQuestionsId?: string | null,
+  } | null,
+};
+
+export type DeleteAssignmentQuestionMutationVariables = {
+  input: DeleteAssignmentQuestionInput,
+  condition?: ModelAssignmentQuestionConditionInput | null,
+};
+
+export type DeleteAssignmentQuestionMutation = {
+  deleteAssignmentQuestion?:  {
+    __typename: "AssignmentQuestion",
+    id: string,
+    order: number,
+    questionText: string,
+    questionType: string,
+    choices?: string | null,
+    correctAnswer?: string | null,
+    lessonTemplate?:  {
+      __typename: "LessonTemplate",
+      id: string,
+      lessonNumber: number,
+      title: string,
+      instructions?: string | null,
+      worksheetUrl?: string | null,
+      videoUrl?: string | null,
+      assignmentType?: string | null,
+      createdAt: string,
+      updatedAt: string,
+      courseLessonTemplatesId?: string | null,
+    } | null,
+    createdAt: string,
+    updatedAt: string,
+    lessonTemplateQuestionsId?: string | null,
+  } | null,
+};
+
+export type CreateParentInviteMutationVariables = {
+  input: CreateParentInviteInput,
+  condition?: ModelParentInviteConditionInput | null,
+};
+
+export type CreateParentInviteMutation = {
+  createParentInvite?:  {
+    __typename: "ParentInvite",
+    id: string,
+    token: string,
+    studentEmail: string,
+    studentName: string,
+    used?: boolean | null,
+    createdAt: string,
+    updatedAt: string,
+  } | null,
+};
+
+export type UpdateParentInviteMutationVariables = {
+  input: UpdateParentInviteInput,
+  condition?: ModelParentInviteConditionInput | null,
+};
+
+export type UpdateParentInviteMutation = {
+  updateParentInvite?:  {
+    __typename: "ParentInvite",
+    id: string,
+    token: string,
+    studentEmail: string,
+    studentName: string,
+    used?: boolean | null,
+    createdAt: string,
+    updatedAt: string,
+  } | null,
+};
+
+export type DeleteParentInviteMutationVariables = {
+  input: DeleteParentInviteInput,
+  condition?: ModelParentInviteConditionInput | null,
+};
+
+export type DeleteParentInviteMutation = {
+  deleteParentInvite?:  {
+    __typename: "ParentInvite",
+    id: string,
+    token: string,
+    studentEmail: string,
+    studentName: string,
+    used?: boolean | null,
+    createdAt: string,
+    updatedAt: string,
+  } | null,
+};
+
+export type CreateParentStudentMutationVariables = {
+  input: CreateParentStudentInput,
+  condition?: ModelParentStudentConditionInput | null,
+};
+
+export type CreateParentStudentMutation = {
+  createParentStudent?:  {
+    __typename: "ParentStudent",
+    id: string,
+    parentId: string,
+    studentEmail: string,
+    studentName: string,
+    createdAt: string,
+    updatedAt: string,
+  } | null,
+};
+
+export type UpdateParentStudentMutationVariables = {
+  input: UpdateParentStudentInput,
+  condition?: ModelParentStudentConditionInput | null,
+};
+
+export type UpdateParentStudentMutation = {
+  updateParentStudent?:  {
+    __typename: "ParentStudent",
+    id: string,
+    parentId: string,
+    studentEmail: string,
+    studentName: string,
+    createdAt: string,
+    updatedAt: string,
+  } | null,
+};
+
+export type DeleteParentStudentMutationVariables = {
+  input: DeleteParentStudentInput,
+  condition?: ModelParentStudentConditionInput | null,
+};
+
+export type DeleteParentStudentMutation = {
+  deleteParentStudent?:  {
+    __typename: "ParentStudent",
+    id: string,
+    parentId: string,
+    studentEmail: string,
+    studentName: string,
+    createdAt: string,
+    updatedAt: string,
+  } | null,
+};
+
+export type CreateStudentProfileMutationVariables = {
+  input: CreateStudentProfileInput,
+  condition?: ModelStudentProfileConditionInput | null,
+};
+
+export type CreateStudentProfileMutation = {
+  createStudentProfile?:  {
+    __typename: "StudentProfile",
+    id: string,
+    userId: string,
+    email: string,
+    firstName: string,
+    lastName: string,
+    gradeLevel?: string | null,
+    courseId?: string | null,
+    planType?: string | null,
+    createdAt: string,
+    updatedAt: string,
+  } | null,
+};
+
+export type UpdateStudentProfileMutationVariables = {
+  input: UpdateStudentProfileInput,
+  condition?: ModelStudentProfileConditionInput | null,
+};
+
+export type UpdateStudentProfileMutation = {
+  updateStudentProfile?:  {
+    __typename: "StudentProfile",
+    id: string,
+    userId: string,
+    email: string,
+    firstName: string,
+    lastName: string,
+    gradeLevel?: string | null,
+    courseId?: string | null,
+    planType?: string | null,
+    createdAt: string,
+    updatedAt: string,
+  } | null,
+};
+
+export type DeleteStudentProfileMutationVariables = {
+  input: DeleteStudentProfileInput,
+  condition?: ModelStudentProfileConditionInput | null,
+};
+
+export type DeleteStudentProfileMutation = {
+  deleteStudentProfile?:  {
+    __typename: "StudentProfile",
+    id: string,
+    userId: string,
+    email: string,
+    firstName: string,
+    lastName: string,
+    gradeLevel?: string | null,
+    courseId?: string | null,
+    planType?: string | null,
+    createdAt: string,
+    updatedAt: string,
   } | null,
 };
 
@@ -2102,6 +2956,7 @@ export type GetLessonQuery = {
     id: string,
     title: string,
     videoUrl?: string | null,
+    instructions?: string | null,
     order?: number | null,
     isPublished?: boolean | null,
     course?:  {
@@ -2138,6 +2993,7 @@ export type ListLessonsQuery = {
       id: string,
       title: string,
       videoUrl?: string | null,
+      instructions?: string | null,
       order?: number | null,
       isPublished?: boolean | null,
       createdAt: string,
@@ -2227,12 +3083,14 @@ export type GetWeeklyPlanItemQuery = {
       id: string,
       title: string,
       videoUrl?: string | null,
+      instructions?: string | null,
       order?: number | null,
       isPublished?: boolean | null,
       createdAt: string,
       updatedAt: string,
       courseLessonsId?: string | null,
     } | null,
+    lessonTemplateId?: string | null,
     weeklyPlan?:  {
       __typename: "WeeklyPlan",
       id: string,
@@ -2268,6 +3126,7 @@ export type ListWeeklyPlanItemsQuery = {
       dayOfWeek: string,
       dueTime?: string | null,
       isPublished?: boolean | null,
+      lessonTemplateId?: string | null,
       createdAt: string,
       updatedAt: string,
       lessonWeeklyPlanItemsId?: string | null,
@@ -2343,6 +3202,9 @@ export type GetSubmissionQuery = {
     id: string,
     studentId: string,
     content?: string | null,
+    answers?: string | null,
+    imageUrls?: string | null,
+    lessonTemplateId?: string | null,
     grade?: string | null,
     submittedAt?: string | null,
     teacherComment?: string | null,
@@ -2356,6 +3218,10 @@ export type GetSubmissionQuery = {
       updatedAt: string,
       courseAssignmentsId?: string | null,
       weeklyPlanItemAssignmentsId?: string | null,
+    } | null,
+    messages?:  {
+      __typename: "ModelSubmissionMessageConnection",
+      nextToken?: string | null,
     } | null,
     createdAt: string,
     updatedAt: string,
@@ -2377,12 +3243,72 @@ export type ListSubmissionsQuery = {
       id: string,
       studentId: string,
       content?: string | null,
+      answers?: string | null,
+      imageUrls?: string | null,
+      lessonTemplateId?: string | null,
       grade?: string | null,
       submittedAt?: string | null,
       teacherComment?: string | null,
       createdAt: string,
       updatedAt: string,
       assignmentSubmissionsId?: string | null,
+    } | null >,
+    nextToken?: string | null,
+  } | null,
+};
+
+export type GetSubmissionMessageQueryVariables = {
+  id: string,
+};
+
+export type GetSubmissionMessageQuery = {
+  getSubmissionMessage?:  {
+    __typename: "SubmissionMessage",
+    id: string,
+    senderId: string,
+    senderType: string,
+    message: string,
+    isRead?: boolean | null,
+    submission?:  {
+      __typename: "Submission",
+      id: string,
+      studentId: string,
+      content?: string | null,
+      answers?: string | null,
+      imageUrls?: string | null,
+      lessonTemplateId?: string | null,
+      grade?: string | null,
+      submittedAt?: string | null,
+      teacherComment?: string | null,
+      createdAt: string,
+      updatedAt: string,
+      assignmentSubmissionsId?: string | null,
+    } | null,
+    createdAt: string,
+    updatedAt: string,
+    submissionMessagesId?: string | null,
+  } | null,
+};
+
+export type ListSubmissionMessagesQueryVariables = {
+  filter?: ModelSubmissionMessageFilterInput | null,
+  limit?: number | null,
+  nextToken?: string | null,
+};
+
+export type ListSubmissionMessagesQuery = {
+  listSubmissionMessages?:  {
+    __typename: "ModelSubmissionMessageConnection",
+    items:  Array< {
+      __typename: "SubmissionMessage",
+      id: string,
+      senderId: string,
+      senderType: string,
+      message: string,
+      isRead?: boolean | null,
+      createdAt: string,
+      updatedAt: string,
+      submissionMessagesId?: string | null,
     } | null >,
     nextToken?: string | null,
   } | null,
@@ -2462,6 +3388,7 @@ export type GetLessonTemplateQuery = {
     instructions?: string | null,
     worksheetUrl?: string | null,
     videoUrl?: string | null,
+    assignmentType?: string | null,
     course?:  {
       __typename: "Course",
       id: string,
@@ -2471,6 +3398,10 @@ export type GetLessonTemplateQuery = {
       isArchived?: boolean | null,
       createdAt: string,
       updatedAt: string,
+    } | null,
+    questions?:  {
+      __typename: "ModelAssignmentQuestionConnection",
+      nextToken?: string | null,
     } | null,
     createdAt: string,
     updatedAt: string,
@@ -2495,9 +3426,191 @@ export type ListLessonTemplatesQuery = {
       instructions?: string | null,
       worksheetUrl?: string | null,
       videoUrl?: string | null,
+      assignmentType?: string | null,
       createdAt: string,
       updatedAt: string,
       courseLessonTemplatesId?: string | null,
+    } | null >,
+    nextToken?: string | null,
+  } | null,
+};
+
+export type GetAssignmentQuestionQueryVariables = {
+  id: string,
+};
+
+export type GetAssignmentQuestionQuery = {
+  getAssignmentQuestion?:  {
+    __typename: "AssignmentQuestion",
+    id: string,
+    order: number,
+    questionText: string,
+    questionType: string,
+    choices?: string | null,
+    correctAnswer?: string | null,
+    lessonTemplate?:  {
+      __typename: "LessonTemplate",
+      id: string,
+      lessonNumber: number,
+      title: string,
+      instructions?: string | null,
+      worksheetUrl?: string | null,
+      videoUrl?: string | null,
+      assignmentType?: string | null,
+      createdAt: string,
+      updatedAt: string,
+      courseLessonTemplatesId?: string | null,
+    } | null,
+    createdAt: string,
+    updatedAt: string,
+    lessonTemplateQuestionsId?: string | null,
+  } | null,
+};
+
+export type ListAssignmentQuestionsQueryVariables = {
+  filter?: ModelAssignmentQuestionFilterInput | null,
+  limit?: number | null,
+  nextToken?: string | null,
+};
+
+export type ListAssignmentQuestionsQuery = {
+  listAssignmentQuestions?:  {
+    __typename: "ModelAssignmentQuestionConnection",
+    items:  Array< {
+      __typename: "AssignmentQuestion",
+      id: string,
+      order: number,
+      questionText: string,
+      questionType: string,
+      choices?: string | null,
+      correctAnswer?: string | null,
+      createdAt: string,
+      updatedAt: string,
+      lessonTemplateQuestionsId?: string | null,
+    } | null >,
+    nextToken?: string | null,
+  } | null,
+};
+
+export type GetParentInviteQueryVariables = {
+  id: string,
+};
+
+export type GetParentInviteQuery = {
+  getParentInvite?:  {
+    __typename: "ParentInvite",
+    id: string,
+    token: string,
+    studentEmail: string,
+    studentName: string,
+    used?: boolean | null,
+    createdAt: string,
+    updatedAt: string,
+  } | null,
+};
+
+export type ListParentInvitesQueryVariables = {
+  filter?: ModelParentInviteFilterInput | null,
+  limit?: number | null,
+  nextToken?: string | null,
+};
+
+export type ListParentInvitesQuery = {
+  listParentInvites?:  {
+    __typename: "ModelParentInviteConnection",
+    items:  Array< {
+      __typename: "ParentInvite",
+      id: string,
+      token: string,
+      studentEmail: string,
+      studentName: string,
+      used?: boolean | null,
+      createdAt: string,
+      updatedAt: string,
+    } | null >,
+    nextToken?: string | null,
+  } | null,
+};
+
+export type GetParentStudentQueryVariables = {
+  id: string,
+};
+
+export type GetParentStudentQuery = {
+  getParentStudent?:  {
+    __typename: "ParentStudent",
+    id: string,
+    parentId: string,
+    studentEmail: string,
+    studentName: string,
+    createdAt: string,
+    updatedAt: string,
+  } | null,
+};
+
+export type ListParentStudentsQueryVariables = {
+  filter?: ModelParentStudentFilterInput | null,
+  limit?: number | null,
+  nextToken?: string | null,
+};
+
+export type ListParentStudentsQuery = {
+  listParentStudents?:  {
+    __typename: "ModelParentStudentConnection",
+    items:  Array< {
+      __typename: "ParentStudent",
+      id: string,
+      parentId: string,
+      studentEmail: string,
+      studentName: string,
+      createdAt: string,
+      updatedAt: string,
+    } | null >,
+    nextToken?: string | null,
+  } | null,
+};
+
+export type GetStudentProfileQueryVariables = {
+  id: string,
+};
+
+export type GetStudentProfileQuery = {
+  getStudentProfile?:  {
+    __typename: "StudentProfile",
+    id: string,
+    userId: string,
+    email: string,
+    firstName: string,
+    lastName: string,
+    gradeLevel?: string | null,
+    courseId?: string | null,
+    planType?: string | null,
+    createdAt: string,
+    updatedAt: string,
+  } | null,
+};
+
+export type ListStudentProfilesQueryVariables = {
+  filter?: ModelStudentProfileFilterInput | null,
+  limit?: number | null,
+  nextToken?: string | null,
+};
+
+export type ListStudentProfilesQuery = {
+  listStudentProfiles?:  {
+    __typename: "ModelStudentProfileConnection",
+    items:  Array< {
+      __typename: "StudentProfile",
+      id: string,
+      userId: string,
+      email: string,
+      firstName: string,
+      lastName: string,
+      gradeLevel?: string | null,
+      courseId?: string | null,
+      planType?: string | null,
+      createdAt: string,
+      updatedAt: string,
     } | null >,
     nextToken?: string | null,
   } | null,
@@ -2777,6 +3890,7 @@ export type OnCreateLessonSubscription = {
     id: string,
     title: string,
     videoUrl?: string | null,
+    instructions?: string | null,
     order?: number | null,
     isPublished?: boolean | null,
     course?:  {
@@ -2809,6 +3923,7 @@ export type OnUpdateLessonSubscription = {
     id: string,
     title: string,
     videoUrl?: string | null,
+    instructions?: string | null,
     order?: number | null,
     isPublished?: boolean | null,
     course?:  {
@@ -2841,6 +3956,7 @@ export type OnDeleteLessonSubscription = {
     id: string,
     title: string,
     videoUrl?: string | null,
+    instructions?: string | null,
     order?: number | null,
     isPublished?: boolean | null,
     course?:  {
@@ -3002,12 +4118,14 @@ export type OnCreateWeeklyPlanItemSubscription = {
       id: string,
       title: string,
       videoUrl?: string | null,
+      instructions?: string | null,
       order?: number | null,
       isPublished?: boolean | null,
       createdAt: string,
       updatedAt: string,
       courseLessonsId?: string | null,
     } | null,
+    lessonTemplateId?: string | null,
     weeklyPlan?:  {
       __typename: "WeeklyPlan",
       id: string,
@@ -3044,12 +4162,14 @@ export type OnUpdateWeeklyPlanItemSubscription = {
       id: string,
       title: string,
       videoUrl?: string | null,
+      instructions?: string | null,
       order?: number | null,
       isPublished?: boolean | null,
       createdAt: string,
       updatedAt: string,
       courseLessonsId?: string | null,
     } | null,
+    lessonTemplateId?: string | null,
     weeklyPlan?:  {
       __typename: "WeeklyPlan",
       id: string,
@@ -3086,12 +4206,14 @@ export type OnDeleteWeeklyPlanItemSubscription = {
       id: string,
       title: string,
       videoUrl?: string | null,
+      instructions?: string | null,
       order?: number | null,
       isPublished?: boolean | null,
       createdAt: string,
       updatedAt: string,
       courseLessonsId?: string | null,
     } | null,
+    lessonTemplateId?: string | null,
     weeklyPlan?:  {
       __typename: "WeeklyPlan",
       id: string,
@@ -3218,6 +4340,9 @@ export type OnCreateSubmissionSubscription = {
     id: string,
     studentId: string,
     content?: string | null,
+    answers?: string | null,
+    imageUrls?: string | null,
+    lessonTemplateId?: string | null,
     grade?: string | null,
     submittedAt?: string | null,
     teacherComment?: string | null,
@@ -3231,6 +4356,10 @@ export type OnCreateSubmissionSubscription = {
       updatedAt: string,
       courseAssignmentsId?: string | null,
       weeklyPlanItemAssignmentsId?: string | null,
+    } | null,
+    messages?:  {
+      __typename: "ModelSubmissionMessageConnection",
+      nextToken?: string | null,
     } | null,
     createdAt: string,
     updatedAt: string,
@@ -3248,6 +4377,9 @@ export type OnUpdateSubmissionSubscription = {
     id: string,
     studentId: string,
     content?: string | null,
+    answers?: string | null,
+    imageUrls?: string | null,
+    lessonTemplateId?: string | null,
     grade?: string | null,
     submittedAt?: string | null,
     teacherComment?: string | null,
@@ -3261,6 +4393,10 @@ export type OnUpdateSubmissionSubscription = {
       updatedAt: string,
       courseAssignmentsId?: string | null,
       weeklyPlanItemAssignmentsId?: string | null,
+    } | null,
+    messages?:  {
+      __typename: "ModelSubmissionMessageConnection",
+      nextToken?: string | null,
     } | null,
     createdAt: string,
     updatedAt: string,
@@ -3278,6 +4414,9 @@ export type OnDeleteSubmissionSubscription = {
     id: string,
     studentId: string,
     content?: string | null,
+    answers?: string | null,
+    imageUrls?: string | null,
+    lessonTemplateId?: string | null,
     grade?: string | null,
     submittedAt?: string | null,
     teacherComment?: string | null,
@@ -3292,9 +4431,112 @@ export type OnDeleteSubmissionSubscription = {
       courseAssignmentsId?: string | null,
       weeklyPlanItemAssignmentsId?: string | null,
     } | null,
+    messages?:  {
+      __typename: "ModelSubmissionMessageConnection",
+      nextToken?: string | null,
+    } | null,
     createdAt: string,
     updatedAt: string,
     assignmentSubmissionsId?: string | null,
+  } | null,
+};
+
+export type OnCreateSubmissionMessageSubscriptionVariables = {
+  filter?: ModelSubscriptionSubmissionMessageFilterInput | null,
+};
+
+export type OnCreateSubmissionMessageSubscription = {
+  onCreateSubmissionMessage?:  {
+    __typename: "SubmissionMessage",
+    id: string,
+    senderId: string,
+    senderType: string,
+    message: string,
+    isRead?: boolean | null,
+    submission?:  {
+      __typename: "Submission",
+      id: string,
+      studentId: string,
+      content?: string | null,
+      answers?: string | null,
+      imageUrls?: string | null,
+      lessonTemplateId?: string | null,
+      grade?: string | null,
+      submittedAt?: string | null,
+      teacherComment?: string | null,
+      createdAt: string,
+      updatedAt: string,
+      assignmentSubmissionsId?: string | null,
+    } | null,
+    createdAt: string,
+    updatedAt: string,
+    submissionMessagesId?: string | null,
+  } | null,
+};
+
+export type OnUpdateSubmissionMessageSubscriptionVariables = {
+  filter?: ModelSubscriptionSubmissionMessageFilterInput | null,
+};
+
+export type OnUpdateSubmissionMessageSubscription = {
+  onUpdateSubmissionMessage?:  {
+    __typename: "SubmissionMessage",
+    id: string,
+    senderId: string,
+    senderType: string,
+    message: string,
+    isRead?: boolean | null,
+    submission?:  {
+      __typename: "Submission",
+      id: string,
+      studentId: string,
+      content?: string | null,
+      answers?: string | null,
+      imageUrls?: string | null,
+      lessonTemplateId?: string | null,
+      grade?: string | null,
+      submittedAt?: string | null,
+      teacherComment?: string | null,
+      createdAt: string,
+      updatedAt: string,
+      assignmentSubmissionsId?: string | null,
+    } | null,
+    createdAt: string,
+    updatedAt: string,
+    submissionMessagesId?: string | null,
+  } | null,
+};
+
+export type OnDeleteSubmissionMessageSubscriptionVariables = {
+  filter?: ModelSubscriptionSubmissionMessageFilterInput | null,
+};
+
+export type OnDeleteSubmissionMessageSubscription = {
+  onDeleteSubmissionMessage?:  {
+    __typename: "SubmissionMessage",
+    id: string,
+    senderId: string,
+    senderType: string,
+    message: string,
+    isRead?: boolean | null,
+    submission?:  {
+      __typename: "Submission",
+      id: string,
+      studentId: string,
+      content?: string | null,
+      answers?: string | null,
+      imageUrls?: string | null,
+      lessonTemplateId?: string | null,
+      grade?: string | null,
+      submittedAt?: string | null,
+      teacherComment?: string | null,
+      createdAt: string,
+      updatedAt: string,
+      assignmentSubmissionsId?: string | null,
+    } | null,
+    createdAt: string,
+    updatedAt: string,
+    submissionMessagesId?: string | null,
   } | null,
 };
 
@@ -3425,6 +4667,7 @@ export type OnCreateLessonTemplateSubscription = {
     instructions?: string | null,
     worksheetUrl?: string | null,
     videoUrl?: string | null,
+    assignmentType?: string | null,
     course?:  {
       __typename: "Course",
       id: string,
@@ -3434,6 +4677,10 @@ export type OnCreateLessonTemplateSubscription = {
       isArchived?: boolean | null,
       createdAt: string,
       updatedAt: string,
+    } | null,
+    questions?:  {
+      __typename: "ModelAssignmentQuestionConnection",
+      nextToken?: string | null,
     } | null,
     createdAt: string,
     updatedAt: string,
@@ -3454,6 +4701,7 @@ export type OnUpdateLessonTemplateSubscription = {
     instructions?: string | null,
     worksheetUrl?: string | null,
     videoUrl?: string | null,
+    assignmentType?: string | null,
     course?:  {
       __typename: "Course",
       id: string,
@@ -3463,6 +4711,10 @@ export type OnUpdateLessonTemplateSubscription = {
       isArchived?: boolean | null,
       createdAt: string,
       updatedAt: string,
+    } | null,
+    questions?:  {
+      __typename: "ModelAssignmentQuestionConnection",
+      nextToken?: string | null,
     } | null,
     createdAt: string,
     updatedAt: string,
@@ -3483,6 +4735,7 @@ export type OnDeleteLessonTemplateSubscription = {
     instructions?: string | null,
     worksheetUrl?: string | null,
     videoUrl?: string | null,
+    assignmentType?: string | null,
     course?:  {
       __typename: "Course",
       id: string,
@@ -3493,8 +4746,267 @@ export type OnDeleteLessonTemplateSubscription = {
       createdAt: string,
       updatedAt: string,
     } | null,
+    questions?:  {
+      __typename: "ModelAssignmentQuestionConnection",
+      nextToken?: string | null,
+    } | null,
     createdAt: string,
     updatedAt: string,
     courseLessonTemplatesId?: string | null,
+  } | null,
+};
+
+export type OnCreateAssignmentQuestionSubscriptionVariables = {
+  filter?: ModelSubscriptionAssignmentQuestionFilterInput | null,
+};
+
+export type OnCreateAssignmentQuestionSubscription = {
+  onCreateAssignmentQuestion?:  {
+    __typename: "AssignmentQuestion",
+    id: string,
+    order: number,
+    questionText: string,
+    questionType: string,
+    choices?: string | null,
+    correctAnswer?: string | null,
+    lessonTemplate?:  {
+      __typename: "LessonTemplate",
+      id: string,
+      lessonNumber: number,
+      title: string,
+      instructions?: string | null,
+      worksheetUrl?: string | null,
+      videoUrl?: string | null,
+      assignmentType?: string | null,
+      createdAt: string,
+      updatedAt: string,
+      courseLessonTemplatesId?: string | null,
+    } | null,
+    createdAt: string,
+    updatedAt: string,
+    lessonTemplateQuestionsId?: string | null,
+  } | null,
+};
+
+export type OnUpdateAssignmentQuestionSubscriptionVariables = {
+  filter?: ModelSubscriptionAssignmentQuestionFilterInput | null,
+};
+
+export type OnUpdateAssignmentQuestionSubscription = {
+  onUpdateAssignmentQuestion?:  {
+    __typename: "AssignmentQuestion",
+    id: string,
+    order: number,
+    questionText: string,
+    questionType: string,
+    choices?: string | null,
+    correctAnswer?: string | null,
+    lessonTemplate?:  {
+      __typename: "LessonTemplate",
+      id: string,
+      lessonNumber: number,
+      title: string,
+      instructions?: string | null,
+      worksheetUrl?: string | null,
+      videoUrl?: string | null,
+      assignmentType?: string | null,
+      createdAt: string,
+      updatedAt: string,
+      courseLessonTemplatesId?: string | null,
+    } | null,
+    createdAt: string,
+    updatedAt: string,
+    lessonTemplateQuestionsId?: string | null,
+  } | null,
+};
+
+export type OnDeleteAssignmentQuestionSubscriptionVariables = {
+  filter?: ModelSubscriptionAssignmentQuestionFilterInput | null,
+};
+
+export type OnDeleteAssignmentQuestionSubscription = {
+  onDeleteAssignmentQuestion?:  {
+    __typename: "AssignmentQuestion",
+    id: string,
+    order: number,
+    questionText: string,
+    questionType: string,
+    choices?: string | null,
+    correctAnswer?: string | null,
+    lessonTemplate?:  {
+      __typename: "LessonTemplate",
+      id: string,
+      lessonNumber: number,
+      title: string,
+      instructions?: string | null,
+      worksheetUrl?: string | null,
+      videoUrl?: string | null,
+      assignmentType?: string | null,
+      createdAt: string,
+      updatedAt: string,
+      courseLessonTemplatesId?: string | null,
+    } | null,
+    createdAt: string,
+    updatedAt: string,
+    lessonTemplateQuestionsId?: string | null,
+  } | null,
+};
+
+export type OnCreateParentInviteSubscriptionVariables = {
+  filter?: ModelSubscriptionParentInviteFilterInput | null,
+};
+
+export type OnCreateParentInviteSubscription = {
+  onCreateParentInvite?:  {
+    __typename: "ParentInvite",
+    id: string,
+    token: string,
+    studentEmail: string,
+    studentName: string,
+    used?: boolean | null,
+    createdAt: string,
+    updatedAt: string,
+  } | null,
+};
+
+export type OnUpdateParentInviteSubscriptionVariables = {
+  filter?: ModelSubscriptionParentInviteFilterInput | null,
+};
+
+export type OnUpdateParentInviteSubscription = {
+  onUpdateParentInvite?:  {
+    __typename: "ParentInvite",
+    id: string,
+    token: string,
+    studentEmail: string,
+    studentName: string,
+    used?: boolean | null,
+    createdAt: string,
+    updatedAt: string,
+  } | null,
+};
+
+export type OnDeleteParentInviteSubscriptionVariables = {
+  filter?: ModelSubscriptionParentInviteFilterInput | null,
+};
+
+export type OnDeleteParentInviteSubscription = {
+  onDeleteParentInvite?:  {
+    __typename: "ParentInvite",
+    id: string,
+    token: string,
+    studentEmail: string,
+    studentName: string,
+    used?: boolean | null,
+    createdAt: string,
+    updatedAt: string,
+  } | null,
+};
+
+export type OnCreateParentStudentSubscriptionVariables = {
+  filter?: ModelSubscriptionParentStudentFilterInput | null,
+};
+
+export type OnCreateParentStudentSubscription = {
+  onCreateParentStudent?:  {
+    __typename: "ParentStudent",
+    id: string,
+    parentId: string,
+    studentEmail: string,
+    studentName: string,
+    createdAt: string,
+    updatedAt: string,
+  } | null,
+};
+
+export type OnUpdateParentStudentSubscriptionVariables = {
+  filter?: ModelSubscriptionParentStudentFilterInput | null,
+};
+
+export type OnUpdateParentStudentSubscription = {
+  onUpdateParentStudent?:  {
+    __typename: "ParentStudent",
+    id: string,
+    parentId: string,
+    studentEmail: string,
+    studentName: string,
+    createdAt: string,
+    updatedAt: string,
+  } | null,
+};
+
+export type OnDeleteParentStudentSubscriptionVariables = {
+  filter?: ModelSubscriptionParentStudentFilterInput | null,
+};
+
+export type OnDeleteParentStudentSubscription = {
+  onDeleteParentStudent?:  {
+    __typename: "ParentStudent",
+    id: string,
+    parentId: string,
+    studentEmail: string,
+    studentName: string,
+    createdAt: string,
+    updatedAt: string,
+  } | null,
+};
+
+export type OnCreateStudentProfileSubscriptionVariables = {
+  filter?: ModelSubscriptionStudentProfileFilterInput | null,
+};
+
+export type OnCreateStudentProfileSubscription = {
+  onCreateStudentProfile?:  {
+    __typename: "StudentProfile",
+    id: string,
+    userId: string,
+    email: string,
+    firstName: string,
+    lastName: string,
+    gradeLevel?: string | null,
+    courseId?: string | null,
+    planType?: string | null,
+    createdAt: string,
+    updatedAt: string,
+  } | null,
+};
+
+export type OnUpdateStudentProfileSubscriptionVariables = {
+  filter?: ModelSubscriptionStudentProfileFilterInput | null,
+};
+
+export type OnUpdateStudentProfileSubscription = {
+  onUpdateStudentProfile?:  {
+    __typename: "StudentProfile",
+    id: string,
+    userId: string,
+    email: string,
+    firstName: string,
+    lastName: string,
+    gradeLevel?: string | null,
+    courseId?: string | null,
+    planType?: string | null,
+    createdAt: string,
+    updatedAt: string,
+  } | null,
+};
+
+export type OnDeleteStudentProfileSubscriptionVariables = {
+  filter?: ModelSubscriptionStudentProfileFilterInput | null,
+};
+
+export type OnDeleteStudentProfileSubscription = {
+  onDeleteStudentProfile?:  {
+    __typename: "StudentProfile",
+    id: string,
+    userId: string,
+    email: string,
+    firstName: string,
+    lastName: string,
+    gradeLevel?: string | null,
+    courseId?: string | null,
+    planType?: string | null,
+    createdAt: string,
+    updatedAt: string,
   } | null,
 };
