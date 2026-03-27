@@ -13,6 +13,12 @@ function RedirectIfAuthenticated() {
 
   useEffect(() => {
     if (!user) return
+    const params = new URLSearchParams(window.location.search)
+    const redirect = params.get('redirect')
+    if (redirect) {
+      router.replace(redirect)
+      return
+    }
     fetchAuthSession().then(session => {
       const groups = (session.tokens?.accessToken?.payload['cognito:groups'] as string[]) ?? []
       if (groups.includes('teacher')) {

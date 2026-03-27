@@ -62,7 +62,7 @@ type Invite = {
 type State = 'loading' | 'not-found' | 'already-used' | 'already-linked' | 'ready' | 'confirming' | 'done' | 'error'
 
 export default function AcceptInvitePage() {
-  const { user } = useAuthenticator()
+  const { user, authStatus } = useAuthenticator()
   const router = useRouter()
   const params = useParams()
   const token = params?.token as string
@@ -71,15 +71,15 @@ export default function AcceptInvitePage() {
   const [state, setState] = useState<State>('loading')
 
   useEffect(() => {
-    if (user === null) {
-      router.replace(`/login`)
+    if (authStatus === 'unauthenticated') {
+      router.replace(`/login?redirect=/parent/accept/${token}`)
     }
-  }, [user, router])
+  }, [authStatus, router, token])
 
   useEffect(() => {
-    if (!user || !token) return
+    if (authStatus !== 'authenticated' || !token) return
     loadInvite()
-  }, [user, token])
+  }, [authStatus, token])
 
   async function loadInvite() {
     setState('loading')
