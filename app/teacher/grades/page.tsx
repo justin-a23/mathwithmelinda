@@ -37,6 +37,7 @@ const listStudentProfilesQuery = /* GraphQL */`
     listStudentProfiles(limit: 500) {
       items {
         id
+        userId
         email
         firstName
         lastName
@@ -89,10 +90,12 @@ export default function GradingPage() {
   async function fetchStudentProfiles() {
     try {
       const result = await client.graphql({ query: listStudentProfilesQuery }) as any
-      const items = result.data.listStudentProfiles.items as { id: string; email: string; firstName: string; lastName: string }[]
+      const items = result.data.listStudentProfiles.items as { id: string; userId: string; email: string; firstName: string; lastName: string }[]
       const map: Record<string, string> = {}
       for (const p of items) {
-        map[p.email] = `${p.firstName} ${p.lastName}`
+        const name = `${p.firstName} ${p.lastName}`
+        if (p.email) map[p.email] = name
+        if (p.userId) map[p.userId] = name
       }
       setStudentNameMap(map)
     } catch (err) {
@@ -214,7 +217,7 @@ export default function GradingPage() {
                         ) : s.studentId}
                       </div>
                       <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginBottom: '4px' }}>
-                        {s.assignment?.course?.title || 'Unknown course'} &mdash; {s.assignment?.title || 'Unknown lesson'}
+                        {(() => { try { const c = JSON.parse(s.content || '{}'); return s.assignment?.course?.title || c.lessonTitle || 'No lesson info' } catch { return s.assignment?.course?.title || 'No lesson info' } })()}
                       </div>
                       <div style={{ fontSize: '11px', color: 'var(--gray-mid)' }}>
                         Submitted {s.submittedAt ? new Date(s.submittedAt).toLocaleDateString() : 'Unknown'}
@@ -242,7 +245,7 @@ export default function GradingPage() {
                         <span style={{ background: 'var(--plum)', color: 'white', fontSize: '11px', padding: '2px 8px', borderRadius: '20px' }}>{s.grade}</span>
                       </div>
                       <div style={{ fontSize: '12px', color: 'var(--gray-mid)' }}>
-                        {s.assignment?.course?.title || 'Unknown course'} &mdash; {s.assignment?.title || 'Unknown lesson'}
+                        {(() => { try { const c = JSON.parse(s.content || '{}'); return s.assignment?.course?.title || c.lessonTitle || 'No lesson info' } catch { return s.assignment?.course?.title || 'No lesson info' } })()}
                       </div>
                     </div>
                   ))}
