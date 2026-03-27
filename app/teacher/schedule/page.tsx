@@ -9,7 +9,7 @@ import { listCourses, listLessonTemplates } from '../../../src/graphql/queries'
 const client = generateClient()
 
 type Course = { id: string; title: string; gradeLevel: string | null }
-type LessonTemplate = { id: string; lessonNumber: number; title: string; instructions: string | null; worksheetUrl: string | null }
+type LessonTemplate = { id: string; lessonNumber: number; title: string; instructions: string | null; worksheetUrl: string | null; videoUrl: string | null }
 
 type DayPlan = {
   day: string
@@ -17,6 +17,7 @@ type DayPlan = {
   lessonNumber: string
   lessonTitle: string
   instructions: string
+  videoUrl: string
   dueDate: string
   dueTime: string
   isPublished: boolean
@@ -56,6 +57,7 @@ export default function ScheduleWeek() {
       lessonNumber: '',
       lessonTitle: '',
       instructions: '',
+      videoUrl: '',
       dueDate: '',
       dueTime: getDefaultDueTime(day),
       isPublished: false,
@@ -113,6 +115,7 @@ export default function ScheduleWeek() {
       lessonNumber: String(template.lessonNumber),
       lessonTitle: template.title,
       instructions: template.instructions || '',
+      videoUrl: template.videoUrl || '',
     }
     setDays(updated)
   }
@@ -137,16 +140,17 @@ export default function ScheduleWeek() {
 
       for (const day of days) {
         if (!day.lessonNumber) continue
-        const lessonResult = await client.graphql({
+        const lessonResult = await (client.graphql({
           query: createLesson,
           variables: { input: {
             title: day.lessonTitle || `Lesson ${day.lessonNumber}`,
             order: parseInt(day.lessonNumber) || 0,
             isPublished: day.isPublished,
             courseLessonsId: selectedCourseId,
-            videoUrl: ''
-          }}
-        })
+            videoUrl: day.videoUrl || '',
+            instructions: day.instructions || ''
+          } as any}
+        }) as any)
         await client.graphql({
           query: createWeeklyPlanItem,
           variables: { input: {

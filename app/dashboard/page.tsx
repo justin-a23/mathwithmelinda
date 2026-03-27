@@ -144,7 +144,7 @@ export default function Dashboard() {
                   })
                   .map((item) => (
                     <div key={item.id}
-                      onClick={() => router.push('/lessons')}
+                      onClick={() => router.push(`/lessons?id=${item.id}`)}
                       style={{ background: item.dayOfWeek === today ? 'var(--plum-light)' : 'var(--background)', border: `1px solid ${item.dayOfWeek === today ? 'var(--plum-mid)' : 'var(--gray-light)'}`, borderRadius: 'var(--radius)', padding: '20px 24px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
                       onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 4px 16px rgba(123,79,166,0.12)')}
                       onMouseLeave={e => (e.currentTarget.style.boxShadow = 'none')}>
