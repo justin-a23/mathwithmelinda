@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { generateClient } from 'aws-amplify/api'
 import ThemeToggle from '../../components/ThemeToggle'
+import { useRoleGuard } from '../../hooks/useRoleGuard'
 
 const client = generateClient()
 
@@ -49,6 +50,7 @@ function fmtDate(iso: string) {
 export default function TeacherMessagesPage() {
   const { user } = useAuthenticator()
   const router = useRouter()
+  const { checking } = useRoleGuard('teacher')
 
   const [messages, setMessages] = useState<Message[]>([])
   const [loading, setLoading] = useState(true)
@@ -130,6 +132,8 @@ export default function TeacherMessagesPage() {
   }
 
   const totalUnread = messages.filter(m => !m.isRead).length
+
+  if (checking) return null
 
   return (
     <div style={{ fontFamily: 'var(--font-body)', background: 'var(--page-bg)', minHeight: '100vh' }}>

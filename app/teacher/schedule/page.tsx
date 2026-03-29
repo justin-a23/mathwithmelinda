@@ -6,6 +6,7 @@ import { useEffect, useState, useRef, Suspense } from 'react'
 import { generateClient } from 'aws-amplify/api'
 import { listCourses, listLessonTemplates, listStudentProfiles } from '../../../src/graphql/queries'
 import ThemeToggle from '../../components/ThemeToggle'
+import { useRoleGuard } from '../../hooks/useRoleGuard'
 
 const client = generateClient()
 
@@ -46,6 +47,7 @@ function ScheduleWeekInner() {
   const { user } = useAuthenticator()
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { checking } = useRoleGuard('teacher')
   const preselectedCourseId = searchParams.get('courseId') || ''
 
   const [courses, setCourses] = useState<Course[]>([])
@@ -247,6 +249,8 @@ function ScheduleWeekInner() {
   }
 
   const allSelected = students.length > 0 && selectedStudentIds.size === students.length
+
+  if (checking) return null
 
   return (
     <div style={{ fontFamily: 'var(--font-body)', background: 'var(--page-bg)', minHeight: '100vh' }}>

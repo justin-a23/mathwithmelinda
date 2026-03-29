@@ -6,6 +6,7 @@ import { useEffect, useState, useRef } from 'react'
 import { generateClient } from 'aws-amplify/api'
 import { listCourses } from '../../../src/graphql/queries'
 import ThemeToggle from '../../components/ThemeToggle'
+import { useRoleGuard } from '../../hooks/useRoleGuard'
 
 const client = generateClient()
 
@@ -17,6 +18,7 @@ type Course = {
 export default function UploadVideo() {
   const { user } = useAuthenticator()
   const router = useRouter()
+  const { checking } = useRoleGuard('teacher')
   const [courses, setCourses] = useState<Course[]>([])
   const [selectedCourse, setSelectedCourse] = useState('')
   const [selectedCourseFolder, setSelectedCourseFolder] = useState('')
@@ -126,6 +128,8 @@ export default function UploadVideo() {
       setUploading(false)
     }
   }
+
+  if (checking) return null
 
   return (
     <div style={{ fontFamily: 'var(--font-body)', background: 'var(--page-bg)', minHeight: '100vh' }}>

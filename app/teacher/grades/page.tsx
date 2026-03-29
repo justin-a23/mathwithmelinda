@@ -7,6 +7,7 @@ import { generateClient } from 'aws-amplify/api'
 import { useTheme } from '../../ThemeProvider'
 import MathRenderer from '../../components/MathRenderer'
 import ThemeToggle from '../../components/ThemeToggle'
+import { useRoleGuard } from '../../hooks/useRoleGuard'
 
 function SubmissionImage({ url, alt, style }: { url: string; alt: string; style?: React.CSSProperties }) {
   const [failed, setFailed] = useState(false)
@@ -285,6 +286,7 @@ function AnswersSection({ questions, content, showWorkImageUrls }: {
 export default function GradingPage() {
   const { user } = useAuthenticator()
   const router = useRouter()
+  const { checking } = useRoleGuard('teacher')
   const [submissions, setSubmissions] = useState<Submission[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedSubmission, setSelectedSubmission] = useState<Submission | null>(null)
@@ -694,6 +696,7 @@ export default function GradingPage() {
     ? 'Archive all ' + bulkArchiveCourseName + ' submissions (' + bulkArchiveCount + ')'
     : 'Archive all submissions (' + bulkArchiveCount + ')'
 
+  if (checking) return null
   if (!mounted) return <div style={{ fontFamily: 'var(--font-body)', background: 'var(--page-bg)', minHeight: '100vh' }} />
 
   return (

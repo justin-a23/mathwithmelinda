@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { generateClient } from 'aws-amplify/api'
 import ThemeToggle from '../../components/ThemeToggle'
+import { useRoleGuard } from '../../hooks/useRoleGuard'
 
 const client = generateClient()
 
@@ -168,6 +169,7 @@ function randomToken() {
 export default function StudentsPage() {
   const { user } = useAuthenticator()
   const router = useRouter()
+  const { checking } = useRoleGuard('teacher')
 
   const [students, setStudents] = useState<Student[]>([])
   const [courses, setCourses] = useState<Course[]>([])
@@ -425,6 +427,8 @@ export default function StudentsPage() {
   }
 
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://mathwithmelinda.com'
+
+  if (checking) return null
 
   return (
     <div style={{ fontFamily: 'var(--font-body)', background: 'var(--page-bg)', minHeight: '100vh' }}>

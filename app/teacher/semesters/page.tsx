@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { generateClient } from 'aws-amplify/api'
 import ThemeToggle from '../../components/ThemeToggle'
+import { useRoleGuard } from '../../hooks/useRoleGuard'
 
 const client = generateClient()
 
@@ -113,6 +114,7 @@ function formatDateRange(start: string, end: string): string {
 export default function SemestersPage() {
   const { user } = useAuthenticator()
   const router = useRouter()
+  const { checking } = useRoleGuard('teacher')
 
   const [courses, setCourses] = useState<Course[]>([])
   const [semesters, setSemesters] = useState<Semester[]>([])
@@ -269,6 +271,8 @@ export default function SemestersPage() {
     display: 'block',
     marginBottom: '6px',
   }
+
+  if (checking) return null
 
   return (
     <div style={{ fontFamily: 'var(--font-body)', background: 'var(--page-bg)', minHeight: '100vh' }}>

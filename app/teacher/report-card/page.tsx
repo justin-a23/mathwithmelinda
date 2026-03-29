@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState, Suspense } from 'react'
 import { generateClient } from 'aws-amplify/api'
 import ThemeToggle from '../../components/ThemeToggle'
+import { useRoleGuard } from '../../hooks/useRoleGuard'
 
 const client = generateClient()
 
@@ -173,6 +174,7 @@ function ReportCardInner() {
   const { user } = useAuthenticator()
   const router = useRouter()
   const params = useSearchParams()
+  const { checking } = useRoleGuard('teacher')
   const studentId = params.get('studentId') || ''
   const semesterId = params.get('semesterId') || ''
 
@@ -361,6 +363,8 @@ function ReportCardInner() {
       setLoading(false)
     }
   }
+
+  if (checking) return null
 
   return (
     <div style={{ fontFamily: 'var(--font-body)', background: 'var(--page-bg)', minHeight: '100vh' }}>

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { generateClient } from 'aws-amplify/api'
 import ThemeToggle from '../../components/ThemeToggle'
+import { useRoleGuard } from '../../hooks/useRoleGuard'
 
 const client = generateClient()
 
@@ -159,7 +160,7 @@ function gradeChip(letter: string): { bg: string; text: string } {
 export default function GradebookPage() {
   const { user } = useAuthenticator()
   const router = useRouter()
-
+  const { checking } = useRoleGuard('teacher')
   const [semesters, setSemesters] = useState<Semester[]>([])
   const [selectedSemesterId, setSelectedSemesterId] = useState('')
   const [loading, setLoading] = useState(true)
@@ -382,6 +383,8 @@ export default function GradebookPage() {
   const assignmentHigh = assignmentGrades.length > 0 ? Math.max(...assignmentGrades) : null
   const assignmentLow = assignmentGrades.length > 0 ? Math.min(...assignmentGrades) : null
   const assignmentSubmitted = assignmentRows.filter(r => r.grade !== null).length
+
+  if (checking) return null
 
   return (
     <div style={{ fontFamily: 'var(--font-body)', background: 'var(--page-bg)', minHeight: '100vh' }}>

@@ -7,6 +7,7 @@ import { generateClient } from 'aws-amplify/api'
 import { listLessonTemplates, getCourse, listAssignmentQuestions } from '../../../../src/graphql/queries'
 import { updateLessonTemplate, createAssignmentQuestion, deleteAssignmentQuestion, updateAssignmentQuestion } from '../../../../src/graphql/mutations'
 import ThemeToggle from '../../../components/ThemeToggle'
+import { useRoleGuard } from '../../../hooks/useRoleGuard'
 import MathToolbar from '../../../components/MathToolbar'
 import MathRenderer from '../../../components/MathRenderer'
 
@@ -77,6 +78,7 @@ const QUESTION_TYPE_LABELS: Record<string, string> = {
 export default function LessonLibraryPage() {
   const { user } = useAuthenticator()
   const router = useRouter()
+  const { checking } = useRoleGuard('teacher')
   const params = useParams()
   const courseId = params?.courseId as string
 
@@ -427,6 +429,8 @@ export default function LessonLibraryPage() {
   ]
 
   const showQuestionBuilder = editForm.assignmentType === 'questions' || editForm.assignmentType === 'both'
+
+  if (checking) return null
 
   return (
     <div style={{ fontFamily: 'var(--font-body)', background: 'var(--page-bg)', minHeight: '100vh' }}>

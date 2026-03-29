@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 import { generateClient } from 'aws-amplify/api'
 import ThemeToggle from '../../components/ThemeToggle'
 import { useTheme } from '../../ThemeProvider'
+import { useRoleGuard } from '../../hooks/useRoleGuard'
 
 const client = generateClient()
 
@@ -118,6 +119,7 @@ export default function ManagePlansPage() {
   useTheme()
   const { user } = useAuthenticator()
   const router = useRouter()
+  const { checking } = useRoleGuard('teacher')
 
   const [plans, setPlans] = useState<WeeklyPlan[]>([])
   const [studentMap, setStudentMap] = useState<Record<string, string>>({})
@@ -269,6 +271,8 @@ export default function ManagePlansPage() {
     color: 'var(--foreground)',
     minWidth: '220px',
   }
+
+  if (checking) return null
 
   return (
     <div style={{ fontFamily: 'var(--font-body)', background: 'var(--page-bg)', minHeight: '100vh' }}>

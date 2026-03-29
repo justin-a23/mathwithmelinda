@@ -6,6 +6,7 @@ import { useEffect, useState, useRef } from 'react'
 import { generateClient } from 'aws-amplify/api'
 import ThemeToggle from '../../components/ThemeToggle'
 import ImageCropper from '../../components/ImageCropper'
+import { useRoleGuard } from '../../hooks/useRoleGuard'
 
 const client = generateClient()
 
@@ -73,6 +74,7 @@ const inputStyle: React.CSSProperties = {
 export default function TeacherProfilePage() {
   const { user, signOut } = useAuthenticator()
   const router = useRouter()
+  const { checking } = useRoleGuard('teacher')
 
   const [profile, setProfile] = useState<TeacherProfile | null>(null)
   const [loading, setLoading] = useState(true)
@@ -81,6 +83,7 @@ export default function TeacherProfilePage() {
   const [bio, setBio] = useState('')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [saveError, setSaveError] = useState('')
 
   const [profilePicUrl, setProfilePicUrl] = useState<string | null>(null)
   const [uploadingPic, setUploadingPic] = useState(false)
@@ -145,16 +148,46 @@ export default function TeacherProfilePage() {
     if (!profile) return
     setSaving(true)
     setSaved(false)
+    setSaveError('')
     try {
-      await client.graphql({
+      const result = await client.graphql({
         query: updateTeacherProfileMutation,
         variables: { input: { id: profile.id, displayName: displayName.trim(), bio: bio.trim() } },
-      })
+      }) as any
+      if (result.errors && result.errors.length > 0) {
+        throw new Error(result.errors[0].message)
+      }
       setProfile(prev => prev ? { ...prev, displayName: displayName.trim(), bio: bio.trim() } : prev)
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error saving profile:', err)
+      const msg = err?.message || 'Unknown error'
+      // If the record is broken (manually created, wrong format), delete and recreate it
+      if (msg.includes('conditional') || msg.includes('ConditionalCheckFailed') || msg.includes('not found') || msg.includes('Cannot return null')) {
+        try {
+          // Delete the broken record and recreate
+          await client.graphql({
+            query: `mutation DeleteTeacherProfile($input: DeleteTeacherProfileInput!) { deleteTeacherProfile(input: $input) { id } }`,
+            variables: { input: { id: profile.id } },
+          })
+          const userId = user?.userId || user?.username || ''
+          const email = user?.signInDetails?.loginId || userId
+          const created = await client.graphql({
+            query: createTeacherProfileMutation,
+            variables: { input: { userId, email, displayName: displayName.trim(), bio: bio.trim() } },
+          }) as any
+          const p = created.data.createTeacherProfile as TeacherProfile
+          setProfile(p)
+          setSaved(true)
+          setTimeout(() => setSaved(false), 3000)
+        } catch (recreateErr) {
+          console.error('Error recreating profile:', recreateErr)
+          setSaveError('Save failed. Please try refreshing the page.')
+        }
+      } else {
+        setSaveError(`Save failed: ${msg}`)
+      }
     } finally {
       setSaving(false)
     }
@@ -172,6 +205,7 @@ export default function TeacherProfilePage() {
     if (!profile) return
     setCropperSrc(null)
     setUploadingPic(true)
+    setSaveError('')
     try {
       const userId = user?.userId || user?.username || ''
       const res = await fetch('/api/profile-pic', {
@@ -181,10 +215,29 @@ export default function TeacherProfilePage() {
       })
       const { signedUrl, key } = await res.json()
       await fetch(signedUrl, { method: 'PUT', body: blob, headers: { 'Content-Type': 'image/jpeg' } })
-      await client.graphql({
+      // Use current profile id; if broken, delete+recreate first then update
+      let profileId = profile.id
+      const updateResult = await client.graphql({
         query: updateTeacherProfileMutation,
-        variables: { input: { id: profile.id, profilePictureKey: key } },
-      })
+        variables: { input: { id: profileId, profilePictureKey: key } },
+      }) as any
+      if (updateResult.errors && updateResult.errors.length > 0) {
+        // Try delete + recreate
+        await client.graphql({
+          query: `mutation DeleteTeacherProfile($input: DeleteTeacherProfileInput!) { deleteTeacherProfile(input: $input) { id } }`,
+          variables: { input: { id: profileId } },
+        })
+        const email = user?.signInDetails?.loginId || userId
+        const created = await client.graphql({
+          query: createTeacherProfileMutation,
+          variables: { input: { userId, email, displayName: displayName.trim(), bio: bio.trim(), profilePictureKey: key } },
+        }) as any
+        const p = created.data.createTeacherProfile as TeacherProfile
+        setProfile(p)
+        profileId = p.id
+      } else {
+        setProfile(prev => prev ? { ...prev, profilePictureKey: key } : prev)
+      }
       const viewRes = await fetch('/api/profile-pic', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -192,9 +245,9 @@ export default function TeacherProfilePage() {
       })
       const { url } = await viewRes.json()
       setProfilePicUrl(url)
-      setProfile(prev => prev ? { ...prev, profilePictureKey: key } : prev)
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error uploading picture:', err)
+      setSaveError('Photo upload failed. Please try again.')
     } finally {
       setUploadingPic(false)
     }
@@ -230,6 +283,8 @@ export default function TeacherProfilePage() {
     : email.slice(0, 2).toUpperCase()
 
   const isDirty = displayName.trim() !== (profile?.displayName || '') || bio.trim() !== (profile?.bio || '')
+
+  if (checking) return null
 
   return (
     <div style={{ fontFamily: 'var(--font-body)', background: 'var(--page-bg)', minHeight: '100vh' }}>
@@ -332,7 +387,7 @@ export default function TeacherProfilePage() {
                   />
                 </div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
                 <button
                   onClick={saveInfo}
                   disabled={saving || !isDirty}
@@ -340,6 +395,7 @@ export default function TeacherProfilePage() {
                   {saving ? 'Saving…' : 'Save'}
                 </button>
                 {saved && <span style={{ fontSize: '13px', color: '#16a34a', fontWeight: 500 }}>✓ Saved!</span>}
+                {saveError && <span style={{ fontSize: '13px', color: '#b91c1c', fontWeight: 500 }}>{saveError}</span>}
               </div>
             </div>
 
