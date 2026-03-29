@@ -4,7 +4,7 @@ import { useAuthenticator } from '@aws-amplify/ui-react'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { generateClient } from 'aws-amplify/api'
-import ThemeToggle from '../../components/ThemeToggle'
+import TeacherNav from '../../components/TeacherNav'
 import { useRoleGuard } from '../../hooks/useRoleGuard'
 
 const client = generateClient()
@@ -143,25 +143,7 @@ export default function TeacherMessagesPage() {
         .msg-card:hover { box-shadow: 0 4px 16px rgba(123,79,166,0.12) !important; }
       `}</style>
 
-      {/* Nav */}
-      <nav style={{ background: 'var(--nav-bg)', padding: '0 48px', height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <button onClick={() => router.push('/teacher')}
-            style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px', padding: 0 }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
-            Dashboard
-          </button>
-          <span style={{ color: 'rgba(255,255,255,0.25)' }}>/</span>
-          <span style={{ fontFamily: 'var(--font-display)', color: 'white', fontSize: '18px' }}>Messages</span>
-          <span style={{ background: 'var(--plum)', color: 'white', fontSize: '11px', fontWeight: 500, padding: '3px 10px', borderRadius: '20px' }}>Teacher</span>
-          {totalUnread > 0 && (
-            <span style={{ background: '#ef4444', color: 'white', fontSize: '11px', fontWeight: 700, padding: '3px 10px', borderRadius: '20px' }}>
-              {totalUnread} unread
-            </span>
-          )}
-        </div>
-        <ThemeToggle />
-      </nav>
+      <TeacherNav />
 
       <main style={{ maxWidth: '820px', margin: '0 auto', padding: '40px 24px 80px' }}>
         <div style={{ marginBottom: '28px' }}>

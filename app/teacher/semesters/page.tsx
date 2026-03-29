@@ -4,7 +4,7 @@ import { useAuthenticator } from '@aws-amplify/ui-react'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { generateClient } from 'aws-amplify/api'
-import ThemeToggle from '../../components/ThemeToggle'
+import TeacherNav from '../../components/TeacherNav'
 import { useRoleGuard } from '../../hooks/useRoleGuard'
 
 const client = generateClient()
@@ -276,25 +276,7 @@ export default function SemestersPage() {
 
   return (
     <div style={{ fontFamily: 'var(--font-body)', background: 'var(--page-bg)', minHeight: '100vh' }}>
-      {/* Nav */}
-      <nav style={{ background: 'var(--nav-bg)', padding: '0 48px', height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <button
-            onClick={() => router.push('/teacher')}
-            style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.75)', cursor: 'pointer', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 0' }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polyline points="15 18 9 12 15 6" />
-            </svg>
-            Dashboard
-          </button>
-          <span style={{ color: 'rgba(255,255,255,0.3)' }}>/</span>
-          <span style={{ fontFamily: 'var(--font-display)', color: 'white', fontSize: '18px' }}>Terms</span>
-          <span style={{ background: 'var(--plum)', color: 'white', fontSize: '11px', fontWeight: 500, padding: '3px 10px', borderRadius: '20px', marginLeft: '4px' }}>Teacher</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <ThemeToggle />
-        </div>
-      </nav>
+      <TeacherNav />
 
       <main style={{ maxWidth: '900px', margin: '0 auto', padding: '48px 24px' }}>
         {/* Page header */}

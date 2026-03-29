@@ -4,7 +4,7 @@ import { useAuthenticator } from '@aws-amplify/ui-react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState, Suspense } from 'react'
 import { generateClient } from 'aws-amplify/api'
-import ThemeToggle from '../../components/ThemeToggle'
+import TeacherNav from '../../components/TeacherNav'
 import { useRoleGuard } from '../../hooks/useRoleGuard'
 
 const client = generateClient()
@@ -378,32 +378,19 @@ function ReportCardInner() {
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       `}</style>
 
-      {/* Nav — hidden on print */}
-      <nav className="no-print" style={{ background: 'var(--nav-bg)', padding: '0 48px', height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <button onClick={() => router.push('/teacher/gradebook')}
-            style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px', padding: 0 }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
-            Back to Gradebook
+      <TeacherNav />
+      {report && (
+        <div className="no-print" style={{ maxWidth: '820px', margin: '0 auto', padding: '16px 24px 0', display: 'flex', justifyContent: 'flex-end' }}>
+          <button
+            onClick={() => window.print()}
+            style={{ background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '8px', padding: '10px 20px', cursor: 'pointer', fontSize: '14px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>
+            </svg>
+            Print / Save as PDF
           </button>
-          <span style={{ color: 'rgba(255,255,255,0.25)' }}>/</span>
-          <span style={{ fontFamily: 'var(--font-display)', color: 'white', fontSize: '18px' }}>Report Card</span>
-          <span style={{ background: 'var(--plum)', color: 'white', fontSize: '11px', fontWeight: 500, padding: '3px 10px', borderRadius: '20px' }}>Teacher</span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <ThemeToggle />
-          {report && (
-            <button
-              onClick={() => window.print()}
-              style={{ background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '8px', padding: '10px 20px', cursor: 'pointer', fontSize: '14px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>
-              </svg>
-              Print / Save as PDF
-            </button>
-          )}
-        </div>
-      </nav>
+      )}
 
       <main style={{ maxWidth: '820px', margin: '0 auto', padding: '48px 24px 80px' }}>
         {loading ? (

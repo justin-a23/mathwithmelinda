@@ -4,7 +4,7 @@ import { useAuthenticator } from '@aws-amplify/ui-react'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState, useRef } from 'react'
 import { generateClient } from 'aws-amplify/api'
-import ThemeToggle from '../../components/ThemeToggle'
+import TeacherNav from '../../components/TeacherNav'
 import ImageCropper from '../../components/ImageCropper'
 import { useRoleGuard } from '../../hooks/useRoleGuard'
 
@@ -297,19 +297,7 @@ export default function TeacherProfilePage() {
           onCancel={handleCropCancel}
         />
       )}
-      <nav style={{ background: 'var(--nav-bg)', padding: '0 48px', height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <button onClick={() => router.push('/teacher')}
-            style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px', padding: 0 }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
-            Dashboard
-          </button>
-          <span style={{ color: 'rgba(255,255,255,0.25)' }}>/</span>
-          <span style={{ fontFamily: 'var(--font-display)', color: 'white', fontSize: '18px' }}>My Profile</span>
-          <span style={{ background: 'var(--plum)', color: 'white', fontSize: '11px', fontWeight: 500, padding: '3px 10px', borderRadius: '20px' }}>Teacher</span>
-        </div>
-        <ThemeToggle />
-      </nav>
+      <TeacherNav />
 
       <main style={{ maxWidth: '600px', margin: '0 auto', padding: '48px 24px' }}>
         <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '32px', color: 'var(--foreground)', marginBottom: '8px' }}>My Profile</h1>

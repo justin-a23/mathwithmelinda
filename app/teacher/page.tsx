@@ -1,26 +1,13 @@
 'use client'
 
-import { useAuthenticator } from '@aws-amplify/ui-react'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { generateClient } from 'aws-amplify/api'
 import { listCourses } from '../../src/graphql/queries'
-import ThemeToggle from '../components/ThemeToggle'
+import TeacherNav from '../components/TeacherNav'
 import { useRoleGuard } from '../hooks/useRoleGuard'
 
 const client = generateClient()
-
-const getTeacherProfileQuery = /* GraphQL */`
-  query GetTeacherProfile($userId: String!) {
-    listTeacherProfiles(filter: { userId: { eq: $userId } }, limit: 1) {
-      items {
-        id
-        displayName
-        profilePictureKey
-      }
-    }
-  }
-`
 
 type Course = {
   id: string
@@ -35,14 +22,6 @@ type CourseWeekStats = {
   received: number
   graded: number
 }
-
-const listUnreadMessagesQuery = /* GraphQL */`
-  query ListUnreadMessages {
-    listMessages(filter: { isRead: { eq: false } }, limit: 200) {
-      items { id isRead }
-    }
-  }
-`
 
 const listRecentSubmissionsQuery = /* GraphQL */`
   query ListRecentSubmissions {
@@ -75,7 +54,6 @@ function formatWeekRange(monday: Date): string {
   return monday.toLocaleDateString('en-US', opts) + ' – ' + friday.toLocaleDateString('en-US', opts)
 }
 
-// Named component — avoids Turbopack IIFE issues
 function GradingBar({ graded, received }: { graded: number; received: number }) {
   const [ready, setReady] = useState(false)
   useEffect(() => {
@@ -109,7 +87,6 @@ function GradingBar({ graded, received }: { graded: number; received: number }) 
 }
 
 export default function TeacherDashboard() {
-  const { user, signOut } = useAuthenticator()
   const router = useRouter()
   const { checking } = useRoleGuard('teacher')
   const [courses, setCourses] = useState<Course[]>([])
@@ -118,48 +95,12 @@ export default function TeacherDashboard() {
   const [newCourse, setNewCourse] = useState({ title: '', description: '', gradeLevel: '' })
   const [saving, setSaving] = useState(false)
   const [weekStats, setWeekStats] = useState<CourseWeekStats[]>([])
-  const [totalUngraded, setTotalUngraded] = useState(0)
   const [statsLoading, setStatsLoading] = useState(true)
-  const [teacherPicUrl, setTeacherPicUrl] = useState<string | null>(null)
-  const [teacherDisplayName, setTeacherDisplayName] = useState('')
-  const [unreadMessageCount, setUnreadMessageCount] = useState(0)
-
-  useEffect(() => {
-    if (user === null) router.replace('/login')
-  }, [user, router])
 
   useEffect(() => {
     fetchCourses()
     fetchWeekStats()
-    fetchUnreadMessages()
   }, [])
-
-  useEffect(() => {
-    const userId = user?.userId || user?.username || ''
-    if (!userId) return
-    async function loadTeacherProfile() {
-      try {
-        const result = await client.graphql({ query: getTeacherProfileQuery, variables: { userId } }) as any
-        const items = result.data.listTeacherProfiles.items
-        if (items.length > 0) {
-          const p = items[0]
-          if (p.displayName) setTeacherDisplayName(p.displayName)
-          if (p.profilePictureKey) {
-            const res = await fetch('/api/profile-pic', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ action: 'view', key: p.profilePictureKey }),
-            })
-            const { url } = await res.json()
-            setTeacherPicUrl(url)
-          }
-        }
-      } catch (err) {
-        console.error('Error loading teacher profile:', err)
-      }
-    }
-    loadTeacherProfile()
-  }, [user?.userId, user?.username])
 
   async function fetchCourses() {
     try {
@@ -209,26 +150,10 @@ export default function TeacherDashboard() {
       setWeekStats(
         Object.entries(byCourse).map(([courseId, data]) => ({ courseId, ...data }))
       )
-
-      // Count all ungraded submissions across all time (not just this week)
-      const ungraded = allSubs.filter(s =>
-        !s.isArchived && !s.grade && s.status !== 'returned'
-      ).length
-      setTotalUngraded(ungraded)
     } catch (err) {
       console.error('Error fetching week stats:', err)
     } finally {
       setStatsLoading(false)
-    }
-  }
-
-  async function fetchUnreadMessages() {
-    try {
-      const result = await (client.graphql({ query: listUnreadMessagesQuery }) as any)
-      const items = result.data.listMessages.items
-      setUnreadMessageCount(items.length)
-    } catch (err) {
-      console.error('Error fetching unread messages:', err)
     }
   }
 
@@ -256,192 +181,12 @@ export default function TeacherDashboard() {
 
   return (
     <div style={{ fontFamily: 'var(--font-body)', background: 'var(--page-bg)', minHeight: '100vh' }}>
-      <nav style={{ background: 'var(--nav-bg)', padding: '0 48px', height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{ width: '36px', height: '36px', background: 'var(--plum)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <svg width="20" height="20" viewBox="0 0 40 40" fill="none">
-              <rect x="17" y="6" width="6" height="28" rx="3" fill="white"/>
-              <rect x="6" y="17" width="28" height="6" rx="3" fill="white"/>
-            </svg>
-          </div>
-          <span style={{ fontFamily: 'var(--font-display)', color: 'white', fontSize: '20px' }}>Math with Melinda</span>
-          <span style={{ background: 'var(--plum)', color: 'white', fontSize: '11px', fontWeight: 500, padding: '3px 10px', borderRadius: '20px', marginLeft: '8px' }}>Teacher</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <ThemeToggle />
-          <button
-            onClick={() => router.push('/teacher/profile')}
-            title={teacherDisplayName || 'My Profile'}
-            style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div style={{ width: '36px', height: '36px', borderRadius: '50%', overflow: 'hidden', border: '2px solid rgba(255,255,255,0.4)', flexShrink: 0 }}>
-              {teacherPicUrl ? (
-                <img src={teacherPicUrl} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              ) : (
-                <div style={{ width: '100%', height: '100%', background: 'var(--plum-light)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--plum)' }}>
-                    {teacherDisplayName ? teacherDisplayName.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase() : 'M'}
-                  </span>
-                </div>
-              )}
-            </div>
-            {teacherDisplayName && (
-              <span style={{ color: 'rgba(255,255,255,0.85)', fontSize: '13px', fontWeight: 500 }}>{teacherDisplayName.split(' ')[0]}</span>
-            )}
-          </button>
-          <button onClick={async () => { await signOut(); router.replace('/login') }} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'white', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '14px' }}>
-            Sign out
-          </button>
-        </div>
-      </nav>
+      <TeacherNav />
 
-      <main style={{ maxWidth: '1100px', margin: '0 auto', padding: '48px 24px' }}>
-
-        {/* Header */}
-        <div style={{ marginBottom: '32px' }}>
-          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '32px', color: 'var(--foreground)', marginBottom: '4px' }}>Teacher Dashboard</h1>
-          <p style={{ color: 'var(--gray-mid)', marginBottom: '28px' }}>Manage your courses, lessons and students.</p>
-
-          {/* Action cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '12px' }}>
-
-            {/* Grade Work — highlighted when ungraded work exists */}
-            <button onClick={() => router.push('/teacher/grades')} style={{
-              background: totalUngraded > 0 ? 'var(--plum)' : 'var(--background)',
-              color: totalUngraded > 0 ? 'white' : 'var(--foreground)',
-              border: `1px solid ${totalUngraded > 0 ? 'var(--plum)' : 'var(--gray-light)'}`,
-              borderRadius: '12px', padding: '20px 16px', cursor: 'pointer', textAlign: 'left',
-              display: 'flex', flexDirection: 'column', gap: '8px', transition: 'box-shadow 0.15s',
-            }}>
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
-              </svg>
-              <div>
-                <div style={{ fontSize: '14px', fontWeight: 600 }}>Grade Work</div>
-                <div style={{ fontSize: '12px', opacity: 0.75, marginTop: '2px' }}>
-                  {totalUngraded > 0 ? `${totalUngraded} pending` : 'All caught up'}
-                </div>
-              </div>
-            </button>
-
-            {/* Gradebook */}
-            <button onClick={() => router.push('/teacher/gradebook')} style={{
-              background: 'var(--background)', color: 'var(--foreground)',
-              border: '1px solid var(--gray-light)', borderRadius: '12px', padding: '20px 16px',
-              cursor: 'pointer', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '8px',
-            }}>
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                <rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/>
-              </svg>
-              <div>
-                <div style={{ fontSize: '14px', fontWeight: 600 }}>Gradebook</div>
-                <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginTop: '2px' }}>All student grades</div>
-              </div>
-            </button>
-
-            {/* Assigned Work */}
-            <button onClick={() => router.push('/teacher/plans')} style={{
-              background: 'var(--background)', color: 'var(--foreground)',
-              border: '1px solid var(--gray-light)', borderRadius: '12px', padding: '20px 16px',
-              cursor: 'pointer', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '8px',
-            }}>
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
-              </svg>
-              <div>
-                <div style={{ fontSize: '14px', fontWeight: 600 }}>Assigned Work</div>
-                <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginTop: '2px' }}>Weekly plans</div>
-              </div>
-            </button>
-
-            {/* Students */}
-            <button onClick={() => router.push('/teacher/students')} style={{
-              background: 'var(--background)', color: 'var(--foreground)',
-              border: '1px solid var(--gray-light)', borderRadius: '12px', padding: '20px 16px',
-              cursor: 'pointer', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '8px',
-            }}>
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>
-              </svg>
-              <div>
-                <div style={{ fontSize: '14px', fontWeight: 600 }}>Students</div>
-                <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginTop: '2px' }}>Manage roster</div>
-              </div>
-            </button>
-
-            {/* Semesters */}
-            <button onClick={() => router.push('/teacher/semesters')} style={{
-              background: 'var(--background)', color: 'var(--foreground)',
-              border: '1px solid var(--gray-light)', borderRadius: '12px', padding: '20px 16px',
-              cursor: 'pointer', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '8px',
-            }}>
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                <path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/>
-              </svg>
-              <div>
-                <div style={{ fontSize: '14px', fontWeight: 600 }}>Terms</div>
-                <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginTop: '2px' }}>Grade weights & cutoffs</div>
-              </div>
-            </button>
-
-            {/* Upload Video */}
-            <button onClick={() => router.push('/teacher/upload')} style={{
-              background: 'var(--background)', color: 'var(--foreground)',
-              border: '1px solid var(--gray-light)', borderRadius: '12px', padding: '20px 16px',
-              cursor: 'pointer', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '8px',
-            }}>
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                <polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/>
-              </svg>
-              <div>
-                <div style={{ fontSize: '14px', fontWeight: 600 }}>Upload Video</div>
-                <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginTop: '2px' }}>Add lesson videos</div>
-              </div>
-            </button>
-
-            {/* Messages */}
-            <button onClick={() => router.push('/teacher/messages')} style={{
-              background: unreadMessageCount > 0 ? 'var(--background)' : 'var(--background)',
-              color: 'var(--foreground)',
-              border: `1px solid ${unreadMessageCount > 0 ? 'var(--plum)' : 'var(--gray-light)'}`,
-              borderRadius: '12px', padding: '20px 16px', cursor: 'pointer', textAlign: 'left',
-              display: 'flex', flexDirection: 'column', gap: '8px', position: 'relative',
-            }}>
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
-              </svg>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ fontSize: '14px', fontWeight: 600 }}>Messages</span>
-                  {unreadMessageCount > 0 && (
-                    <span style={{ background: '#ef4444', color: 'white', fontSize: '10px', fontWeight: 700, padding: '1px 6px', borderRadius: '20px' }}>
-                      {unreadMessageCount}
-                    </span>
-                  )}
-                </div>
-                <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginTop: '2px' }}>Student questions</div>
-              </div>
-            </button>
-
-            {/* Add Course */}
-            <button onClick={() => setShowAddCourse(true)} style={{
-              background: 'var(--background)', color: 'var(--foreground)',
-              border: '1px dashed var(--gray-light)', borderRadius: '12px', padding: '20px 16px',
-              cursor: 'pointer', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '8px',
-            }}>
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
-              </svg>
-              <div>
-                <div style={{ fontSize: '14px', fontWeight: 600 }}>Add Course</div>
-                <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginTop: '2px' }}>Create new course</div>
-              </div>
-            </button>
-
-          </div>
-        </div>
+      <main style={{ maxWidth: '1100px', margin: '0 auto', padding: '40px 24px' }}>
 
         {/* ── THIS WEEK ── */}
-        <div style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', padding: '24px 28px', marginBottom: '48px' }}>
+        <div style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', padding: '24px 28px', marginBottom: '40px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
             <h2 style={{ fontSize: '13px', fontWeight: 500, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--plum)', margin: 0 }}>
               This Week's Grading
@@ -480,15 +225,10 @@ export default function TeacherDashboard() {
                     paddingBottom: '14px',
                     borderBottom: isLast ? 'none' : '1px solid var(--gray-light)',
                   }}>
-                    {/* Course name */}
                     <span style={{ width: '160px', flexShrink: 0, fontFamily: 'var(--font-display)', fontSize: '16px', color: 'var(--foreground)', lineHeight: 1.2 }}>
                       {course.title}
                     </span>
-
-                    {/* Full-width bar */}
                     <GradingBar graded={graded} received={received} />
-
-                    {/* Stats */}
                     <div style={{ width: '200px', flexShrink: 0, textAlign: 'right', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
                       {received > 0 ? (
                         <>
@@ -555,9 +295,18 @@ export default function TeacherDashboard() {
         )}
 
         {/* ── COURSES ── */}
-        <h2 style={{ fontSize: '13px', fontWeight: 500, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--plum)', marginBottom: '16px' }}>
-          Your Courses
-        </h2>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+          <h2 style={{ fontSize: '13px', fontWeight: 500, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--plum)', margin: 0 }}>
+            Your Courses
+          </h2>
+          <button
+            onClick={() => setShowAddCourse(true)}
+            style={{ background: 'var(--background)', color: 'var(--gray-dark)', border: '1px dashed var(--gray-light)', borderRadius: '6px', padding: '6px 14px', cursor: 'pointer', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Add Course
+          </button>
+        </div>
 
         {loading ? (
           <p style={{ color: 'var(--gray-mid)' }}>Loading courses...</p>
@@ -576,7 +325,6 @@ export default function TeacherDashboard() {
                   onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 4px 16px rgba(123,79,166,0.12)')}
                   onMouseLeave={e => (e.currentTarget.style.boxShadow = 'none')}>
 
-                  {/* Text section grows to fill — this pushes bar + buttons to the same position in every card */}
                   <div style={{ flex: 1 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
                       <div style={{ fontFamily: 'var(--font-display)', fontSize: '20px', color: 'var(--foreground)' }}>{course.title}</div>
@@ -594,7 +342,6 @@ export default function TeacherDashboard() {
                     <div style={{ fontSize: '12px', color: 'var(--gray-mid)' }}>Grade {course.gradeLevel}</div>
                   </div>
 
-                  {/* Bar — always rendered at same position, just invisible when no data */}
                   <div style={{ height: '12px', margin: '16px 0' }}>
                     {received > 0 && <GradingBar graded={graded} received={received} />}
                   </div>
