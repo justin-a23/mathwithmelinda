@@ -316,6 +316,8 @@ export default function GradingPage() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [expandedStudents, setExpandedStudents] = useState<Set<string>>(new Set())
+  const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date())
+  const [refreshing, setRefreshing] = useState(false)
   useEffect(() => setMounted(true), [])
 
   useEffect(() => {
@@ -327,6 +329,34 @@ export default function GradingPage() {
     fetchStudentProfiles()
     fetchVideoWatches()
   }, [])
+
+  // Auto-refresh submissions every 60 seconds
+  useEffect(() => {
+    const id = setInterval(() => {
+      silentRefresh()
+    }, 60_000)
+    return () => clearInterval(id)
+  }, [])
+
+  async function silentRefresh() {
+    try {
+      const result = await client.graphql({ query: listSubmissionsWithDetails }) as any
+      const items = result.data.listSubmissions.items as Submission[]
+      setSubmissions(items)
+      setLastRefreshed(new Date())
+    } catch { /* silent */ }
+  }
+
+  async function handleManualRefresh() {
+    setRefreshing(true)
+    try {
+      const result = await client.graphql({ query: listSubmissionsWithDetails }) as any
+      const items = result.data.listSubmissions.items as Submission[]
+      setSubmissions(items)
+      setLastRefreshed(new Date())
+    } catch (err) { console.error(err) }
+    finally { setRefreshing(false) }
+  }
 
   async function fetchStudentProfiles() {
     try {
@@ -366,6 +396,7 @@ export default function GradingPage() {
       const result = await client.graphql({ query: listSubmissionsWithDetails }) as any
       const items = result.data.listSubmissions.items as Submission[]
       setSubmissions(items)
+      setLastRefreshed(new Date())
     } catch (err) {
       console.error(err)
     } finally {
@@ -694,7 +725,23 @@ export default function GradingPage() {
 
         <div style={{ width: '340px', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
-            <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '28px', color: 'var(--foreground)', margin: 0 }}>Grade Work</h1>
+            <div>
+              <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '28px', color: 'var(--foreground)', margin: 0 }}>Grade Work</h1>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                <span style={{ fontSize: '11px', color: 'var(--gray-mid)' }}>
+                  Updated {lastRefreshed.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                </span>
+                <button onClick={handleManualRefresh} disabled={refreshing}
+                  title="Check for new submissions"
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--plum)', padding: '2px 4px', display: 'flex', alignItems: 'center', gap: '3px', fontSize: '11px', fontWeight: 600, opacity: refreshing ? 0.5 : 1 }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+                    style={{ animation: refreshing ? 'spin 0.6s linear infinite' : 'none' }}>
+                    <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                  </svg>
+                  {refreshing ? 'Checking…' : 'Refresh'}
+                </button>
+              </div>
+            </div>
             <button onClick={() => { setShowArchived(!showArchived); setSelectedSubmission(null) }}
               style={{ background: showArchived ? 'var(--plum)' : 'var(--gray-light)', color: showArchived ? 'white' : 'var(--gray-dark)', border: 'none', borderRadius: '20px', padding: '5px 12px', fontSize: '12px', cursor: 'pointer', fontWeight: 500 }}>
               {showArchived ? '← Active' : `Archive${archivedCount > 0 ? ` (${archivedCount})` : ''}`}
