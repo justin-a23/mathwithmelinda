@@ -2,26 +2,21 @@ import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { NextRequest, NextResponse } from 'next/server'
 
-const BUCKET = 'mathwithmelinda-submissions'
+const s3 = new S3Client({
+  region: 'us-east-1',
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+  },
+})
 
-function makeS3() {
-  const accessKeyId = process.env.AWS_ACCESS_KEY_ID
-  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY
-  if (!accessKeyId || !secretAccessKey) {
-    throw new Error('AWS credentials not set in environment (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY)')
-  }
-  return new S3Client({
-    region: 'us-east-1',
-    credentials: { accessKeyId, secretAccessKey },
-  })
-}
+const BUCKET = 'mathwithmelinda-submissions'
 
 // GET /api/profile-pic?key=profiles/... — returns a signed read URL
 export async function GET(request: NextRequest) {
   try {
     const key = request.nextUrl.searchParams.get('key')
     if (!key) return NextResponse.json({ error: 'Missing key' }, { status: 400 })
-    const s3 = makeS3()
     const command = new GetObjectCommand({ Bucket: BUCKET, Key: key })
     const url = await getSignedUrl(s3, command, { expiresIn: 3600 })
     return NextResponse.json({ url })
@@ -46,9 +41,6 @@ export async function POST(request: NextRequest) {
 
     step = 'read file buffer'
     const buffer = Buffer.from(await file.arrayBuffer())
-
-    step = 'init S3 client'
-    const s3 = makeS3()
 
     step = 'upload to S3'
     const key = 'profiles/' + userId + '.jpg'
