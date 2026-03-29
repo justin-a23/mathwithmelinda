@@ -365,7 +365,7 @@ export default function StudentGradesPage() {
         ) : !profile ? (
           <p style={{ color: 'var(--gray-mid)', textAlign: 'center', padding: '80px 0' }}>No student profile found.</p>
         ) : semesters.length === 0 ? (
-          <p style={{ color: 'var(--gray-mid)', textAlign: 'center', padding: '80px 0' }}>No semesters set up for your course yet.</p>
+          <p style={{ color: 'var(--gray-mid)', textAlign: 'center', padding: '80px 0' }}>No terms set up for your course yet.</p>
         ) : (
           <>
             {/* Semester tabs */}
@@ -426,7 +426,7 @@ export default function StudentGradesPage() {
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '20px' }}>
                     {[
                       { label: 'Lessons', icon: '📖', avg: lAvg, weight: selectedSemester?.lessonWeightPercent ?? 60, color: '#15803d', bg: '#f0fdf4', border: '#bbf7d0' },
-                      { label: 'Quizzes', icon: '✏️', avg: qAvg, weight: selectedSemester?.quizWeightPercent ?? 20, color: '#b45309', bg: '#fffbeb', border: '#fde68a' },
+                      { label: 'Participation', icon: '✏️', avg: qAvg, weight: selectedSemester?.quizWeightPercent ?? 20, color: '#b45309', bg: '#fffbeb', border: '#fde68a' },
                       { label: 'Tests', icon: '📝', avg: tAvg, weight: selectedSemester?.testWeightPercent ?? 20, color: '#b91c1c', bg: '#fef2f2', border: '#fecaca' },
                     ].map(cat => (
                       <div key={cat.label} style={{ background: cat.bg, border: `1px solid ${cat.border}`, borderRadius: '12px', padding: '16px 18px' }}>
@@ -450,7 +450,7 @@ export default function StudentGradesPage() {
                 {/* ── ASSIGNMENT LIST ── */}
                 {assignments.length === 0 ? (
                   <p style={{ color: 'var(--gray-mid)', textAlign: 'center', padding: '32px 0' }}>
-                    No assignments found in this semester's date range.
+                    No assignments found in this term's date range.
                   </p>
                 ) : (
                   <div style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: '12px', overflow: 'hidden' }}>

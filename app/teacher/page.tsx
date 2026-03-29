@@ -354,7 +354,7 @@ export default function TeacherDashboard() {
                 <path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/>
               </svg>
               <div>
-                <div style={{ fontSize: '14px', fontWeight: 600 }}>Semesters</div>
+                <div style={{ fontSize: '14px', fontWeight: 600 }}>Terms</div>
                 <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginTop: '2px' }}>Grade weights & cutoffs</div>
               </div>
             </button>

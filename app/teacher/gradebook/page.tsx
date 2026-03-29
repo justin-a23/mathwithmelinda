@@ -412,10 +412,10 @@ export default function GradebookPage() {
         {/* Top bar */}
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: '24px', marginBottom: '32px', flexWrap: 'wrap' }}>
           <div>
-            <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--gray-mid)', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '8px' }}>Semester</label>
+            <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--gray-mid)', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '8px' }}>Term</label>
             <select value={selectedSemesterId} onChange={e => { setSelectedSemesterId(e.target.value); setExpandedStudentId(null) }}
               style={{ padding: '10px 36px 10px 14px', border: '1px solid var(--gray-light)', borderRadius: '8px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)', minWidth: '280px', cursor: 'pointer', appearance: 'none', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23999' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' }}>
-              <option value="">Select a semester…</option>
+              <option value="">Select a term…</option>
               {semesters.map(s => (
                 <option key={s.id} value={s.id}>{s.course?.title ? `${s.course.title} — ` : ''}{s.name}{s.isActive ? ' ●' : ''}</option>
               ))}
@@ -436,7 +436,7 @@ export default function GradebookPage() {
               ))}
               <div style={{ display: 'flex', gap: '6px', alignItems: 'center', paddingBottom: '4px' }}>
                 <span style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '20px', background: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0', fontWeight: 600 }}>📖 {selectedSemester.lessonWeightPercent ?? 60}%</span>
-                <span style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '20px', background: '#fffbeb', color: '#b45309', border: '1px solid #fde68a', fontWeight: 600 }}>✏️ {selectedSemester.quizWeightPercent ?? 20}%</span>
+                <span style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '20px', background: '#fffbeb', color: '#b45309', border: '1px solid #fde68a', fontWeight: 600 }}>✏️ Participation {selectedSemester.quizWeightPercent ?? 20}%</span>
                 <span style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '20px', background: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca', fontWeight: 600 }}>📝 {selectedSemester.testWeightPercent ?? 20}%</span>
               </div>
             </div>
@@ -451,7 +451,7 @@ export default function GradebookPage() {
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" style={{ opacity: 0.3, display: 'block', margin: '0 auto 16px' }}>
               <rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/>
             </svg>
-            <p style={{ fontSize: '16px', margin: 0 }}>Select a semester to view the gradebook</p>
+            <p style={{ fontSize: '16px', margin: 0 }}>Select a term to view the gradebook</p>
           </div>
         ) : dataLoading ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--gray-mid)', padding: '48px 0', justifyContent: 'center' }}>
@@ -461,7 +461,7 @@ export default function GradebookPage() {
         ) : rows.length === 0 ? (
           <p style={{ color: 'var(--gray-mid)', textAlign: 'center', padding: '48px 0' }}>No students found for this course.</p>
         ) : columns.length === 0 ? (
-          <p style={{ color: 'var(--gray-mid)', textAlign: 'center', padding: '48px 0' }}>No lessons found in weekly plans within this semester's date range.</p>
+          <p style={{ color: 'var(--gray-mid)', textAlign: 'center', padding: '48px 0' }}>No lessons found in weekly plans within this term's date range.</p>
         ) : (
           <>
             {/* View toggle */}
@@ -552,7 +552,7 @@ export default function GradebookPage() {
                             const isEven = i % 2 === 0
                             const catColor = col.category === 'test' ? '#dc2626' : col.category === 'quiz' ? '#d97706' : '#16a34a'
                             const catBg = col.category === 'test' ? '#fef2f2' : col.category === 'quiz' ? '#fffbeb' : '#f0fdf4'
-                            const catLabel = col.category === 'test' ? '📝 Test' : col.category === 'quiz' ? '✏️ Quiz' : '📖 Lesson'
+                            const catLabel = col.category === 'test' ? '📝 Test' : col.category === 'quiz' ? '✏️ Participation' : '📖 Lesson'
 
                             let gradeEl: React.ReactNode
                             if (!g) {

@@ -575,7 +575,7 @@ export default function LessonLibraryPage() {
                         <div style={{ display: 'flex', gap: '8px' }}>
                           {([
                             { value: 'lesson', label: '📖 Lesson' },
-                            { value: 'quiz', label: '✏️ Quiz' },
+                            { value: 'quiz', label: '✏️ Participation' },
                             { value: 'test', label: '📝 Test' },
                           ] as { value: string; label: string }[]).map(cat => (
                             <button

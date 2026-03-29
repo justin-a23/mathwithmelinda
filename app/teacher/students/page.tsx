@@ -600,7 +600,7 @@ export default function StudentsPage() {
                       {courseSemesters.length > 0 && (
                         <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--gray-light)' }}>
                           <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--gray-dark)', display: 'block', marginBottom: '10px', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
-                            Semester Enrollment
+                            Term Enrollment
                           </label>
                           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                             {courseSemesters.map(sem => {
@@ -639,7 +639,7 @@ export default function StudentsPage() {
                       )}
                       {courseSemesters.length === 0 && s.courseId && (
                         <p style={{ fontSize: '11px', color: 'var(--gray-mid)', margin: '12px 0 0', fontStyle: 'italic' }}>
-                          No semesters exist for this course yet. Create one under Semesters.
+                          No terms exist for this course yet. Create one under Terms.
                         </p>
                       )}
 

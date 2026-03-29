@@ -1,6 +1,5 @@
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
 import { NextRequest, NextResponse } from 'next/server'
-import sharp from 'sharp'
 
 const s3 = new S3Client({
   region: 'us-east-1',
@@ -9,19 +8,6 @@ const s3 = new S3Client({
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
   }
 })
-
-async function convertToJpeg(buffer: Buffer, contentType: string): Promise<Buffer> {
-  if (contentType === 'image/heic' || contentType === 'image/heif') {
-    const heicConvert = (await import('heic-convert')).default
-    const converted = await heicConvert({
-      buffer: buffer,
-      format: 'JPEG',
-      quality: 0.9
-    })
-    return Buffer.from(converted)
-  }
-  return sharp(buffer).jpeg({ quality: 90 }).toBuffer()
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -38,19 +24,30 @@ export async function POST(request: NextRequest) {
     const buffer = Buffer.from(arrayBuffer)
 
     const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+    const isHeic = file.type === 'image/heic' || file.type === 'image/heif'
+      || file.name.toLowerCase().endsWith('.heic') || file.name.toLowerCase().endsWith('.heif')
 
     let uploadBuffer: Buffer
     let contentType: string
     let filename: string
 
     if (isPdf) {
+      // Upload PDF as-is
       uploadBuffer = buffer
       contentType = 'application/pdf'
       filename = file.name
-    } else {
-      uploadBuffer = await convertToJpeg(buffer, file.type)
+    } else if (isHeic) {
+      // Convert HEIC/HEIF to JPEG (iPhone format)
+      const heicConvert = (await import('heic-convert')).default
+      const converted = await heicConvert({ buffer, format: 'JPEG', quality: 0.9 })
+      uploadBuffer = Buffer.from(converted)
       contentType = 'image/jpeg'
       filename = file.name.replace(/\.[^.]+$/, '.jpg')
+    } else {
+      // JPG, PNG, etc — upload directly, no processing needed
+      uploadBuffer = buffer
+      contentType = file.type || 'image/jpeg'
+      filename = file.name
     }
 
     const key = `submissions/${studentId}/${lessonId}/${Date.now()}-${filename}`

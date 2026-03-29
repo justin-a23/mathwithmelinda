@@ -235,7 +235,7 @@ export default function SemestersPage() {
   }
 
   async function deleteSemester(id: string) {
-    if (!confirm('Delete this semester? This cannot be undone.')) return
+    if (!confirm('Delete this term? This cannot be undone.')) return
     setDeletingId(id)
     try {
       await (client.graphql({ query: DELETE_SEMESTER, variables: { input: { id } } }) as any)
@@ -284,7 +284,7 @@ export default function SemestersPage() {
             Dashboard
           </button>
           <span style={{ color: 'rgba(255,255,255,0.3)' }}>/</span>
-          <span style={{ fontFamily: 'var(--font-display)', color: 'white', fontSize: '18px' }}>Semesters</span>
+          <span style={{ fontFamily: 'var(--font-display)', color: 'white', fontSize: '18px' }}>Terms</span>
           <span style={{ background: 'var(--plum)', color: 'white', fontSize: '11px', fontWeight: 500, padding: '3px 10px', borderRadius: '20px', marginLeft: '4px' }}>Teacher</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -296,14 +296,14 @@ export default function SemestersPage() {
         {/* Page header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
           <div>
-            <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '32px', color: 'var(--foreground)', marginBottom: '8px' }}>Semesters</h1>
-            <p style={{ color: 'var(--gray-mid)', margin: 0 }}>Manage academic semesters and grading weights.</p>
+            <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '32px', color: 'var(--foreground)', marginBottom: '8px' }}>Terms</h1>
+            <p style={{ color: 'var(--gray-mid)', margin: 0 }}>Manage academic terms and grading weights.</p>
           </div>
           {!showForm && (
             <button
               onClick={openCreate}
               style={{ background: 'var(--plum)', color: 'white', padding: '12px 24px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '14px', fontWeight: 500 }}>
-              + New Semester
+              + New Term
             </button>
           )}
         </div>
@@ -312,7 +312,7 @@ export default function SemestersPage() {
         {showForm && (
           <div style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', padding: '28px', marginBottom: '40px' }}>
             <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '20px', color: 'var(--foreground)', marginBottom: '24px', marginTop: 0 }}>
-              {form.id ? 'Edit Semester' : 'New Semester'}
+              {form.id ? 'Edit Term' : 'New Term'}
             </h2>
 
             {/* Row 1: Name + Course */}
@@ -372,7 +372,7 @@ export default function SemestersPage() {
                   onChange={e => setForm(f => ({ ...f, isActive: e.target.checked }))}
                   style={{ width: '16px', height: '16px', accentColor: 'var(--plum)', cursor: 'pointer' }}
                 />
-                <span style={{ fontSize: '14px', color: 'var(--foreground)', fontWeight: 500 }}>Mark as active semester</span>
+                <span style={{ fontSize: '14px', color: 'var(--foreground)', fontWeight: 500 }}>Mark as active term</span>
               </label>
             </div>
 
@@ -405,7 +405,7 @@ export default function SemestersPage() {
                   />
                 </div>
                 <div>
-                  <label style={labelStyle}>Quizzes %</label>
+                  <label style={labelStyle}>Participation %</label>
                   <input
                     type="number"
                     min={0}
@@ -468,7 +468,7 @@ export default function SemestersPage() {
                   fontWeight: 500,
                   opacity: (saving || !weightOk || !form.name || !form.courseId || !form.startDate || !form.endDate) ? 0.6 : 1,
                 }}>
-                {saving ? 'Saving...' : form.id ? 'Save Changes' : 'Create Semester'}
+                {saving ? 'Saving...' : form.id ? 'Save Changes' : 'Create Term'}
               </button>
               <button
                 onClick={cancelForm}
@@ -488,8 +488,8 @@ export default function SemestersPage() {
           </div>
         ) : semesters.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '64px 24px', color: 'var(--gray-mid)' }}>
-            <p style={{ fontSize: '16px', marginBottom: '8px' }}>No semesters yet.</p>
-            <p style={{ fontSize: '14px' }}>Click "New Semester" to get started.</p>
+            <p style={{ fontSize: '16px', marginBottom: '8px' }}>No terms yet.</p>
+            <p style={{ fontSize: '14px' }}>Click "New Term" to get started.</p>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -534,7 +534,7 @@ export default function SemestersPage() {
                   {/* Weights + cutoffs */}
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
                     <span style={{ fontSize: '12px', color: 'var(--gray-mid)', background: 'var(--gray-light)', padding: '3px 10px', borderRadius: '20px' }}>
-                      Lessons {sem.lessonWeightPercent ?? 60}% · Quizzes {sem.quizWeightPercent ?? 20}% · Tests {sem.testWeightPercent ?? 20}%
+                      Lessons {sem.lessonWeightPercent ?? 60}% · Participation {sem.quizWeightPercent ?? 20}% · Tests {sem.testWeightPercent ?? 20}%
                     </span>
                     <span style={{ fontSize: '12px', color: 'var(--gray-mid)', background: 'var(--gray-light)', padding: '3px 10px', borderRadius: '20px' }}>
                       A≥{sem.gradeA ?? 90} B≥{sem.gradeB ?? 80} C≥{sem.gradeC ?? 70} D≥{sem.gradeD ?? 60}
