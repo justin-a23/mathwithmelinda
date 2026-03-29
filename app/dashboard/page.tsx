@@ -46,6 +46,31 @@ const listWeeklyPlansWithItems = /* GraphQL */`
 
 const client = generateClient()
 
+const LIST_MESSAGES_FOR_STUDENT = /* GraphQL */ `
+  query ListMessages($filter: ModelMessageFilterInput) {
+    listMessages(filter: $filter, limit: 200) {
+      items { id studentId studentName content sentAt isRead teacherReply repliedAt }
+    }
+  }
+`
+
+const CREATE_MESSAGE = /* GraphQL */ `
+  mutation CreateMessage($input: CreateMessageInput!) {
+    createMessage(input: $input) { id }
+  }
+`
+
+type StudentMessage = {
+  id: string
+  studentId: string
+  studentName: string | null
+  content: string
+  sentAt: string
+  isRead: boolean | null
+  teacherReply: string | null
+  repliedAt: string | null
+}
+
 type ReturnedSubmission = {
   id: string
   lessonTitle: string
@@ -182,6 +207,12 @@ export default function Dashboard() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [submittedLessonIds, setSubmittedLessonIds] = useState<Set<string>>(new Set())
   const [returnedSubmissions, setReturnedSubmissions] = useState<ReturnedSubmission[]>([])
+  const [showAskModal, setShowAskModal] = useState(false)
+  const [askText, setAskText] = useState('')
+  const [askSending, setAskSending] = useState(false)
+  const [askSent, setAskSent] = useState(false)
+  const [myMessages, setMyMessages] = useState<StudentMessage[]>([])
+  const [messagesLoaded, setMessagesLoaded] = useState(false)
 
   useEffect(() => {
     if (user === null) router.replace('/login')
@@ -299,6 +330,19 @@ export default function Dashboard() {
           }
         }
         setReturnedSubmissions(returned)
+
+        // Load this student's messages
+        const msgStudentId = loginId || userId
+        try {
+          const msgRes = await (client.graphql({
+            query: LIST_MESSAGES_FOR_STUDENT,
+            variables: { filter: { studentId: { eq: msgStudentId } } },
+          }) as any)
+          const msgItems: StudentMessage[] = msgRes.data.listMessages.items
+          msgItems.sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime())
+          setMyMessages(msgItems)
+        } catch { /* non-critical */ }
+        setMessagesLoaded(true)
       } catch (err) {
         console.error('Error loading dashboard:', err)
       } finally {
@@ -356,10 +400,106 @@ export default function Dashboard() {
     }
   }
 
+  async function sendQuestion() {
+    const content = askText.trim()
+    if (!content) return
+    setAskSending(true)
+    try {
+      const userId = user?.userId || user?.username || ''
+      const loginId = user?.signInDetails?.loginId || ''
+      const studentId = loginId || userId
+      await (client.graphql({
+        query: CREATE_MESSAGE,
+        variables: {
+          input: {
+            studentId,
+            studentName: profileName || undefined,
+            content,
+            sentAt: new Date().toISOString(),
+            isRead: false,
+          },
+        },
+      }) as any)
+      setAskSent(true)
+      setAskText('')
+      // Refresh messages
+      const msgRes = await (client.graphql({
+        query: LIST_MESSAGES_FOR_STUDENT,
+        variables: { filter: { studentId: { eq: studentId } } },
+      }) as any)
+      const msgItems: StudentMessage[] = msgRes.data.listMessages.items
+      msgItems.sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime())
+      setMyMessages(msgItems)
+    } catch (err) {
+      console.error('Error sending message:', err)
+    } finally {
+      setAskSending(false)
+    }
+  }
+
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long' }) // used in subtitle only
+
+  function fmtMsgDate(iso: string) {
+    const d = new Date(iso)
+    if (isNaN(d.getTime())) return iso
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) +
+      ' at ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+  }
 
   return (
     <div style={{ fontFamily: 'var(--font-body)', background: 'var(--page-bg)', minHeight: '100vh' }}>
+
+      {/* Ask a Question Modal */}
+      {showAskModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}
+          onClick={e => { if (e.target === e.currentTarget) { setShowAskModal(false); setAskSent(false) } }}>
+          <div style={{ background: 'var(--background)', borderRadius: '16px', padding: '32px', maxWidth: '480px', width: '100%', boxShadow: '0 24px 64px rgba(0,0,0,0.2)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+              <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', color: 'var(--foreground)', margin: 0 }}>Ask Melinda a Question</h2>
+              <button onClick={() => { setShowAskModal(false); setAskSent(false) }}
+                style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--gray-mid)', padding: '4px', lineHeight: 1 }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+
+            {askSent ? (
+              <div style={{ textAlign: 'center', padding: '16px 0' }}>
+                <div style={{ fontSize: '40px', marginBottom: '12px' }}>✓</div>
+                <div style={{ fontSize: '18px', fontWeight: 700, color: '#15803d', marginBottom: '6px' }}>Message sent!</div>
+                <div style={{ fontSize: '14px', color: 'var(--gray-mid)', marginBottom: '20px' }}>Melinda will reply soon.</div>
+                <button onClick={() => { setShowAskModal(false); setAskSent(false) }}
+                  style={{ background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '8px', padding: '10px 24px', cursor: 'pointer', fontSize: '14px', fontWeight: 600 }}>
+                  Done
+                </button>
+              </div>
+            ) : (
+              <>
+                <textarea
+                  value={askText}
+                  onChange={e => setAskText(e.target.value)}
+                  placeholder="Type your question here…"
+                  rows={4}
+                  autoFocus
+                  style={{ width: '100%', padding: '12px 14px', border: '1px solid var(--gray-light)', borderRadius: '8px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)', resize: 'vertical', boxSizing: 'border-box', marginBottom: '16px' }}
+                />
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button
+                    onClick={sendQuestion}
+                    disabled={askSending || !askText.trim()}
+                    style={{ background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '8px', padding: '10px 24px', cursor: 'pointer', fontSize: '14px', fontWeight: 600, flex: 1, opacity: (askSending || !askText.trim()) ? 0.6 : 1 }}>
+                    {askSending ? 'Sending…' : 'Send'}
+                  </button>
+                  <button onClick={() => { setShowAskModal(false); setAskSent(false) }}
+                    style={{ background: 'transparent', color: 'var(--gray-mid)', border: '1px solid var(--gray-light)', borderRadius: '8px', padding: '10px 20px', cursor: 'pointer', fontSize: '14px' }}>
+                    Cancel
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       <nav style={{ background: 'var(--nav-bg)', padding: '0 48px', height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div style={{ width: '36px', height: '36px', background: 'var(--plum)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -378,6 +518,10 @@ export default function Dashboard() {
               </button>
               <button onClick={() => router.push('/student/grades')} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'white', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '14px' }}>
                 My Grades
+              </button>
+              <button onClick={() => { setShowAskModal(true); setAskSent(false) }} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'white', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                Ask a Question
               </button>
               <button onClick={() => router.push('/profile')} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'white', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '14px' }}>
                 My Profile
@@ -554,6 +698,32 @@ export default function Dashboard() {
               </div>
             )
           })
+        )}
+
+        {/* My Messages section */}
+        {messagesLoaded && myMessages.length > 0 && (
+          <div style={{ marginTop: '48px' }}>
+            <h2 style={{ fontSize: '13px', fontWeight: 500, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--plum)', marginBottom: '16px' }}>
+              My Messages
+            </h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {myMessages.map(msg => (
+                <div key={msg.id} style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', padding: '18px 22px' }}>
+                  <div style={{ fontSize: '14px', color: 'var(--foreground)', lineHeight: '1.6', marginBottom: '6px' }}>{msg.content}</div>
+                  <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginBottom: msg.teacherReply ? '12px' : '0' }}>{fmtMsgDate(msg.sentAt)}</div>
+                  {msg.teacherReply && (
+                    <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '12px 14px' }}>
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: '#15803d', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '6px' }}>Melinda replied</div>
+                      <div style={{ fontSize: '14px', color: '#15803d', lineHeight: '1.6' }}>{msg.teacherReply}</div>
+                      {msg.repliedAt && (
+                        <div style={{ fontSize: '11px', color: '#16a34a', marginTop: '6px', opacity: 0.7 }}>{fmtMsgDate(msg.repliedAt)}</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
         )}
       </main>
     </div>

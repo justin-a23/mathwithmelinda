@@ -210,3 +210,14 @@ type ParentStudentLink @model {
   studentProfileId: ID!
   studentProfile: StudentProfile @belongsTo(fields: ["studentProfileId"])
 }
+
+type Message @model {
+  id: ID!
+  studentId: String!
+  studentName: String
+  content: String!
+  sentAt: String!
+  isRead: Boolean
+  teacherReply: String
+  repliedAt: String
+}

@@ -547,6 +547,21 @@ export default function GradebookPage() {
                       {/* Expanded: assignment list */}
                       {isExpanded && (
                         <div style={{ borderTop: '1px solid var(--gray-light)', padding: '0' }}>
+                          {/* Print Report Card button */}
+                          <div style={{ padding: '10px 20px', borderBottom: '1px solid var(--gray-light)', background: 'rgba(123,79,166,0.03)', display: 'flex', justifyContent: 'flex-end' }}
+                            onClick={e => e.stopPropagation()}>
+                            <button
+                              onClick={e => {
+                                e.stopPropagation()
+                                router.push(`/teacher/report-card?studentId=${row.student.id}&semesterId=${selectedSemesterId}`)
+                              }}
+                              style={{ background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '6px', padding: '6px 14px', cursor: 'pointer', fontSize: '12px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>
+                              </svg>
+                              Print Report Card
+                            </button>
+                          </div>
                           {columns.map((col, i) => {
                             const g = row.grades[col.lessonId]
                             const isEven = i % 2 === 0

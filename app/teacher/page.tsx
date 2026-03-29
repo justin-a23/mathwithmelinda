@@ -35,6 +35,14 @@ type CourseWeekStats = {
   graded: number
 }
 
+const listUnreadMessagesQuery = /* GraphQL */`
+  query ListUnreadMessages {
+    listMessages(filter: { isRead: { eq: false } }, limit: 200) {
+      items { id isRead }
+    }
+  }
+`
+
 const listRecentSubmissionsQuery = /* GraphQL */`
   query ListRecentSubmissions {
     listSubmissions(limit: 500) {
@@ -112,6 +120,7 @@ export default function TeacherDashboard() {
   const [statsLoading, setStatsLoading] = useState(true)
   const [teacherPicUrl, setTeacherPicUrl] = useState<string | null>(null)
   const [teacherDisplayName, setTeacherDisplayName] = useState('')
+  const [unreadMessageCount, setUnreadMessageCount] = useState(0)
 
   useEffect(() => {
     if (user === null) router.replace('/login')
@@ -120,6 +129,7 @@ export default function TeacherDashboard() {
   useEffect(() => {
     fetchCourses()
     fetchWeekStats()
+    fetchUnreadMessages()
   }, [])
 
   useEffect(() => {
@@ -207,6 +217,16 @@ export default function TeacherDashboard() {
       console.error('Error fetching week stats:', err)
     } finally {
       setStatsLoading(false)
+    }
+  }
+
+  async function fetchUnreadMessages() {
+    try {
+      const result = await (client.graphql({ query: listUnreadMessagesQuery }) as any)
+      const items = result.data.listMessages.items
+      setUnreadMessageCount(items.length)
+    } catch (err) {
+      console.error('Error fetching unread messages:', err)
     }
   }
 
@@ -371,6 +391,30 @@ export default function TeacherDashboard() {
               <div>
                 <div style={{ fontSize: '14px', fontWeight: 600 }}>Upload Video</div>
                 <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginTop: '2px' }}>Add lesson videos</div>
+              </div>
+            </button>
+
+            {/* Messages */}
+            <button onClick={() => router.push('/teacher/messages')} style={{
+              background: unreadMessageCount > 0 ? 'var(--background)' : 'var(--background)',
+              color: 'var(--foreground)',
+              border: `1px solid ${unreadMessageCount > 0 ? 'var(--plum)' : 'var(--gray-light)'}`,
+              borderRadius: '12px', padding: '20px 16px', cursor: 'pointer', textAlign: 'left',
+              display: 'flex', flexDirection: 'column', gap: '8px', position: 'relative',
+            }}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+              </svg>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '14px', fontWeight: 600 }}>Messages</span>
+                  {unreadMessageCount > 0 && (
+                    <span style={{ background: '#ef4444', color: 'white', fontSize: '10px', fontWeight: 700, padding: '1px 6px', borderRadius: '20px' }}>
+                      {unreadMessageCount}
+                    </span>
+                  )}
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginTop: '2px' }}>Student questions</div>
               </div>
             </button>
 
