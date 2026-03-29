@@ -225,36 +225,28 @@ export default function TeacherProfilePage() {
     setSaveError('')
     try {
       const userId = user?.userId || user?.username || ''
-      const res = await fetch('/api/profile-pic', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'upload', userId }),
-      })
-      const { signedUrl, key } = await res.json()
-      await fetch(signedUrl, { method: 'PUT', body: blob, headers: { 'Content-Type': 'image/jpeg' } })
-      // Use current profile id; if broken, delete+recreate first then update
-      let profileId = profile.id
+
+      // Upload image server-side (avoids S3 CORS issues with signed URLs)
+      const formData = new FormData()
+      formData.append('file', blob, 'profile.jpg')
+      formData.append('userId', userId)
+      const uploadRes = await fetch('/api/profile-pic', { method: 'POST', body: formData })
+      if (!uploadRes.ok) throw new Error('Upload failed: ' + uploadRes.status)
+      const { key } = await uploadRes.json()
+
+      // Save key to DynamoDB
       const updateResult = await client.graphql({
         query: updateTeacherProfileMutation,
-        variables: { input: { id: profileId, profilePictureKey: key } },
+        variables: { input: { id: profile.id, profilePictureKey: key } },
       }) as any
+
       if (updateResult.errors && updateResult.errors.length > 0) {
-        // Try delete + recreate
-        await client.graphql({
-          query: `mutation DeleteTeacherProfile($input: DeleteTeacherProfileInput!) { deleteTeacherProfile(input: $input) { id } }`,
-          variables: { input: { id: profileId } },
-        })
-        const email = user?.signInDetails?.loginId || userId
-        const created = await client.graphql({
-          query: createTeacherProfileMutation,
-          variables: { input: { userId, email, displayName: displayName.trim(), bio: bio.trim(), profilePictureKey: key } },
-        }) as any
-        const p = created.data.createTeacherProfile as TeacherProfile
-        setProfile(p)
-        profileId = p.id
-      } else {
-        setProfile(prev => prev ? { ...prev, profilePictureKey: key } : prev)
+        throw new Error(updateResult.errors[0].message)
       }
+
+      setProfile(prev => prev ? { ...prev, profilePictureKey: key } : prev)
+
+      // Get a signed read URL to display the image
       const viewRes = await fetch('/api/profile-pic', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -264,7 +256,7 @@ export default function TeacherProfilePage() {
       setProfilePicUrl(url)
     } catch (err: any) {
       console.error('Error uploading picture:', err)
-      setSaveError('Photo upload failed. Please try again.')
+      setSaveError('Photo upload failed: ' + (err?.message || 'Please try again.'))
     } finally {
       setUploadingPic(false)
     }

@@ -14,18 +14,29 @@ const BUCKET = 'mathwithmelinda-submissions'
 
 export async function POST(request: NextRequest) {
   try {
-    const { action, userId, key } = await request.json()
+    const contentType = request.headers.get('content-type') || ''
 
-    if (action === 'upload') {
+    // Server-side upload: client sends the image blob directly
+    if (contentType.startsWith('multipart/form-data')) {
+      const formData = await request.formData()
+      const file = formData.get('file') as File | null
+      const userId = formData.get('userId') as string | null
+      if (!file || !userId) {
+        return NextResponse.json({ error: 'Missing file or userId' }, { status: 400 })
+      }
+      const buffer = Buffer.from(await file.arrayBuffer())
       const profileKey = 'profiles/' + userId + '.jpg'
-      const command = new PutObjectCommand({
+      await s3.send(new PutObjectCommand({
         Bucket: BUCKET,
         Key: profileKey,
+        Body: buffer,
         ContentType: 'image/jpeg',
-      })
-      const signedUrl = await getSignedUrl(s3, command, { expiresIn: 300 })
-      return NextResponse.json({ signedUrl, key: profileKey })
+      }))
+      return NextResponse.json({ key: profileKey })
     }
+
+    // JSON actions: view (get signed read URL)
+    const { action, key } = await request.json()
 
     if (action === 'view') {
       const command = new GetObjectCommand({ Bucket: BUCKET, Key: key })
