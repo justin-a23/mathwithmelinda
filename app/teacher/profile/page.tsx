@@ -109,6 +109,23 @@ export default function TeacherProfilePage() {
       try {
         const result = await client.graphql({ query: getTeacherProfileQuery, variables: { userId } }) as any
         const items = result.data.listTeacherProfiles.items
+
+        // UUID v4 pattern — manually created records like "melinda-teacher-001" won't match
+        const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+        // If we found a record but it has a non-UUID id (manually inserted), migrate it
+        if (items.length > 0 && !UUID_PATTERN.test(items[0].id)) {
+          const old = items[0] as TeacherProfile
+          // Delete the broken record, then fall through to auto-create a proper one
+          try {
+            await client.graphql({
+              query: `mutation DeleteTeacherProfile($input: DeleteTeacherProfileInput!) { deleteTeacherProfile(input: $input) { id } }`,
+              variables: { input: { id: old.id } },
+            })
+          } catch (_) { /* ignore delete errors, create will still work */ }
+          items.splice(0, items.length) // clear items so we fall into the create branch
+        }
+
         if (items.length > 0) {
           const p = items[0] as TeacherProfile
           setProfile(p)
@@ -124,7 +141,7 @@ export default function TeacherProfilePage() {
             setProfilePicUrl(url)
           }
         } else {
-          // Auto-create profile for teacher on first visit
+          // Auto-create profile for teacher on first visit (or after migration)
           const email = user?.signInDetails?.loginId || userId
           const created = await client.graphql({
             query: createTeacherProfileMutation,
