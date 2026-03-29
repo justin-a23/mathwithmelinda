@@ -36,16 +36,30 @@ export async function POST(request: NextRequest) {
 
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
-    const jpegBuffer = await convertToJpeg(buffer, file.type)
 
-    const filename = file.name.replace(/\.[^.]+$/, '.jpg')
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+
+    let uploadBuffer: Buffer
+    let contentType: string
+    let filename: string
+
+    if (isPdf) {
+      uploadBuffer = buffer
+      contentType = 'application/pdf'
+      filename = file.name
+    } else {
+      uploadBuffer = await convertToJpeg(buffer, file.type)
+      contentType = 'image/jpeg'
+      filename = file.name.replace(/\.[^.]+$/, '.jpg')
+    }
+
     const key = `submissions/${studentId}/${lessonId}/${Date.now()}-${filename}`
 
     await s3.send(new PutObjectCommand({
       Bucket: 'mathwithmelinda-submissions',
       Key: key,
-      Body: jpegBuffer,
-      ContentType: 'image/jpeg',
+      Body: uploadBuffer,
+      ContentType: contentType,
     }))
 
     return NextResponse.json({ key, url: `https://mathwithmelinda-submissions.s3.us-east-1.amazonaws.com/${key}` })
