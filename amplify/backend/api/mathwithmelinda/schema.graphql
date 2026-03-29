@@ -12,9 +12,18 @@ type Semester @model {
   startDate: String!
   endDate: String!
   isActive: Boolean
+  courseId: ID
+  course: Course @belongsTo(fields: ["courseId"])
   academicYear: AcademicYear @belongsTo
   enrollments: [Enrollment] @hasMany
   weeklyPlans: [WeeklyPlan] @hasMany
+  lessonWeightPercent: Int
+  testWeightPercent: Int
+  quizWeightPercent: Int
+  gradeA: Int
+  gradeB: Int
+  gradeC: Int
+  gradeD: Int
 }
 
 type Course @model {
@@ -28,6 +37,7 @@ type Course @model {
   enrollments: [Enrollment] @hasMany
   weeklyPlans: [WeeklyPlan] @hasMany
   lessonTemplates: [LessonTemplate] @hasMany
+  semesters: [Semester] @hasMany
 }
 
 type Lesson @model {
@@ -44,6 +54,7 @@ type Lesson @model {
 type WeeklyPlan @model {
   id: ID!
   weekStartDate: String!
+  assignedStudentIds: String
   semester: Semester @belongsTo
   course: Course @belongsTo
   items: [WeeklyPlanItem] @hasMany
@@ -55,6 +66,7 @@ type WeeklyPlanItem @model {
   dueTime: String
   isPublished: Boolean
   lesson: Lesson @belongsTo
+  lessonTemplateId: ID
   weeklyPlan: WeeklyPlan @belongsTo
   assignments: [Assignment] @hasMany
 }
@@ -72,10 +84,28 @@ type Submission @model {
   id: ID!
   studentId: String!
   content: String
+  answers: String
+  imageUrls: String
+  lessonTemplateId: String
   grade: String
   submittedAt: String
   teacherComment: String
+  isArchived: Boolean
+  archivedAt: String
+  status: String
+  returnReason: String
+  returnDueDate: String
   assignment: Assignment @belongsTo
+  messages: [SubmissionMessage] @hasMany
+}
+
+type SubmissionMessage @model {
+  id: ID!
+  senderId: String!
+  senderType: String!
+  message: String!
+  isRead: Boolean
+  submission: Submission @belongsTo
 }
 
 type Enrollment @model {
@@ -93,7 +123,41 @@ type LessonTemplate @model {
   instructions: String
   worksheetUrl: String
   videoUrl: String
+  assignmentType: String
+  lessonCategory: String
   course: Course @belongsTo
+  questions: [AssignmentQuestion] @hasMany
+}
+
+type AssignmentQuestion @model {
+  id: ID!
+  order: Int!
+  questionText: String!
+  questionType: String!
+  choices: String
+  correctAnswer: String
+  lessonTemplate: LessonTemplate @belongsTo
+}
+
+type TeacherProfile @model {
+  id: ID!
+  userId: String!
+  email: String!
+  displayName: String
+  bio: String
+  profilePictureKey: String
+}
+
+type VideoWatch @model {
+  id: ID!
+  studentId: String!
+  lessonId: String!
+  weeklyPlanItemId: String
+  watchedSeconds: Float
+  durationSeconds: Float
+  percentWatched: Float
+  completed: Boolean
+  lastWatchedAt: String
 }
 
 type ParentInvite @model {
@@ -117,7 +181,32 @@ type StudentProfile @model {
   email: String!
   firstName: String!
   lastName: String!
+  preferredName: String
   gradeLevel: String
   courseId: String
   planType: String
+  profilePictureKey: String
+  status: String
+  parentEmail: String
+  parentName: String
+  parentEmail2: String
+  parentName2: String
+  parentLinks: [ParentStudentLink] @hasMany
+}
+
+type ParentProfile @model {
+  id: ID!
+  userId: String!
+  email: String!
+  firstName: String!
+  lastName: String!
+  studentLinks: [ParentStudentLink] @hasMany
+}
+
+type ParentStudentLink @model {
+  id: ID!
+  parentProfileId: ID!
+  parentProfile: ParentProfile @belongsTo(fields: ["parentProfileId"])
+  studentProfileId: ID!
+  studentProfile: StudentProfile @belongsTo(fields: ["studentProfileId"])
 }
