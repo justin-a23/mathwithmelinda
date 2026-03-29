@@ -132,11 +132,7 @@ export default function TeacherProfilePage() {
           setDisplayName(p.displayName || '')
           setBio(p.bio || '')
           if (p.profilePictureKey) {
-            const res = await fetch('/api/profile-pic', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ action: 'view', key: p.profilePictureKey }),
-            })
+            const res = await fetch('/api/profile-pic?key=' + encodeURIComponent(p.profilePictureKey))
             const { url } = await res.json()
             setProfilePicUrl(url)
           }
@@ -247,11 +243,7 @@ export default function TeacherProfilePage() {
       setProfile(prev => prev ? { ...prev, profilePictureKey: key } : prev)
 
       // Get a signed read URL to display the image
-      const viewRes = await fetch('/api/profile-pic', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'view', key }),
-      })
+      const viewRes = await fetch('/api/profile-pic?key=' + encodeURIComponent(key))
       const { url } = await viewRes.json()
       setProfilePicUrl(url)
     } catch (err: any) {

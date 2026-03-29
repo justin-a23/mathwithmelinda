@@ -12,41 +12,44 @@ const s3 = new S3Client({
 
 const BUCKET = 'mathwithmelinda-submissions'
 
+// GET /api/profile-pic?key=profiles/... — returns a signed read URL
+export async function GET(request: NextRequest) {
+  try {
+    const key = request.nextUrl.searchParams.get('key')
+    if (!key) return NextResponse.json({ error: 'Missing key' }, { status: 400 })
+    const command = new GetObjectCommand({ Bucket: BUCKET, Key: key })
+    const url = await getSignedUrl(s3, command, { expiresIn: 3600 })
+    return NextResponse.json({ url })
+  } catch (err) {
+    console.error('Profile pic GET error:', err)
+    return NextResponse.json({ error: 'Failed' }, { status: 500 })
+  }
+}
+
+// POST /api/profile-pic — multipart upload, saves to S3 server-side
 export async function POST(request: NextRequest) {
   try {
-    const contentType = request.headers.get('content-type') || ''
+    const formData = await request.formData()
+    const file = formData.get('file') as File | null
+    const userId = formData.get('userId') as string | null
 
-    // Server-side upload: client sends the image blob directly
-    if (contentType.startsWith('multipart/form-data')) {
-      const formData = await request.formData()
-      const file = formData.get('file') as File | null
-      const userId = formData.get('userId') as string | null
-      if (!file || !userId) {
-        return NextResponse.json({ error: 'Missing file or userId' }, { status: 400 })
-      }
-      const buffer = Buffer.from(await file.arrayBuffer())
-      const profileKey = 'profiles/' + userId + '.jpg'
-      await s3.send(new PutObjectCommand({
-        Bucket: BUCKET,
-        Key: profileKey,
-        Body: buffer,
-        ContentType: 'image/jpeg',
-      }))
-      return NextResponse.json({ key: profileKey })
+    if (!file || !userId) {
+      return NextResponse.json({ error: 'Missing file or userId' }, { status: 400 })
     }
 
-    // JSON actions: view (get signed read URL)
-    const { action, key } = await request.json()
+    const buffer = Buffer.from(await file.arrayBuffer())
+    const key = 'profiles/' + userId + '.jpg'
 
-    if (action === 'view') {
-      const command = new GetObjectCommand({ Bucket: BUCKET, Key: key })
-      const signedUrl = await getSignedUrl(s3, command, { expiresIn: 3600 })
-      return NextResponse.json({ url: signedUrl })
-    }
+    await s3.send(new PutObjectCommand({
+      Bucket: BUCKET,
+      Key: key,
+      Body: buffer,
+      ContentType: 'image/jpeg',
+    }))
 
-    return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
-  } catch (err) {
-    console.error('Profile pic error:', err)
-    return NextResponse.json({ error: 'Failed' }, { status: 500 })
+    return NextResponse.json({ key })
+  } catch (err: any) {
+    console.error('Profile pic POST error:', err)
+    return NextResponse.json({ error: err?.message || 'Failed' }, { status: 500 })
   }
 }
