@@ -388,7 +388,7 @@ export default function ProfilePage() {
 
             {/* Sign out */}
             <div style={{ textAlign: 'center', paddingTop: '8px' }}>
-              <button onClick={signOut} style={{ background: 'transparent', color: 'var(--gray-mid)', border: 'none', cursor: 'pointer', fontSize: '14px', textDecoration: 'underline' }}>
+              <button onClick={async () => { await signOut(); router.replace('/login') }} style={{ background: 'transparent', color: 'var(--gray-mid)', border: 'none', cursor: 'pointer', fontSize: '14px', textDecoration: 'underline' }}>
                 Sign out
               </button>
             </div>
