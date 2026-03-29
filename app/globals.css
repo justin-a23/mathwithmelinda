@@ -3,7 +3,8 @@
 @import "./brand.css";
 
 :root {
-  --background: #FAFAFA;
+  --background: #FFFFFF;
+  --page-bg: #F0F0F5;
   --foreground: #1E1E2E;
 }
 
@@ -15,7 +16,7 @@
 }
 
 body {
-  background: var(--background);
+  background: var(--page-bg, #F0F0F5);
   color: var(--foreground);
   font-family: var(--font-body);
 }
@@ -32,7 +33,9 @@ body {
 }
 
 [data-theme="dark"] {
-  --background: #1E1E2E;
+  --background: #28283C;
+  --page-bg: #1E1E2E;
+  --surface: #28283C;
   --foreground: #FAFAFA;
   --white: #1E1E2E;
   --charcoal: #FAFAFA;
@@ -46,7 +49,8 @@ body {
 }
 
 [data-theme="light"] {
-  --background: #FAFAFA;
+  --background: #FFFFFF;
+  --page-bg: #F0F0F5;
   --foreground: #1E1E2E;
   --charcoal: #1E1E2E;
   --nav-bg: #1E1E2E;

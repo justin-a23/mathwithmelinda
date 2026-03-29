@@ -6,6 +6,7 @@ import { useEffect, useState, useRef } from 'react'
 import { generateClient } from 'aws-amplify/api'
 import { listLessonTemplates, getCourse, listAssignmentQuestions } from '../../../../src/graphql/queries'
 import { updateLessonTemplate, createAssignmentQuestion, deleteAssignmentQuestion, updateAssignmentQuestion } from '../../../../src/graphql/mutations'
+import ThemeToggle from '../../../components/ThemeToggle'
 import MathToolbar from '../../../components/MathToolbar'
 import MathRenderer from '../../../components/MathRenderer'
 
@@ -28,6 +29,7 @@ type LessonTemplate = {
   worksheetUrl: string | null
   videoUrl: string | null
   assignmentType: string | null
+  lessonCategory: string | null
   courseLessonTemplatesId: string | null
   updatedAt: string | null
 }
@@ -46,6 +48,7 @@ type EditForm = {
   worksheetUrl: string
   videoUrl: string
   assignmentType: string
+  lessonCategory: string
 }
 
 type UploadState = {
@@ -83,7 +86,7 @@ export default function LessonLibraryPage() {
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [editForm, setEditForm] = useState<EditForm>({ title: '', lessonNumber: '', instructions: '', worksheetUrl: '', videoUrl: '', assignmentType: 'none' })
+  const [editForm, setEditForm] = useState<EditForm>({ title: '', lessonNumber: '', instructions: '', worksheetUrl: '', videoUrl: '', assignmentType: 'none', lessonCategory: 'lesson' })
   const [saving, setSaving] = useState(false)
   const [videoUpload, setVideoUpload] = useState<UploadState>({ uploading: false, progress: 0, error: '' })
   const [worksheetUpload, setWorksheetUpload] = useState<UploadState>({ uploading: false, progress: 0, error: '' })
@@ -185,7 +188,8 @@ export default function LessonLibraryPage() {
       instructions: lesson.instructions || '',
       worksheetUrl: lesson.worksheetUrl || '',
       videoUrl: lesson.videoUrl || '',
-      assignmentType: lesson.assignmentType || 'none'
+      assignmentType: lesson.assignmentType || 'none',
+      lessonCategory: lesson.lessonCategory || 'lesson'
     })
     setVideoFile(null)
     setWorksheetFile(null)
@@ -275,7 +279,8 @@ export default function LessonLibraryPage() {
             instructions: editForm.instructions || null,
             worksheetUrl: editForm.worksheetUrl || null,
             videoUrl: editForm.videoUrl || null,
-            assignmentType: editForm.assignmentType || 'none'
+            assignmentType: editForm.assignmentType || 'none',
+            lessonCategory: editForm.lessonCategory || 'lesson'
           }
         }
       })
@@ -286,7 +291,8 @@ export default function LessonLibraryPage() {
         instructions: editForm.instructions || null,
         worksheetUrl: editForm.worksheetUrl || null,
         videoUrl: editForm.videoUrl || null,
-        assignmentType: editForm.assignmentType || 'none'
+        assignmentType: editForm.assignmentType || 'none',
+        lessonCategory: editForm.lessonCategory || 'lesson'
       } : l).sort((a, b) => a.lessonNumber - b.lessonNumber))
       setEditingId(null)
     } catch (err) {
@@ -423,7 +429,7 @@ export default function LessonLibraryPage() {
   const showQuestionBuilder = editForm.assignmentType === 'questions' || editForm.assignmentType === 'both'
 
   return (
-    <div style={{ fontFamily: 'var(--font-body)', background: 'var(--background)', minHeight: '100vh' }}>
+    <div style={{ fontFamily: 'var(--font-body)', background: 'var(--page-bg)', minHeight: '100vh' }}>
       {/* Nav */}
       <nav style={{ background: 'var(--nav-bg)', padding: '0 48px', height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -434,7 +440,13 @@ export default function LessonLibraryPage() {
           <span style={{ color: 'white', fontSize: '14px' }}>{course?.title || 'Lesson Library'}</span>
           <span style={{ background: 'var(--plum)', color: 'white', fontSize: '11px', fontWeight: 500, padding: '3px 10px', borderRadius: '20px' }}>Teacher</span>
         </div>
-        <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '14px' }}>{user?.signInDetails?.loginId}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <ThemeToggle />
+          <button onClick={() => router.push('/teacher/profile')} title="My Profile" style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: 'white', padding: '7px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+            My Profile
+          </button>
+        </div>
       </nav>
 
       <main style={{ maxWidth: '1100px', margin: '0 auto', padding: '48px 24px' }}>
@@ -555,6 +567,40 @@ export default function LessonLibraryPage() {
                           rows={5}
                           style={{ ...inputStyle, resize: 'vertical' }}
                         />
+                      </div>
+
+                      {/* Lesson Category Picker */}
+                      <div style={{ marginBottom: '16px' }}>
+                        <label style={labelStyle}>Grade Category</label>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          {([
+                            { value: 'lesson', label: '📖 Lesson' },
+                            { value: 'quiz', label: '✏️ Quiz' },
+                            { value: 'test', label: '📝 Test' },
+                          ] as { value: string; label: string }[]).map(cat => (
+                            <button
+                              key={cat.value}
+                              onClick={() => setEditForm(f => ({ ...f, lessonCategory: cat.value }))}
+                              style={{
+                                padding: '8px 20px',
+                                borderRadius: '8px',
+                                border: '1px solid',
+                                cursor: 'pointer',
+                                fontSize: '13px',
+                                fontWeight: 500,
+                                fontFamily: 'var(--font-body)',
+                                borderColor: editForm.lessonCategory === cat.value ? 'var(--plum)' : 'var(--gray-light)',
+                                background: editForm.lessonCategory === cat.value ? 'var(--plum)' : 'var(--white)',
+                                color: editForm.lessonCategory === cat.value ? 'white' : 'var(--gray-dark)'
+                              }}
+                            >
+                              {cat.label}
+                            </button>
+                          ))}
+                        </div>
+                        <p style={{ margin: '6px 0 0', fontSize: '11px', color: 'var(--gray-mid)' }}>
+                          Used for weighted grade calculations. Tests and quizzes can carry more weight than regular lessons.
+                        </p>
                       </div>
 
                       {/* Assignment Type Picker */}

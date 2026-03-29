@@ -78,6 +78,17 @@ export const createSemester = /* GraphQL */ `mutation CreateSemester(
     startDate
     endDate
     isActive
+    courseId
+    course {
+      id
+      title
+      description
+      gradeLevel
+      isArchived
+      createdAt
+      updatedAt
+      __typename
+    }
     academicYear {
       id
       year
@@ -93,9 +104,17 @@ export const createSemester = /* GraphQL */ `mutation CreateSemester(
       nextToken
       __typename
     }
+    lessonWeightPercent
+    testWeightPercent
+    quizWeightPercent
+    gradeA
+    gradeB
+    gradeC
+    gradeD
     createdAt
     updatedAt
     academicYearSemestersId
+    courseSemestersId
     __typename
   }
 }
@@ -113,6 +132,17 @@ export const updateSemester = /* GraphQL */ `mutation UpdateSemester(
     startDate
     endDate
     isActive
+    courseId
+    course {
+      id
+      title
+      description
+      gradeLevel
+      isArchived
+      createdAt
+      updatedAt
+      __typename
+    }
     academicYear {
       id
       year
@@ -128,9 +158,17 @@ export const updateSemester = /* GraphQL */ `mutation UpdateSemester(
       nextToken
       __typename
     }
+    lessonWeightPercent
+    testWeightPercent
+    quizWeightPercent
+    gradeA
+    gradeB
+    gradeC
+    gradeD
     createdAt
     updatedAt
     academicYearSemestersId
+    courseSemestersId
     __typename
   }
 }
@@ -148,6 +186,17 @@ export const deleteSemester = /* GraphQL */ `mutation DeleteSemester(
     startDate
     endDate
     isActive
+    courseId
+    course {
+      id
+      title
+      description
+      gradeLevel
+      isArchived
+      createdAt
+      updatedAt
+      __typename
+    }
     academicYear {
       id
       year
@@ -163,9 +212,17 @@ export const deleteSemester = /* GraphQL */ `mutation DeleteSemester(
       nextToken
       __typename
     }
+    lessonWeightPercent
+    testWeightPercent
+    quizWeightPercent
+    gradeA
+    gradeB
+    gradeC
+    gradeD
     createdAt
     updatedAt
     academicYearSemestersId
+    courseSemestersId
     __typename
   }
 }
@@ -200,6 +257,10 @@ export const createCourse = /* GraphQL */ `mutation CreateCourse(
       __typename
     }
     lessonTemplates {
+      nextToken
+      __typename
+    }
+    semesters {
       nextToken
       __typename
     }
@@ -242,6 +303,10 @@ export const updateCourse = /* GraphQL */ `mutation UpdateCourse(
       nextToken
       __typename
     }
+    semesters {
+      nextToken
+      __typename
+    }
     createdAt
     updatedAt
     __typename
@@ -278,6 +343,10 @@ export const deleteCourse = /* GraphQL */ `mutation DeleteCourse(
       __typename
     }
     lessonTemplates {
+      nextToken
+      __typename
+    }
+    semesters {
       nextToken
       __typename
     }
@@ -402,15 +471,25 @@ export const createWeeklyPlan = /* GraphQL */ `mutation CreateWeeklyPlan(
   createWeeklyPlan(input: $input, condition: $condition) {
     id
     weekStartDate
+    assignedStudentIds
     semester {
       id
       name
       startDate
       endDate
       isActive
+      courseId
+      lessonWeightPercent
+      testWeightPercent
+      quizWeightPercent
+      gradeA
+      gradeB
+      gradeC
+      gradeD
       createdAt
       updatedAt
       academicYearSemestersId
+      courseSemestersId
       __typename
     }
     course {
@@ -445,15 +524,25 @@ export const updateWeeklyPlan = /* GraphQL */ `mutation UpdateWeeklyPlan(
   updateWeeklyPlan(input: $input, condition: $condition) {
     id
     weekStartDate
+    assignedStudentIds
     semester {
       id
       name
       startDate
       endDate
       isActive
+      courseId
+      lessonWeightPercent
+      testWeightPercent
+      quizWeightPercent
+      gradeA
+      gradeB
+      gradeC
+      gradeD
       createdAt
       updatedAt
       academicYearSemestersId
+      courseSemestersId
       __typename
     }
     course {
@@ -488,15 +577,25 @@ export const deleteWeeklyPlan = /* GraphQL */ `mutation DeleteWeeklyPlan(
   deleteWeeklyPlan(input: $input, condition: $condition) {
     id
     weekStartDate
+    assignedStudentIds
     semester {
       id
       name
       startDate
       endDate
       isActive
+      courseId
+      lessonWeightPercent
+      testWeightPercent
+      quizWeightPercent
+      gradeA
+      gradeB
+      gradeC
+      gradeD
       createdAt
       updatedAt
       academicYearSemestersId
+      courseSemestersId
       __typename
     }
     course {
@@ -549,6 +648,7 @@ export const createWeeklyPlanItem = /* GraphQL */ `mutation CreateWeeklyPlanItem
     weeklyPlan {
       id
       weekStartDate
+      assignedStudentIds
       createdAt
       updatedAt
       semesterWeeklyPlansId
@@ -595,6 +695,7 @@ export const updateWeeklyPlanItem = /* GraphQL */ `mutation UpdateWeeklyPlanItem
     weeklyPlan {
       id
       weekStartDate
+      assignedStudentIds
       createdAt
       updatedAt
       semesterWeeklyPlansId
@@ -641,6 +742,7 @@ export const deleteWeeklyPlanItem = /* GraphQL */ `mutation DeleteWeeklyPlanItem
     weeklyPlan {
       id
       weekStartDate
+      assignedStudentIds
       createdAt
       updatedAt
       semesterWeeklyPlansId
@@ -778,6 +880,11 @@ export const createSubmission = /* GraphQL */ `mutation CreateSubmission(
     grade
     submittedAt
     teacherComment
+    isArchived
+    archivedAt
+    status
+    returnReason
+    returnDueDate
     assignment {
       id
       title
@@ -817,6 +924,11 @@ export const updateSubmission = /* GraphQL */ `mutation UpdateSubmission(
     grade
     submittedAt
     teacherComment
+    isArchived
+    archivedAt
+    status
+    returnReason
+    returnDueDate
     assignment {
       id
       title
@@ -856,6 +968,11 @@ export const deleteSubmission = /* GraphQL */ `mutation DeleteSubmission(
     grade
     submittedAt
     teacherComment
+    isArchived
+    archivedAt
+    status
+    returnReason
+    returnDueDate
     assignment {
       id
       title
@@ -901,6 +1018,11 @@ export const createSubmissionMessage = /* GraphQL */ `mutation CreateSubmissionM
       grade
       submittedAt
       teacherComment
+      isArchived
+      archivedAt
+      status
+      returnReason
+      returnDueDate
       createdAt
       updatedAt
       assignmentSubmissionsId
@@ -936,6 +1058,11 @@ export const updateSubmissionMessage = /* GraphQL */ `mutation UpdateSubmissionM
       grade
       submittedAt
       teacherComment
+      isArchived
+      archivedAt
+      status
+      returnReason
+      returnDueDate
       createdAt
       updatedAt
       assignmentSubmissionsId
@@ -971,6 +1098,11 @@ export const deleteSubmissionMessage = /* GraphQL */ `mutation DeleteSubmissionM
       grade
       submittedAt
       teacherComment
+      isArchived
+      archivedAt
+      status
+      returnReason
+      returnDueDate
       createdAt
       updatedAt
       assignmentSubmissionsId
@@ -1010,9 +1142,18 @@ export const createEnrollment = /* GraphQL */ `mutation CreateEnrollment(
       startDate
       endDate
       isActive
+      courseId
+      lessonWeightPercent
+      testWeightPercent
+      quizWeightPercent
+      gradeA
+      gradeB
+      gradeC
+      gradeD
       createdAt
       updatedAt
       academicYearSemestersId
+      courseSemestersId
       __typename
     }
     createdAt
@@ -1050,9 +1191,18 @@ export const updateEnrollment = /* GraphQL */ `mutation UpdateEnrollment(
       startDate
       endDate
       isActive
+      courseId
+      lessonWeightPercent
+      testWeightPercent
+      quizWeightPercent
+      gradeA
+      gradeB
+      gradeC
+      gradeD
       createdAt
       updatedAt
       academicYearSemestersId
+      courseSemestersId
       __typename
     }
     createdAt
@@ -1090,9 +1240,18 @@ export const deleteEnrollment = /* GraphQL */ `mutation DeleteEnrollment(
       startDate
       endDate
       isActive
+      courseId
+      lessonWeightPercent
+      testWeightPercent
+      quizWeightPercent
+      gradeA
+      gradeB
+      gradeC
+      gradeD
       createdAt
       updatedAt
       academicYearSemestersId
+      courseSemestersId
       __typename
     }
     createdAt
@@ -1118,6 +1277,7 @@ export const createLessonTemplate = /* GraphQL */ `mutation CreateLessonTemplate
     worksheetUrl
     videoUrl
     assignmentType
+    lessonCategory
     course {
       id
       title
@@ -1154,6 +1314,7 @@ export const updateLessonTemplate = /* GraphQL */ `mutation UpdateLessonTemplate
     worksheetUrl
     videoUrl
     assignmentType
+    lessonCategory
     course {
       id
       title
@@ -1190,6 +1351,7 @@ export const deleteLessonTemplate = /* GraphQL */ `mutation DeleteLessonTemplate
     worksheetUrl
     videoUrl
     assignmentType
+    lessonCategory
     course {
       id
       title
@@ -1233,6 +1395,7 @@ export const createAssignmentQuestion = /* GraphQL */ `mutation CreateAssignment
       worksheetUrl
       videoUrl
       assignmentType
+      lessonCategory
       createdAt
       updatedAt
       courseLessonTemplatesId
@@ -1267,6 +1430,7 @@ export const updateAssignmentQuestion = /* GraphQL */ `mutation UpdateAssignment
       worksheetUrl
       videoUrl
       assignmentType
+      lessonCategory
       createdAt
       updatedAt
       courseLessonTemplatesId
@@ -1301,6 +1465,7 @@ export const deleteAssignmentQuestion = /* GraphQL */ `mutation DeleteAssignment
       worksheetUrl
       videoUrl
       assignmentType
+      lessonCategory
       createdAt
       updatedAt
       courseLessonTemplatesId
@@ -1315,6 +1480,135 @@ export const deleteAssignmentQuestion = /* GraphQL */ `mutation DeleteAssignment
 ` as GeneratedMutation<
   APITypes.DeleteAssignmentQuestionMutationVariables,
   APITypes.DeleteAssignmentQuestionMutation
+>;
+export const createTeacherProfile = /* GraphQL */ `mutation CreateTeacherProfile(
+  $input: CreateTeacherProfileInput!
+  $condition: ModelTeacherProfileConditionInput
+) {
+  createTeacherProfile(input: $input, condition: $condition) {
+    id
+    userId
+    email
+    displayName
+    bio
+    profilePictureKey
+    createdAt
+    updatedAt
+    __typename
+  }
+}
+` as GeneratedMutation<
+  APITypes.CreateTeacherProfileMutationVariables,
+  APITypes.CreateTeacherProfileMutation
+>;
+export const updateTeacherProfile = /* GraphQL */ `mutation UpdateTeacherProfile(
+  $input: UpdateTeacherProfileInput!
+  $condition: ModelTeacherProfileConditionInput
+) {
+  updateTeacherProfile(input: $input, condition: $condition) {
+    id
+    userId
+    email
+    displayName
+    bio
+    profilePictureKey
+    createdAt
+    updatedAt
+    __typename
+  }
+}
+` as GeneratedMutation<
+  APITypes.UpdateTeacherProfileMutationVariables,
+  APITypes.UpdateTeacherProfileMutation
+>;
+export const deleteTeacherProfile = /* GraphQL */ `mutation DeleteTeacherProfile(
+  $input: DeleteTeacherProfileInput!
+  $condition: ModelTeacherProfileConditionInput
+) {
+  deleteTeacherProfile(input: $input, condition: $condition) {
+    id
+    userId
+    email
+    displayName
+    bio
+    profilePictureKey
+    createdAt
+    updatedAt
+    __typename
+  }
+}
+` as GeneratedMutation<
+  APITypes.DeleteTeacherProfileMutationVariables,
+  APITypes.DeleteTeacherProfileMutation
+>;
+export const createVideoWatch = /* GraphQL */ `mutation CreateVideoWatch(
+  $input: CreateVideoWatchInput!
+  $condition: ModelVideoWatchConditionInput
+) {
+  createVideoWatch(input: $input, condition: $condition) {
+    id
+    studentId
+    lessonId
+    weeklyPlanItemId
+    watchedSeconds
+    durationSeconds
+    percentWatched
+    completed
+    lastWatchedAt
+    createdAt
+    updatedAt
+    __typename
+  }
+}
+` as GeneratedMutation<
+  APITypes.CreateVideoWatchMutationVariables,
+  APITypes.CreateVideoWatchMutation
+>;
+export const updateVideoWatch = /* GraphQL */ `mutation UpdateVideoWatch(
+  $input: UpdateVideoWatchInput!
+  $condition: ModelVideoWatchConditionInput
+) {
+  updateVideoWatch(input: $input, condition: $condition) {
+    id
+    studentId
+    lessonId
+    weeklyPlanItemId
+    watchedSeconds
+    durationSeconds
+    percentWatched
+    completed
+    lastWatchedAt
+    createdAt
+    updatedAt
+    __typename
+  }
+}
+` as GeneratedMutation<
+  APITypes.UpdateVideoWatchMutationVariables,
+  APITypes.UpdateVideoWatchMutation
+>;
+export const deleteVideoWatch = /* GraphQL */ `mutation DeleteVideoWatch(
+  $input: DeleteVideoWatchInput!
+  $condition: ModelVideoWatchConditionInput
+) {
+  deleteVideoWatch(input: $input, condition: $condition) {
+    id
+    studentId
+    lessonId
+    weeklyPlanItemId
+    watchedSeconds
+    durationSeconds
+    percentWatched
+    completed
+    lastWatchedAt
+    createdAt
+    updatedAt
+    __typename
+  }
+}
+` as GeneratedMutation<
+  APITypes.DeleteVideoWatchMutationVariables,
+  APITypes.DeleteVideoWatchMutation
 >;
 export const createParentInvite = /* GraphQL */ `mutation CreateParentInvite(
   $input: CreateParentInviteInput!
@@ -1437,9 +1731,20 @@ export const createStudentProfile = /* GraphQL */ `mutation CreateStudentProfile
     email
     firstName
     lastName
+    preferredName
     gradeLevel
     courseId
     planType
+    profilePictureKey
+    status
+    parentEmail
+    parentName
+    parentEmail2
+    parentName2
+    parentLinks {
+      nextToken
+      __typename
+    }
     createdAt
     updatedAt
     __typename
@@ -1459,9 +1764,20 @@ export const updateStudentProfile = /* GraphQL */ `mutation UpdateStudentProfile
     email
     firstName
     lastName
+    preferredName
     gradeLevel
     courseId
     planType
+    profilePictureKey
+    status
+    parentEmail
+    parentName
+    parentEmail2
+    parentName2
+    parentLinks {
+      nextToken
+      __typename
+    }
     createdAt
     updatedAt
     __typename
@@ -1481,9 +1797,20 @@ export const deleteStudentProfile = /* GraphQL */ `mutation DeleteStudentProfile
     email
     firstName
     lastName
+    preferredName
     gradeLevel
     courseId
     planType
+    profilePictureKey
+    status
+    parentEmail
+    parentName
+    parentEmail2
+    parentName2
+    parentLinks {
+      nextToken
+      __typename
+    }
     createdAt
     updatedAt
     __typename
@@ -1492,4 +1819,220 @@ export const deleteStudentProfile = /* GraphQL */ `mutation DeleteStudentProfile
 ` as GeneratedMutation<
   APITypes.DeleteStudentProfileMutationVariables,
   APITypes.DeleteStudentProfileMutation
+>;
+export const createParentProfile = /* GraphQL */ `mutation CreateParentProfile(
+  $input: CreateParentProfileInput!
+  $condition: ModelParentProfileConditionInput
+) {
+  createParentProfile(input: $input, condition: $condition) {
+    id
+    userId
+    email
+    firstName
+    lastName
+    studentLinks {
+      nextToken
+      __typename
+    }
+    createdAt
+    updatedAt
+    __typename
+  }
+}
+` as GeneratedMutation<
+  APITypes.CreateParentProfileMutationVariables,
+  APITypes.CreateParentProfileMutation
+>;
+export const updateParentProfile = /* GraphQL */ `mutation UpdateParentProfile(
+  $input: UpdateParentProfileInput!
+  $condition: ModelParentProfileConditionInput
+) {
+  updateParentProfile(input: $input, condition: $condition) {
+    id
+    userId
+    email
+    firstName
+    lastName
+    studentLinks {
+      nextToken
+      __typename
+    }
+    createdAt
+    updatedAt
+    __typename
+  }
+}
+` as GeneratedMutation<
+  APITypes.UpdateParentProfileMutationVariables,
+  APITypes.UpdateParentProfileMutation
+>;
+export const deleteParentProfile = /* GraphQL */ `mutation DeleteParentProfile(
+  $input: DeleteParentProfileInput!
+  $condition: ModelParentProfileConditionInput
+) {
+  deleteParentProfile(input: $input, condition: $condition) {
+    id
+    userId
+    email
+    firstName
+    lastName
+    studentLinks {
+      nextToken
+      __typename
+    }
+    createdAt
+    updatedAt
+    __typename
+  }
+}
+` as GeneratedMutation<
+  APITypes.DeleteParentProfileMutationVariables,
+  APITypes.DeleteParentProfileMutation
+>;
+export const createParentStudentLink = /* GraphQL */ `mutation CreateParentStudentLink(
+  $input: CreateParentStudentLinkInput!
+  $condition: ModelParentStudentLinkConditionInput
+) {
+  createParentStudentLink(input: $input, condition: $condition) {
+    id
+    parentProfileId
+    parentProfile {
+      id
+      userId
+      email
+      firstName
+      lastName
+      createdAt
+      updatedAt
+      __typename
+    }
+    studentProfileId
+    studentProfile {
+      id
+      userId
+      email
+      firstName
+      lastName
+      preferredName
+      gradeLevel
+      courseId
+      planType
+      profilePictureKey
+      status
+      parentEmail
+      parentName
+      parentEmail2
+      parentName2
+      createdAt
+      updatedAt
+      __typename
+    }
+    createdAt
+    updatedAt
+    studentProfileParentLinksId
+    parentProfileStudentLinksId
+    __typename
+  }
+}
+` as GeneratedMutation<
+  APITypes.CreateParentStudentLinkMutationVariables,
+  APITypes.CreateParentStudentLinkMutation
+>;
+export const updateParentStudentLink = /* GraphQL */ `mutation UpdateParentStudentLink(
+  $input: UpdateParentStudentLinkInput!
+  $condition: ModelParentStudentLinkConditionInput
+) {
+  updateParentStudentLink(input: $input, condition: $condition) {
+    id
+    parentProfileId
+    parentProfile {
+      id
+      userId
+      email
+      firstName
+      lastName
+      createdAt
+      updatedAt
+      __typename
+    }
+    studentProfileId
+    studentProfile {
+      id
+      userId
+      email
+      firstName
+      lastName
+      preferredName
+      gradeLevel
+      courseId
+      planType
+      profilePictureKey
+      status
+      parentEmail
+      parentName
+      parentEmail2
+      parentName2
+      createdAt
+      updatedAt
+      __typename
+    }
+    createdAt
+    updatedAt
+    studentProfileParentLinksId
+    parentProfileStudentLinksId
+    __typename
+  }
+}
+` as GeneratedMutation<
+  APITypes.UpdateParentStudentLinkMutationVariables,
+  APITypes.UpdateParentStudentLinkMutation
+>;
+export const deleteParentStudentLink = /* GraphQL */ `mutation DeleteParentStudentLink(
+  $input: DeleteParentStudentLinkInput!
+  $condition: ModelParentStudentLinkConditionInput
+) {
+  deleteParentStudentLink(input: $input, condition: $condition) {
+    id
+    parentProfileId
+    parentProfile {
+      id
+      userId
+      email
+      firstName
+      lastName
+      createdAt
+      updatedAt
+      __typename
+    }
+    studentProfileId
+    studentProfile {
+      id
+      userId
+      email
+      firstName
+      lastName
+      preferredName
+      gradeLevel
+      courseId
+      planType
+      profilePictureKey
+      status
+      parentEmail
+      parentName
+      parentEmail2
+      parentName2
+      createdAt
+      updatedAt
+      __typename
+    }
+    createdAt
+    updatedAt
+    studentProfileParentLinksId
+    parentProfileStudentLinksId
+    __typename
+  }
+}
+` as GeneratedMutation<
+  APITypes.DeleteParentStudentLinkMutationVariables,
+  APITypes.DeleteParentStudentLinkMutation
 >;

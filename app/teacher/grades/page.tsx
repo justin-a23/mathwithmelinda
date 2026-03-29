@@ -6,6 +6,32 @@ import { useEffect, useState } from 'react'
 import { generateClient } from 'aws-amplify/api'
 import { useTheme } from '../../ThemeProvider'
 import MathRenderer from '../../components/MathRenderer'
+import ThemeToggle from '../../components/ThemeToggle'
+
+function SubmissionImage({ url, alt, style }: { url: string; alt: string; style?: React.CSSProperties }) {
+  const [failed, setFailed] = useState(false)
+  if (failed) {
+    const isHeic = url.toLowerCase().includes('.heic') || url.toLowerCase().includes('.heif')
+    return (
+      <a href={url} target="_blank" rel="noopener noreferrer" style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        gap: '6px', padding: '12px', borderRadius: '6px', border: '1px solid var(--gray-light)',
+        background: 'var(--gray-light)', textDecoration: 'none', color: 'var(--plum)',
+        fontSize: '12px', fontWeight: 500, textAlign: 'center', ...style, minHeight: style?.height || '90px'
+      }}>
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+        </svg>
+        {isHeic ? 'HEIC — open to view' : 'View file'}
+      </a>
+    )
+  }
+  return (
+    <a href={url} target="_blank" rel="noopener noreferrer">
+      <img src={url} alt={alt} style={style} onError={() => setFailed(true)} />
+    </a>
+  )
+}
 
 const client = generateClient()
 
@@ -19,6 +45,10 @@ const listSubmissionsWithDetails = /* GraphQL */`
         grade
         teacherComment
         submittedAt
+        isArchived
+        archivedAt
+        status
+        returnReason
         assignment {
           id
           title
@@ -62,6 +92,42 @@ const getLessonTemplateQuestions = /* GraphQL */`
   }
 `
 
+const listVideoWatchesQuery = /* GraphQL */`
+  query ListVideoWatches {
+    listVideoWatches(limit: 2000) {
+      items {
+        id
+        studentId
+        lessonId
+        weeklyPlanItemId
+        watchedSeconds
+        durationSeconds
+        percentWatched
+        completed
+        lastWatchedAt
+      }
+    }
+  }
+`
+
+type VideoWatchRecord = {
+  id: string
+  studentId: string
+  lessonId: string
+  weeklyPlanItemId?: string | null
+  watchedSeconds: number
+  durationSeconds?: number | null
+  percentWatched: number
+  completed: boolean
+  lastWatchedAt: string
+}
+
+function formatWatchTime(secs: number): string {
+  const m = Math.floor(secs / 60)
+  const s = Math.floor(secs % 60)
+  return m > 0 ? `${m}m ${s}s` : `${s}s`
+}
+
 type Submission = {
   id: string
   studentId: string
@@ -69,6 +135,10 @@ type Submission = {
   grade: string | null
   teacherComment: string | null
   submittedAt: string | null
+  isArchived?: boolean | null
+  archivedAt?: string | null
+  status?: string | null
+  returnReason?: string | null
   assignment?: {
     id: string
     title: string
@@ -79,9 +149,137 @@ type Submission = {
 
 type Question = { id: string; order: number; questionText: string; questionType: string }
 
+function getSubmissionCourseId(s: Submission): string {
+  if (s.assignment?.course?.id) return s.assignment.course.id
+  try { return JSON.parse(s.content || '{}').courseId || '' }
+  catch { return '' }
+}
+
+function getSubmissionCourseTitle(s: Submission): string {
+  if (s.assignment?.course?.title) return s.assignment.course.title
+  try { return JSON.parse(s.content || '{}').courseTitle || '' }
+  catch { return '' }
+}
+
 function getSubmissionLabel(s: Submission): string {
-  try { const c = JSON.parse(s.content || '{}'); return s.assignment?.course?.title || c.lessonTitle || 'No lesson info' }
-  catch { return s.assignment?.course?.title || 'No lesson info' }
+  const courseTitle = getSubmissionCourseTitle(s)
+  try { const c = JSON.parse(s.content || '{}'); return courseTitle || c.lessonTitle || 'No lesson info' }
+  catch { return courseTitle || 'No lesson info' }
+}
+
+function getSubmissionTitle(s: Submission): string {
+  if (s.assignment?.title) return s.assignment.title
+  try { return JSON.parse(s.content || '{}').lessonTitle || 'Submission' }
+  catch (e) { return 'Submission' }
+}
+
+function getSubmissionLessonId(s: Submission): string {
+  try { return JSON.parse(s.content || '{}').lessonId || '' }
+  catch { return '' }
+}
+
+function getSubmissionDueDateTime(s: Submission): Date | null {
+  try { const c = JSON.parse(s.content || '{}'); return c.dueDateTime ? new Date(c.dueDateTime) : null }
+  catch { return null }
+}
+
+function isSubmissionLate(s: Submission): boolean {
+  if (!s.submittedAt) return false
+  const due = getSubmissionDueDateTime(s)
+  if (!due) return false
+  return new Date(s.submittedAt) > due
+}
+
+function formatSubmittedAt(iso: string | null): string {
+  if (!iso) return 'Unknown date'
+  return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
+}
+
+function WatchBadge({ watch }: { watch: VideoWatchRecord | undefined | null }) {
+  if (!watch) return (
+    <span title="No video watch data" style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', color: 'var(--gray-mid)', fontSize: '11px', flexShrink: 0 }}>
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19M1 1l22 22"/>
+      </svg>
+    </span>
+  )
+  const pct = Math.round(watch.percentWatched)
+  const color = pct >= 90 ? '#16a34a' : pct >= 50 ? '#d97706' : '#dc2626'
+  const bg = pct >= 90 ? '#dcfce7' : pct >= 50 ? '#fef3c7' : '#fee2e2'
+  return (
+    <span title={`Watched ${pct}% of video · Last watched ${new Date(watch.lastWatchedAt).toLocaleDateString()}`}
+      style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', background: bg, color, borderRadius: '20px', padding: '2px 7px', fontSize: '11px', fontWeight: 600, flexShrink: 0 }}>
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+        <ellipse cx="12" cy="12" rx="11" ry="8"/><circle cx="12" cy="12" r="3" fill="currentColor"/>
+      </svg>
+      {pct}%
+    </span>
+  )
+}
+
+function NotesSection({ content }: { content: string | null }) {
+  if (!content) return null
+  let notes = ''
+  try {
+    const parsed = JSON.parse(content)
+    notes = parsed.notes || ''
+  } catch (e) {
+    return null
+  }
+  if (!notes) return null
+  return (
+    <div style={{ background: 'var(--gray-light)', borderRadius: '6px', padding: '12px 16px', marginBottom: '24px' }}>
+      <div style={{ fontSize: '11px', fontWeight: 500, color: 'var(--gray-mid)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '1px' }}>Student notes</div>
+      <p style={{ fontSize: '14px', color: 'var(--foreground)' }}>{notes}</p>
+    </div>
+  )
+}
+
+function AnswersSection({ questions, content, showWorkImageUrls }: {
+  questions: Question[]
+  content: string | null
+  showWorkImageUrls: Record<string, string[]>
+}) {
+  if (questions.length === 0) return null
+  let answers: Record<string, string> = {}
+  try {
+    const parsed = JSON.parse(content || '{}')
+    answers = parsed.answers || {}
+  } catch (e) {
+    answers = {}
+  }
+  return (
+    <div style={{ marginBottom: '24px' }}>
+      <div style={{ fontSize: '11px', fontWeight: 500, color: 'var(--gray-mid)', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '1px' }}>Student answers</div>
+      {questions.map((q, idx) => {
+        const answer = answers[q.id]
+        const swUrls = showWorkImageUrls[q.id] || []
+        return (
+          <div key={q.id} style={{ marginBottom: '16px', paddingBottom: '16px', borderBottom: idx < questions.length - 1 ? '1px solid var(--gray-light)' : 'none' }}>
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '8px' }}>
+              <span style={{ fontWeight: 700, color: 'var(--plum)', fontSize: '14px', minWidth: '24px' }}>{idx + 1}.</span>
+              <span style={{ fontSize: '14px', color: 'var(--gray-dark)' }}><MathRenderer text={q.questionText} /></span>
+            </div>
+            {q.questionType === 'show_work' ? (
+              swUrls.length > 0 ? (
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', paddingLeft: '34px' }}>
+                  {swUrls.map((url, i) => (
+                    <SubmissionImage key={i} url={url} alt="Show work" style={{ width: '120px', height: '90px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--gray-light)' }} />
+                  ))}
+                </div>
+              ) : (
+                <p style={{ paddingLeft: '34px', fontSize: '13px', color: 'var(--gray-mid)', fontStyle: 'italic' }}>No photo uploaded</p>
+              )
+            ) : (
+              <div style={{ paddingLeft: '34px', background: answer ? 'var(--plum-light)' : 'var(--gray-light)', borderRadius: '6px', padding: '8px 12px', fontSize: '14px', color: answer ? 'var(--foreground)' : 'var(--gray-mid)', fontStyle: answer ? 'normal' : 'italic' }}>
+                {answer ? <MathRenderer text={answer} /> : 'No answer provided'}
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
 }
 
 export default function GradingPage() {
@@ -94,11 +292,31 @@ export default function GradingPage() {
   const [comment, setComment] = useState('')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [returning, setReturning] = useState(false)
+  const [returnReason, setReturnReason] = useState('')
+  const [returnDueDate, setReturnDueDate] = useState('')
+  const [showReturnForm, setShowReturnForm] = useState(false)
+  const [returned, setReturned] = useState(false)
+  const [clearingGrade, setClearingGrade] = useState(false)
+  const [gradeCleared, setGradeCleared] = useState(false)
   const [imageUrls, setImageUrls] = useState<string[]>([])
   const [studentNameMap, setStudentNameMap] = useState<Record<string, string>>({})
   const [questions, setQuestions] = useState<Question[]>([])
   const [showWorkImageUrls, setShowWorkImageUrls] = useState<Record<string, string[]>>({})
   const { theme } = useTheme()
+
+  const [filterCourse, setFilterCourse] = useState('all')
+  const [filterStatus, setFilterStatus] = useState<'all' | 'ungraded' | 'graded'>('ungraded')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [showArchived, setShowArchived] = useState(false)
+  const [archiving, setArchiving] = useState(false)
+  const [bulkConfirm, setBulkConfirm] = useState(false)
+  const [mounted, setMounted] = useState(false)
+  const [videoWatchMap, setVideoWatchMap] = useState<Record<string, VideoWatchRecord>>({})
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [expandedStudents, setExpandedStudents] = useState<Set<string>>(new Set())
+  useEffect(() => setMounted(true), [])
 
   useEffect(() => {
     if (user === null) router.replace('/login')
@@ -107,6 +325,7 @@ export default function GradingPage() {
   useEffect(() => {
     fetchSubmissions()
     fetchStudentProfiles()
+    fetchVideoWatches()
   }, [])
 
   async function fetchStudentProfiles() {
@@ -125,10 +344,28 @@ export default function GradingPage() {
     }
   }
 
+  async function fetchVideoWatches() {
+    try {
+      const result = await client.graphql({ query: listVideoWatchesQuery }) as any
+      const items = result.data.listVideoWatches.items as VideoWatchRecord[]
+      const map: Record<string, VideoWatchRecord> = {}
+      for (const w of items) {
+        const key = `${w.studentId}_${w.lessonId}`
+        if (!map[key] || w.lastWatchedAt > map[key].lastWatchedAt) {
+          map[key] = w
+        }
+      }
+      setVideoWatchMap(map)
+    } catch (err) {
+      console.error('Error fetching video watches:', err)
+    }
+  }
+
   async function fetchSubmissions() {
     try {
       const result = await client.graphql({ query: listSubmissionsWithDetails }) as any
-      setSubmissions(result.data.listSubmissions.items as Submission[])
+      const items = result.data.listSubmissions.items as Submission[]
+      setSubmissions(items)
     } catch (err) {
       console.error(err)
     } finally {
@@ -151,6 +388,11 @@ export default function GradingPage() {
     setGrade(submission.grade || '')
     setComment(submission.teacherComment || '')
     setSaved(false)
+    setReturnReason('')
+    setReturnDueDate('')
+    setShowReturnForm(false)
+    setReturned(false)
+    setGradeCleared(false)
     setImageUrls([])
     setQuestions([])
     setShowWorkImageUrls({})
@@ -206,11 +448,225 @@ export default function GradingPage() {
     }
   }
 
-  const ungraded = submissions.filter(s => !s.grade)
-  const graded = submissions.filter(s => s.grade)
+  async function returnToStudent() {
+    if (!selectedSubmission || !returnReason.trim()) return
+    setReturning(true)
+    try {
+      const { updateSubmission } = await import('../../../src/graphql/mutations')
+      const input = {
+        id: selectedSubmission.id,
+        status: 'returned',
+        returnReason: returnReason.trim(),
+        grade: null,
+        ...(returnDueDate ? { returnDueDate } : {}),
+      } as any
+      await (client.graphql({ query: updateSubmission, variables: { input } }) as any)
+      const update = { status: 'returned', returnReason: returnReason.trim(), returnDueDate: returnDueDate || null, grade: null }
+      setSubmissions(prev => prev.map(s => s.id === selectedSubmission.id ? { ...s, ...update } : s))
+      setSelectedSubmission(prev => prev ? { ...prev, ...update } : prev)
+      setReturned(true)
+      setShowReturnForm(false)
+    } catch (err) { console.error(err) }
+    finally { setReturning(false) }
+  }
+
+  async function clearGrade() {
+    if (!selectedSubmission) return
+    setClearingGrade(true)
+    setGradeCleared(false)
+    try {
+      const { updateSubmission } = await import('../../../src/graphql/mutations')
+      await (client.graphql({
+        query: updateSubmission,
+        variables: { input: { id: selectedSubmission.id, grade: null, teacherComment: null } }
+      }) as any)
+      setGrade('')
+      setComment('')
+      setSubmissions(prev => prev.map(s => s.id === selectedSubmission.id ? { ...s, grade: null, teacherComment: null } : s))
+      setSelectedSubmission(prev => prev ? { ...prev, grade: null, teacherComment: null } : prev)
+      setGradeCleared(true)
+    } catch (err) { console.error(err) }
+    finally { setClearingGrade(false) }
+  }
+
+  async function pullBackReturn() {
+    if (!selectedSubmission) return
+    try {
+      const { updateSubmission } = await import('../../../src/graphql/mutations')
+      await (client.graphql({
+        query: updateSubmission,
+        variables: { input: { id: selectedSubmission.id, status: null, returnReason: null, returnDueDate: null } as any }
+      }) as any)
+      const update = { status: null, returnReason: null, returnDueDate: null }
+      setSubmissions(prev => prev.map(s => s.id === selectedSubmission.id ? { ...s, ...update } : s))
+      setSelectedSubmission(prev => prev ? { ...prev, ...update } : prev)
+      setReturned(false)
+      setShowReturnForm(false)
+    } catch (err) { console.error(err) }
+  }
+
+  async function archiveSubmission(id: string) {
+    setArchiving(true)
+    try {
+      const { updateSubmission } = await import('../../../src/graphql/mutations')
+      await client.graphql({
+        query: updateSubmission,
+        variables: { input: { id, isArchived: true, archivedAt: new Date().toISOString() } }
+      })
+      setSubmissions(prev => prev.map(s => s.id === id ? { ...s, isArchived: true, archivedAt: new Date().toISOString() } : s))
+      if (selectedSubmission?.id === id) setSelectedSubmission(null)
+    } catch (err) { console.error(err) }
+    finally { setArchiving(false) }
+  }
+
+  async function unarchiveSubmission(id: string) {
+    try {
+      const { updateSubmission } = await import('../../../src/graphql/mutations')
+      await client.graphql({
+        query: updateSubmission,
+        variables: { input: { id, isArchived: false, archivedAt: null } }
+      })
+      setSubmissions(prev => prev.map(s => s.id === id ? { ...s, isArchived: false, archivedAt: null } : s))
+    } catch (err) { console.error(err) }
+  }
+
+  async function bulkArchiveCourse() {
+    const toArchive = submissions.filter(s =>
+      !s.isArchived &&
+      (filterCourse === 'all' || getSubmissionCourseId(s) === filterCourse)
+    )
+    setArchiving(true)
+    setBulkConfirm(false)
+    try {
+      const { updateSubmission } = await import('../../../src/graphql/mutations')
+      const now = new Date().toISOString()
+      await Promise.all(toArchive.map(s =>
+        client.graphql({ query: updateSubmission, variables: { input: { id: s.id, isArchived: true, archivedAt: now } } })
+      ))
+      setSubmissions(prev => prev.map(s =>
+        toArchive.find(t => t.id === s.id) ? { ...s, isArchived: true, archivedAt: now } : s
+      ))
+      setSelectedSubmission(null)
+    } catch (err) { console.error(err) }
+    finally { setArchiving(false) }
+  }
+
+  async function deleteSubmissionRecord(id: string) {
+    setDeleting(true)
+    try {
+      const { deleteSubmission } = await import('../../../src/graphql/mutations')
+      await client.graphql({ query: deleteSubmission, variables: { input: { id } } })
+      setSubmissions(prev => prev.filter(s => s.id !== id))
+      if (selectedSubmission?.id === id) setSelectedSubmission(null)
+      setDeleteConfirmId(null)
+    } catch (err) { console.error(err) }
+    finally { setDeleting(false) }
+  }
+
+  async function bulkDeleteArchived() {
+    const toDelete = submissions.filter(s => s.isArchived && (filterCourse === 'all' || getSubmissionCourseId(s) === filterCourse))
+    setDeleting(true)
+    setBulkConfirm(false)
+    try {
+      const { deleteSubmission } = await import('../../../src/graphql/mutations')
+      await Promise.all(toDelete.map(s => client.graphql({ query: deleteSubmission, variables: { input: { id: s.id } } })))
+      setSubmissions(prev => prev.filter(s => !toDelete.find(t => t.id === s.id)))
+      if (selectedSubmission && toDelete.find(t => t.id === selectedSubmission.id)) setSelectedSubmission(null)
+    } catch (err) { console.error(err) }
+    finally { setDeleting(false) }
+  }
+
+  function toggleStudent(studentId: string) {
+    setExpandedStudents(prev => {
+      const next = new Set(prev)
+      if (next.has(studentId)) next.delete(studentId)
+      else next.add(studentId)
+      return next
+    })
+  }
+
+  const courses: { id: string; title: string }[] = []
+  const seenCourseIds = new Set<string>()
+  for (const s of submissions) {
+    const cId = getSubmissionCourseId(s)
+    const cTitle = getSubmissionCourseTitle(s)
+    if (cId && cTitle && !seenCourseIds.has(cId)) {
+      seenCourseIds.add(cId)
+      courses.push({ id: cId, title: cTitle })
+    }
+  }
+
+  const filteredSubmissions = submissions
+    .filter(s => {
+      if (!!s.isArchived !== showArchived) return false
+      if (filterCourse !== 'all' && getSubmissionCourseId(s) !== filterCourse) return false
+      if (!showArchived) {
+        if (filterStatus === 'ungraded' && !!s.grade) return false
+        if (filterStatus === 'graded' && !s.grade) return false
+      }
+      if (searchQuery.trim()) {
+        const name = (studentNameMap[s.studentId] || s.studentId).toLowerCase()
+        if (!name.includes(searchQuery.trim().toLowerCase())) return false
+      }
+      return true
+    })
+    .sort((a, b) => {
+      const ta = a.submittedAt ? new Date(a.submittedAt).getTime() : 0
+      const tb = b.submittedAt ? new Date(b.submittedAt).getTime() : 0
+      return tb - ta
+    })
+
+  // Group by student for the student-grouped view
+  type StudentGroup = { studentId: string; name: string; submissions: Submission[]; ungradedCount: number }
+  const studentGroups: StudentGroup[] = []
+  const seenStudents = new Set<string>()
+  for (const s of filteredSubmissions) {
+    if (!seenStudents.has(s.studentId)) {
+      seenStudents.add(s.studentId)
+      const group = filteredSubmissions.filter(x => x.studentId === s.studentId)
+      studentGroups.push({
+        studentId: s.studentId,
+        name: studentNameMap[s.studentId] || s.studentId,
+        submissions: group,
+        ungradedCount: group.filter(x => !x.grade).length,
+      })
+    }
+  }
+  // Students with ungraded float to top
+  studentGroups.sort((a, b) => {
+    if (a.ungradedCount > 0 && b.ungradedCount === 0) return -1
+    if (a.ungradedCount === 0 && b.ungradedCount > 0) return 1
+    return 0
+  })
+
+  const ungradedCount = submissions.filter(s => !s.grade && !s.isArchived).length
+  const archivedCount = submissions.filter(s => s.isArchived).length
+  const bulkArchiveCount = submissions.filter(s =>
+    !s.isArchived && (filterCourse === 'all' || getSubmissionCourseId(s) === filterCourse)
+  ).length
+  const archivedCourseCount = submissions.filter(s => s.isArchived && (filterCourse === 'all' || getSubmissionCourseId(s) === filterCourse)).length
+
+  const pillBase: React.CSSProperties = {
+    padding: '6px 14px',
+    borderRadius: '20px',
+    border: 'none',
+    cursor: 'pointer',
+    fontSize: '13px',
+    fontWeight: 500,
+    fontFamily: 'var(--font-body)',
+  }
+  const pillActive: React.CSSProperties = { ...pillBase, background: 'var(--plum)', color: 'white' }
+  const pillInactive: React.CSSProperties = { ...pillBase, background: 'var(--gray-light)', color: 'var(--gray-dark)' }
+
+  const bulkArchiveCourseName = filterCourse !== 'all' ? (courses.find(c => c.id === filterCourse)?.title || '') : ''
+  const bulkArchiveLabel = bulkArchiveCourseName
+    ? 'Archive all ' + bulkArchiveCourseName + ' submissions (' + bulkArchiveCount + ')'
+    : 'Archive all submissions (' + bulkArchiveCount + ')'
+
+  if (!mounted) return <div style={{ fontFamily: 'var(--font-body)', background: 'var(--page-bg)', minHeight: '100vh' }} />
 
   return (
-    <div style={{ fontFamily: 'var(--font-body)', background: 'var(--background)', minHeight: '100vh' }}>
+    <div suppressHydrationWarning style={{ fontFamily: 'var(--font-body)', background: 'var(--page-bg)', minHeight: '100vh' }}>
       <nav style={{ background: 'var(--nav-bg)', padding: '0 48px', height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div style={{ width: '36px', height: '36px', background: 'var(--plum)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -222,58 +678,281 @@ export default function GradingPage() {
           <span style={{ fontFamily: 'var(--font-display)', color: 'white', fontSize: '20px' }}>Math with Melinda</span>
           <span style={{ background: 'var(--plum)', color: 'white', fontSize: '11px', fontWeight: 500, padding: '3px 10px', borderRadius: '20px', marginLeft: '8px' }}>Teacher</span>
         </div>
-        <button onClick={() => router.push('/teacher')} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'white', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '14px' }}>
-          ← Back
-        </button>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <ThemeToggle />
+          <button onClick={() => router.push('/teacher/profile')} title="My Profile" style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: 'white', padding: '7px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+            My Profile
+          </button>
+          <button onClick={() => router.push('/teacher')} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'white', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '14px' }}>
+            ← Back
+          </button>
+        </div>
       </nav>
 
       <div style={{ display: 'flex', maxWidth: '1200px', margin: '0 auto', padding: '48px 24px', gap: '32px' }}>
 
         <div style={{ width: '340px', flexShrink: 0 }}>
-          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '28px', color: 'var(--foreground)', marginBottom: '24px' }}>Grade Work</h1>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+            <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '28px', color: 'var(--foreground)', margin: 0 }}>Grade Work</h1>
+            <button onClick={() => { setShowArchived(!showArchived); setSelectedSubmission(null) }}
+              style={{ background: showArchived ? 'var(--plum)' : 'var(--gray-light)', color: showArchived ? 'white' : 'var(--gray-dark)', border: 'none', borderRadius: '20px', padding: '5px 12px', fontSize: '12px', cursor: 'pointer', fontWeight: 500 }}>
+              {showArchived ? '← Active' : `Archive${archivedCount > 0 ? ` (${archivedCount})` : ''}`}
+            </button>
+          </div>
 
+          {/* Search */}
+          <input
+            placeholder="Search student..."
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '9px 12px',
+              border: '1px solid var(--gray-light)',
+              borderRadius: '8px',
+              fontSize: '13px',
+              fontFamily: 'var(--font-body)',
+              background: 'var(--background)',
+              color: 'var(--foreground)',
+              marginBottom: '10px',
+              boxSizing: 'border-box',
+            }}
+          />
+
+          {/* Course filter */}
+          <select
+            value={filterCourse}
+            onChange={e => setFilterCourse(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '9px 12px',
+              border: '1px solid var(--gray-light)',
+              borderRadius: '8px',
+              fontSize: '13px',
+              fontFamily: 'var(--font-body)',
+              background: 'var(--background)',
+              color: 'var(--foreground)',
+              marginBottom: '14px',
+              cursor: 'pointer',
+              boxSizing: 'border-box',
+            }}
+          >
+            <option value="all">All courses</option>
+            {courses.map(c => (
+              <option key={c.id} value={c.id}>{c.title}</option>
+            ))}
+          </select>
+
+          {/* Status tabs */}
+          <div style={{ display: 'flex', gap: '6px', marginBottom: '16px', flexWrap: 'wrap' }}>
+            <button style={filterStatus === 'all' ? pillActive : pillInactive} onClick={() => setFilterStatus('all')}>
+              All
+            </button>
+            <button style={filterStatus === 'ungraded' ? pillActive : pillInactive} onClick={() => setFilterStatus('ungraded')}>
+              Needs Grading
+              {ungradedCount > 0 && (
+                <span style={{
+                  marginLeft: '6px',
+                  background: filterStatus === 'ungraded' ? 'rgba(255,255,255,0.25)' : 'var(--plum)',
+                  color: 'white',
+                  borderRadius: '20px',
+                  padding: '1px 7px',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                }}>
+                  {ungradedCount}
+                </span>
+              )}
+            </button>
+            <button style={filterStatus === 'graded' ? pillActive : pillInactive} onClick={() => setFilterStatus('graded')}>
+              Graded
+            </button>
+          </div>
+
+          {/* Bulk operations */}
+          {!showArchived && bulkArchiveCount > 0 && (
+            <div style={{ marginBottom: '14px' }}>
+              {bulkConfirm ? (
+                <div style={{ background: '#FEF3C7', border: '1px solid #F59E0B', borderRadius: '8px', padding: '10px 12px', fontSize: '12px' }}>
+                  <p style={{ margin: '0 0 8px', color: '#92400E', fontWeight: 500 }}>
+                    Archive {bulkArchiveCount} submission{bulkArchiveCount !== 1 ? 's' : ''}? This can be undone.
+                  </p>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button onClick={bulkArchiveCourse} disabled={archiving}
+                      style={{ background: '#92400E', color: 'white', border: 'none', borderRadius: '6px', padding: '5px 12px', fontSize: '12px', cursor: 'pointer', fontWeight: 500 }}>
+                      {archiving ? 'Archiving...' : 'Yes, archive all'}
+                    </button>
+                    <button onClick={() => setBulkConfirm(false)}
+                      style={{ background: 'transparent', color: '#92400E', border: '1px solid #F59E0B', borderRadius: '6px', padding: '5px 12px', fontSize: '12px', cursor: 'pointer' }}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button onClick={() => setBulkConfirm(true)}
+                  style={{ width: '100%', background: 'transparent', color: 'var(--gray-mid)', border: '1px dashed var(--gray-light)', borderRadius: '8px', padding: '8px', fontSize: '12px', cursor: 'pointer' }}>
+                  {bulkArchiveLabel}
+                </button>
+              )}
+            </div>
+          )}
+          {showArchived && archivedCourseCount > 0 && (
+            <div style={{ marginBottom: '14px' }}>
+              {bulkConfirm ? (
+                <div style={{ background: '#FEE2E2', border: '1px solid #FCA5A5', borderRadius: '8px', padding: '10px 12px', fontSize: '12px' }}>
+                  <p style={{ margin: '0 0 8px', color: '#991B1B', fontWeight: 500 }}>
+                    Permanently delete {archivedCourseCount} archived submission{archivedCourseCount !== 1 ? 's' : ''}? This cannot be undone.
+                  </p>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button onClick={bulkDeleteArchived} disabled={deleting}
+                      style={{ background: '#dc2626', color: 'white', border: 'none', borderRadius: '6px', padding: '5px 12px', fontSize: '12px', cursor: 'pointer', fontWeight: 500 }}>
+                      {deleting ? 'Deleting...' : 'Yes, delete all'}
+                    </button>
+                    <button onClick={() => setBulkConfirm(false)}
+                      style={{ background: 'transparent', color: '#991B1B', border: '1px solid #FCA5A5', borderRadius: '6px', padding: '5px 12px', fontSize: '12px', cursor: 'pointer' }}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button onClick={() => setBulkConfirm(true)}
+                  style={{ width: '100%', background: 'transparent', color: '#dc2626', border: '1px dashed #FCA5A5', borderRadius: '8px', padding: '8px', fontSize: '12px', cursor: 'pointer' }}>
+                  Delete all {archivedCourseCount} archived permanently
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Submission list — grouped by student */}
           {loading ? (
-            <p style={{ color: 'var(--gray-mid)' }}>Loading submissions...</p>
+            <p style={{ color: 'var(--gray-mid)', fontSize: '14px' }}>Loading submissions...</p>
+          ) : studentGroups.length === 0 ? (
+            <p style={{ color: 'var(--gray-mid)', fontSize: '14px', fontStyle: 'italic' }}>No submissions match your filters.</p>
           ) : (
-            <>
-              {ungraded.length > 0 && (
-                <div style={{ marginBottom: '32px' }}>
-                  <div style={{ fontSize: '11px', fontWeight: 500, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--plum)', marginBottom: '12px' }}>Needs grading ({ungraded.length})</div>
-                  {ungraded.map(s => (
-                    <div key={s.id} onClick={() => openSubmission(s)}
-                      style={{ background: selectedSubmission?.id === s.id ? 'var(--plum-light)' : 'var(--background)', border: `1px solid ${selectedSubmission?.id === s.id ? 'var(--plum-mid)' : 'var(--gray-light)'}`, borderRadius: 'var(--radius)', padding: '14px 16px', marginBottom: '8px', cursor: 'pointer' }}
-                      onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 2px 8px rgba(123,79,166,0.12)')}
-                      onMouseLeave={e => (e.currentTarget.style.boxShadow = 'none')}>
-                      <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--foreground)', marginBottom: '4px' }}>
-                        {studentNameMap[s.studentId] ? <><strong>{studentNameMap[s.studentId]}</strong> ({s.studentId})</> : s.studentId}
-                      </div>
-                      <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginBottom: '4px' }}>{getSubmissionLabel(s)}</div>
-                      <div style={{ fontSize: '11px', color: 'var(--gray-mid)' }}>Submitted {s.submittedAt ? new Date(s.submittedAt).toLocaleDateString() : 'Unknown'}</div>
+            studentGroups.map(group => {
+              const isExpanded = expandedStudents.has(group.studentId)
+              return (
+                <div key={group.studentId} style={{ marginBottom: '6px' }}>
+                  {/* Student header */}
+                  <div
+                    onClick={() => toggleStudent(group.studentId)}
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      background: 'var(--background)',
+                      border: '1px solid var(--gray-light)',
+                      borderRadius: isExpanded ? 'var(--radius) var(--radius) 0 0' : 'var(--radius)',
+                      padding: '10px 14px',
+                      cursor: 'pointer',
+                      userSelect: 'none',
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--plum-light)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'var(--background)')}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--foreground)' }}>
+                        {group.name}
+                      </span>
+                      <span style={{ fontSize: '11px', color: 'var(--gray-mid)' }}>
+                        {group.submissions.length} submission{group.submissions.length !== 1 ? 's' : ''}
+                      </span>
                     </div>
-                  ))}
-                </div>
-              )}
-
-              {graded.length > 0 && (
-                <div>
-                  <div style={{ fontSize: '11px', fontWeight: 500, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--gray-mid)', marginBottom: '12px' }}>Graded ({graded.length})</div>
-                  {graded.map(s => (
-                    <div key={s.id} onClick={() => openSubmission(s)}
-                      style={{ background: selectedSubmission?.id === s.id ? 'var(--plum-light)' : 'var(--background)', border: `1px solid ${selectedSubmission?.id === s.id ? 'var(--plum-mid)' : 'var(--gray-light)'}`, borderRadius: 'var(--radius)', padding: '14px 16px', marginBottom: '8px', cursor: 'pointer', opacity: 0.7 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                        <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--foreground)' }}>
-                          {studentNameMap[s.studentId] ? <strong>{studentNameMap[s.studentId]}</strong> : s.studentId}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      {group.ungradedCount > 0 && (
+                        <span style={{ background: '#f97316', color: 'white', fontSize: '11px', fontWeight: 600, padding: '1px 7px', borderRadius: '20px' }}>
+                          {group.ungradedCount} ungraded
+                        </span>
+                      )}
+                      <span style={{ color: 'var(--gray-mid)', fontSize: '13px' }}>{isExpanded ? '▾' : '▸'}</span>
+                    </div>
+                  </div>
+                  {/* Expanded submissions */}
+                  {isExpanded && (
+                    <div style={{ border: '1px solid var(--gray-light)', borderTop: 'none', borderRadius: '0 0 var(--radius) var(--radius)', overflow: 'hidden' }}>
+                      {group.submissions.map((s, idx) => (
+                        <div
+                          key={s.id}
+                          style={{
+                            background: selectedSubmission?.id === s.id ? 'var(--plum-light)' : 'var(--background)',
+                            borderTop: idx > 0 ? '1px solid var(--gray-light)' : 'none',
+                            padding: '10px 14px',
+                            cursor: 'pointer',
+                          }}
+                          onClick={() => openSubmission(s)}
+                          onMouseEnter={e => { if (selectedSubmission?.id !== s.id) e.currentTarget.style.background = 'var(--page-bg)' }}
+                          onMouseLeave={e => { if (selectedSubmission?.id !== s.id) e.currentTarget.style.background = 'var(--background)' }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' }}>
+                            <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--foreground)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: '8px' }}>
+                              {getSubmissionTitle(s)}
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+                              <WatchBadge watch={videoWatchMap[`${s.studentId}_${getSubmissionLessonId(s)}`]} />
+                              {s.status === 'returned' ? (
+                                <span style={{ background: '#f59e0b', color: 'white', fontSize: '11px', padding: '1px 7px', borderRadius: '20px' }}>
+                                  Returned
+                                </span>
+                              ) : s.grade ? (
+                                <span style={{ background: 'var(--plum)', color: 'white', fontSize: '11px', padding: '1px 7px', borderRadius: '20px' }}>
+                                  {s.grade}
+                                </span>
+                              ) : (
+                                <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#f97316', display: 'inline-block', flexShrink: 0, marginTop: '2px' }} />
+                              )}
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', color: 'var(--gray-mid)' }}>
+                              {formatSubmittedAt(s.submittedAt)}
+                              {isSubmissionLate(s) && (
+                                <span style={{ background: '#fee2e2', color: '#dc2626', fontSize: '10px', fontWeight: 700, padding: '1px 5px', borderRadius: '3px', letterSpacing: '0.3px' }}>LATE</span>
+                              )}
+                            </div>
+                            {/* Archive / Delete controls */}
+                            <div onClick={e => e.stopPropagation()} style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                              {s.isArchived ? (
+                                /* Archived view: Restore + Delete */
+                                deleteConfirmId === s.id ? (
+                                  <>
+                                    <span style={{ fontSize: '11px', color: '#dc2626', marginRight: '2px' }}>Delete?</span>
+                                    <button onClick={() => deleteSubmissionRecord(s.id)} disabled={deleting}
+                                      style={{ background: '#dc2626', color: 'white', border: 'none', borderRadius: '4px', padding: '2px 8px', fontSize: '11px', cursor: 'pointer', fontWeight: 500 }}>
+                                      {deleting ? '…' : 'Yes'}
+                                    </button>
+                                    <button onClick={() => setDeleteConfirmId(null)}
+                                      style={{ background: 'transparent', color: 'var(--gray-mid)', border: '1px solid var(--gray-light)', borderRadius: '4px', padding: '2px 6px', fontSize: '11px', cursor: 'pointer' }}>
+                                      No
+                                    </button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <button onClick={() => unarchiveSubmission(s.id)}
+                                      style={{ background: 'transparent', border: 'none', color: 'var(--gray-mid)', cursor: 'pointer', fontSize: '11px', padding: '2px 4px' }}>
+                                      Restore
+                                    </button>
+                                    <button onClick={() => setDeleteConfirmId(s.id)}
+                                      style={{ background: 'transparent', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: '11px', padding: '2px 4px', opacity: 0.7 }}
+                                      title="Delete permanently">
+                                      Delete
+                                    </button>
+                                  </>
+                                )
+                              ) : (
+                                /* Active view: Archive only */
+                                <button onClick={() => archiveSubmission(s.id)} disabled={archiving}
+                                  style={{ background: 'transparent', border: 'none', color: 'var(--gray-mid)', cursor: 'pointer', fontSize: '11px', padding: '2px 4px' }}>
+                                  Archive
+                                </button>
+                              )}
+                            </div>
+                          </div>
                         </div>
-                        <span style={{ background: 'var(--plum)', color: 'white', fontSize: '11px', padding: '2px 8px', borderRadius: '20px' }}>{s.grade}</span>
-                      </div>
-                      <div style={{ fontSize: '12px', color: 'var(--gray-mid)' }}>{getSubmissionLabel(s)}</div>
+                      ))}
                     </div>
-                  ))}
+                  )}
                 </div>
-              )}
-
-              {submissions.length === 0 && <p style={{ color: 'var(--gray-mid)', fontSize: '14px' }}>No submissions yet.</p>}
-            </>
+              )
+            })
           )}
         </div>
 
@@ -282,72 +961,80 @@ export default function GradingPage() {
             <div style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', padding: '32px' }}>
 
               <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', color: 'var(--foreground)', marginBottom: '4px' }}>
-                {selectedSubmission.assignment?.title || (() => { try { return JSON.parse(selectedSubmission.content || '{}').lessonTitle || 'Submission' } catch { return 'Submission' } })()}
+                {getSubmissionTitle(selectedSubmission)}
               </h2>
-              <p style={{ color: 'var(--gray-mid)', fontSize: '13px', marginBottom: '24px' }}>
-                {studentNameMap[selectedSubmission.studentId] || selectedSubmission.studentId} · Submitted {selectedSubmission.submittedAt ? new Date(selectedSubmission.submittedAt).toLocaleDateString() : ''}
+              <p style={{ color: 'var(--gray-mid)', fontSize: '13px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <span>{studentNameMap[selectedSubmission.studentId] || selectedSubmission.studentId}</span>
+                <span>·</span>
+                <span>Submitted {formatSubmittedAt(selectedSubmission.submittedAt)}</span>
+                {isSubmissionLate(selectedSubmission) && (
+                  <span style={{ background: '#fee2e2', color: '#dc2626', fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '4px', letterSpacing: '0.3px' }}>LATE</span>
+                )}
+                {getSubmissionDueDateTime(selectedSubmission) && (
+                  <span style={{ color: 'var(--gray-mid)', fontSize: '12px' }}>
+                    · Due {new Date(getSubmissionDueDateTime(selectedSubmission)!).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                  </span>
+                )}
               </p>
 
-              {questions.length > 0 && (() => {
-                let answers: Record<string, string> = {}
-                try { answers = JSON.parse(selectedSubmission.content || '{}').answers || {} } catch {}
-                return (
-                  <div style={{ marginBottom: '24px' }}>
-                    <div style={{ fontSize: '11px', fontWeight: 500, color: 'var(--gray-mid)', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '1px' }}>Student answers</div>
-                    {questions.map((q, idx) => {
-                      const answer = answers[q.id]
-                      const swUrls = showWorkImageUrls[q.id] || []
-                      return (
-                        <div key={q.id} style={{ marginBottom: '16px', paddingBottom: '16px', borderBottom: idx < questions.length - 1 ? '1px solid var(--gray-light)' : 'none' }}>
-                          <div style={{ display: 'flex', gap: '10px', marginBottom: '8px' }}>
-                            <span style={{ fontWeight: 700, color: 'var(--plum)', fontSize: '14px', minWidth: '24px' }}>{idx + 1}.</span>
-                            <span style={{ fontSize: '14px', color: 'var(--gray-dark)' }}><MathRenderer text={q.questionText} /></span>
-                          </div>
-                          {q.questionType === 'show_work' ? (
-                            swUrls.length > 0 ? (
-                              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', paddingLeft: '34px' }}>
-                                {swUrls.map((url, i) => (
-                                  <a key={i} href={url} target="_blank" rel="noopener noreferrer">
-                                    <img src={url} alt="Show work" style={{ width: '120px', height: '90px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--gray-light)' }} onError={e => (e.currentTarget.style.display = 'none')} />
-                                  </a>
-                                ))}
-                              </div>
-                            ) : <p style={{ paddingLeft: '34px', fontSize: '13px', color: 'var(--gray-mid)', fontStyle: 'italic' }}>No photo uploaded</p>
-                          ) : (
-                            <div style={{ paddingLeft: '34px', background: answer ? 'var(--plum-light)' : 'var(--gray-light)', borderRadius: '6px', padding: '8px 12px', fontSize: '14px', color: answer ? 'var(--foreground)' : 'var(--gray-mid)', fontStyle: answer ? 'normal' : 'italic' }}>
-                              {answer || 'No answer provided'}
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                )
-              })()}
+              <AnswersSection questions={questions} content={selectedSubmission.content} showWorkImageUrls={showWorkImageUrls} />
 
               {imageUrls.length > 0 && (
                 <div style={{ marginBottom: '24px' }}>
                   <div style={{ fontSize: '11px', fontWeight: 500, color: 'var(--gray-mid)', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '1px' }}>Submitted photos ({imageUrls.length})</div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 200px))', gap: '12px' }}>
                     {imageUrls.map((url, i) => (
-                      <a key={i} href={url} target="_blank" rel="noopener noreferrer">
-                        <img src={url} alt={`Submission ${i + 1}`} style={{ width: '100%', minHeight: '150px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--gray-light)', cursor: 'pointer' }} onError={e => (e.currentTarget.style.display = 'none')} />
-                      </a>
+                      <SubmissionImage key={i} url={url} alt={'Submission ' + (i + 1)} style={{ width: '100%', minHeight: '150px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--gray-light)', cursor: 'pointer' }} />
                     ))}
                   </div>
                 </div>
               )}
 
-              {selectedSubmission.content && (() => {
-                try {
-                  const parsed = JSON.parse(selectedSubmission.content)
-                  return parsed.notes ? (
-                    <div style={{ background: 'var(--gray-light)', borderRadius: '6px', padding: '12px 16px', marginBottom: '24px' }}>
-                      <div style={{ fontSize: '11px', fontWeight: 500, color: 'var(--gray-mid)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '1px' }}>Student notes</div>
-                      <p style={{ fontSize: '14px', color: 'var(--foreground)' }}>{parsed.notes}</p>
+              <NotesSection content={selectedSubmission.content} />
+
+              {/* ── Video Watch Panel ── */}
+              {(() => {
+                const lessonId = getSubmissionLessonId(selectedSubmission)
+                if (!lessonId) return null
+                const watch = videoWatchMap[`${selectedSubmission.studentId}_${lessonId}`]
+                const pct = watch ? Math.round(watch.percentWatched) : 0
+                const barColor = pct >= 90 ? '#16a34a' : pct >= 50 ? '#d97706' : '#dc2626'
+                return (
+                  <div style={{ background: 'var(--page-bg)', border: '1px solid var(--gray-light)', borderRadius: '8px', padding: '14px 16px', marginBottom: '24px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: watch ? '12px' : '0' }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--gray-mid)" strokeWidth="2">
+                        <ellipse cx="12" cy="12" rx="11" ry="8"/><circle cx="12" cy="12" r="3" fill="var(--gray-mid)"/>
+                      </svg>
+                      <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--gray-mid)', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+                        Video Watch
+                      </span>
+                      {watch && (
+                        <span style={{ marginLeft: 'auto', fontSize: '11px', color: 'var(--gray-mid)' }}>
+                          Last watched {new Date(watch.lastWatchedAt).toLocaleDateString()}
+                        </span>
+                      )}
                     </div>
-                  ) : null
-                } catch { return null }
+                    {watch ? (
+                      <>
+                        <div style={{ height: '6px', background: 'var(--gray-light)', borderRadius: '3px', overflow: 'hidden', marginBottom: '8px' }}>
+                          <div style={{ height: '100%', width: `${Math.min(pct, 100)}%`, background: barColor, borderRadius: '3px', transition: 'width 0.3s' }} />
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: '13px', fontWeight: 600, color: barColor }}>{pct}% watched</span>
+                          <div style={{ display: 'flex', gap: '16px', fontSize: '12px', color: 'var(--gray-mid)' }}>
+                            <span>{formatWatchTime(watch.watchedSeconds)} watched</span>
+                            {watch.durationSeconds ? <span>of {formatWatchTime(watch.durationSeconds)}</span> : null}
+                            {watch.completed && <span style={{ color: '#16a34a', fontWeight: 600 }}>✓ Completed</span>}
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <p style={{ fontSize: '13px', color: 'var(--gray-mid)', fontStyle: 'italic', margin: 0 }}>
+                        No video watch data — student has not played this lesson's video.
+                      </p>
+                    )}
+                  </div>
+                )
               })()}
 
               <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '16px', marginBottom: '20px' }}>
@@ -355,6 +1042,29 @@ export default function GradingPage() {
                   <label style={{ fontSize: '12px', fontWeight: 500, color: 'var(--gray-dark)', display: 'block', marginBottom: '6px' }}>Grade</label>
                   <input type="text" value={grade} onChange={e => setGrade(e.target.value)} placeholder="e.g. 95"
                     style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--gray-light)', borderRadius: '6px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)' }} />
+                  <button
+                    onClick={async () => {
+                      setGrade('100')
+                      if (!selectedSubmission) return
+                      setSaving(true)
+                      try {
+                        const { updateSubmission } = await import('../../../src/graphql/mutations')
+                        await (client.graphql({
+                          query: updateSubmission,
+                          variables: { input: { id: selectedSubmission.id, grade: '100', teacherComment: comment } }
+                        }) as any)
+                        setSubmissions(prev => prev.map(s => s.id === selectedSubmission.id ? { ...s, grade: '100', teacherComment: comment } : s))
+                        setSelectedSubmission(prev => prev ? { ...prev, grade: '100' } : prev)
+                        setSaved(true)
+                        setTimeout(() => setSaved(false), 3000)
+                      } catch (err) { console.error(err) }
+                      finally { setSaving(false) }
+                    }}
+                    disabled={saving}
+                    style={{ marginTop: '6px', background: 'none', border: 'none', color: '#15803d', padding: '0', cursor: 'pointer', fontSize: '11px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px', opacity: saving ? 0.5 : 1 }}>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
+                    Quick-grade 100
+                  </button>
                 </div>
                 <div>
                   <label style={{ fontSize: '12px', fontWeight: 500, color: 'var(--gray-dark)', display: 'block', marginBottom: '6px' }}>Comments for student</label>
@@ -363,13 +1073,84 @@ export default function GradingPage() {
                 </div>
               </div>
 
-              <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                <button onClick={saveGrade} disabled={saving}
-                  style={{ background: saving ? 'var(--gray-light)' : 'var(--plum)', color: saving ? 'var(--gray-mid)' : 'white', padding: '10px 28px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '14px', fontWeight: 500 }}>
-                  {saving ? 'Saving...' : 'Save Grade'}
-                </button>
-                {saved && <span style={{ color: 'var(--plum)', fontSize: '14px' }}>✓ Grade saved!</span>}
-              </div>
+              {selectedSubmission.status === 'returned' ? (
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap', background: '#fffbeb', border: '1px solid #f59e0b', borderRadius: '8px', padding: '12px 16px' }}>
+                  <span style={{ fontSize: '13px', color: '#92400e', flex: 1 }}>
+                    ↩ This submission was sent back to the student for revision.
+                  </span>
+                  <button onClick={pullBackReturn}
+                    style={{ background: 'white', border: '1px solid #f59e0b', color: '#d97706', padding: '8px 18px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                    ✕ Pull Back
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <button onClick={saveGrade} disabled={saving}
+                    style={{ background: saving ? 'var(--gray-light)' : 'var(--plum)', color: saving ? 'var(--gray-mid)' : 'white', padding: '10px 28px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '14px', fontWeight: 500 }}>
+                    {saving ? 'Saving...' : 'Save Grade'}
+                  </button>
+                  {selectedSubmission.grade && (
+                    <button onClick={clearGrade} disabled={clearingGrade}
+                      style={{ background: 'transparent', border: '1px solid var(--gray-light)', color: 'var(--gray-mid)', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: 500 }}>
+                      {clearingGrade ? 'Clearing...' : 'Clear Grade'}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => { setShowReturnForm(v => !v); setReturned(false) }}
+                    style={{ background: 'transparent', border: '1px solid #f59e0b', color: '#d97706', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: 500 }}>
+                    ↩ Return to Student
+                  </button>
+                  {saved && <span style={{ color: 'var(--plum)', fontSize: '14px' }}>✓ Grade saved!</span>}
+                  {gradeCleared && <span style={{ color: 'var(--gray-mid)', fontSize: '14px' }}>Grade cleared</span>}
+                  {returned && <span style={{ color: '#d97706', fontSize: '14px' }}>↩ Sent back to student</span>}
+                </div>
+              )}
+
+              {showReturnForm && (
+                <div style={{ marginTop: '16px', background: '#fffbeb', border: '1px solid #f59e0b', borderRadius: '8px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {selectedSubmission.grade && (
+                    <div style={{ background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: '6px', padding: '10px 14px', fontSize: '13px', color: '#92400e', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span>⚠️</span>
+                      <span>This submission has a grade of <strong>{selectedSubmission.grade}</strong>. Sending it back will remove the grade.</span>
+                    </div>
+                  )}
+                  <div>
+                    <label style={{ fontSize: '12px', fontWeight: 600, color: '#92400e', display: 'block', marginBottom: '6px' }}>
+                      Reason for returning <span style={{ color: '#d97706' }}>*</span> (student will see this)
+                    </label>
+                    <textarea
+                      value={returnReason}
+                      onChange={e => setReturnReason(e.target.value)}
+                      placeholder="e.g. Please redo problems 3 and 4 — show your work for each step."
+                      rows={3}
+                      style={{ width: '100%', padding: '10px 12px', border: '1px solid #f59e0b', borderRadius: '6px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'white', color: '#1a1a1a', resize: 'vertical', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '12px', fontWeight: 600, color: '#92400e', display: 'block', marginBottom: '6px' }}>
+                      New due date <span style={{ color: '#a16207', fontWeight: 400 }}>(optional)</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={returnDueDate}
+                      onChange={e => setReturnDueDate(e.target.value)}
+                      style={{ padding: '8px 12px', border: '1px solid #f59e0b', borderRadius: '6px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'white', color: '#1a1a1a', cursor: 'pointer' }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      onClick={returnToStudent}
+                      disabled={returning || !returnReason.trim()}
+                      style={{ background: returning || !returnReason.trim() ? '#e5e7eb' : '#f59e0b', color: returning || !returnReason.trim() ? '#9ca3af' : 'white', border: 'none', borderRadius: '6px', padding: '8px 20px', fontSize: '13px', fontWeight: 600, cursor: returning || !returnReason.trim() ? 'not-allowed' : 'pointer' }}>
+                      {returning ? 'Sending...' : 'Send Back'}
+                    </button>
+                    <button onClick={() => { setShowReturnForm(false); setReturnReason(''); setReturnDueDate('') }}
+                      style={{ background: 'transparent', border: '1px solid #f59e0b', color: '#92400e', borderRadius: '6px', padding: '8px 14px', fontSize: '13px', cursor: 'pointer' }}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         ) : (

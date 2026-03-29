@@ -78,31 +78,22 @@ export type Semester = {
   startDate: string,
   endDate: string,
   isActive?: boolean | null,
+  courseId?: string | null,
+  course?: Course | null,
   academicYear?: AcademicYear | null,
   enrollments?: ModelEnrollmentConnection | null,
   weeklyPlans?: ModelWeeklyPlanConnection | null,
+  lessonWeightPercent?: number | null,
+  testWeightPercent?: number | null,
+  quizWeightPercent?: number | null,
+  gradeA?: number | null,
+  gradeB?: number | null,
+  gradeC?: number | null,
+  gradeD?: number | null,
   createdAt: string,
   updatedAt: string,
   academicYearSemestersId?: string | null,
-};
-
-export type ModelEnrollmentConnection = {
-  __typename: "ModelEnrollmentConnection",
-  items:  Array<Enrollment | null >,
-  nextToken?: string | null,
-};
-
-export type Enrollment = {
-  __typename: "Enrollment",
-  id: string,
-  studentId: string,
-  planType?: string | null,
-  course?: Course | null,
-  semester?: Semester | null,
-  createdAt: string,
-  updatedAt: string,
-  semesterEnrollmentsId?: string | null,
-  courseEnrollmentsId?: string | null,
+  courseSemestersId?: string | null,
 };
 
 export type Course = {
@@ -117,6 +108,7 @@ export type Course = {
   enrollments?: ModelEnrollmentConnection | null,
   weeklyPlans?: ModelWeeklyPlanConnection | null,
   lessonTemplates?: ModelLessonTemplateConnection | null,
+  semesters?: ModelSemesterConnection | null,
   createdAt: string,
   updatedAt: string,
 };
@@ -168,6 +160,7 @@ export type WeeklyPlan = {
   __typename: "WeeklyPlan",
   id: string,
   weekStartDate: string,
+  assignedStudentIds?: string | null,
   semester?: Semester | null,
   course?: Course | null,
   items?: ModelWeeklyPlanItemConnection | null,
@@ -214,6 +207,11 @@ export type Submission = {
   grade?: string | null,
   submittedAt?: string | null,
   teacherComment?: string | null,
+  isArchived?: boolean | null,
+  archivedAt?: string | null,
+  status?: string | null,
+  returnReason?: string | null,
+  returnDueDate?: string | null,
   assignment?: Assignment | null,
   messages?: ModelSubmissionMessageConnection | null,
   createdAt: string,
@@ -240,6 +238,25 @@ export type SubmissionMessage = {
   submissionMessagesId?: string | null,
 };
 
+export type ModelEnrollmentConnection = {
+  __typename: "ModelEnrollmentConnection",
+  items:  Array<Enrollment | null >,
+  nextToken?: string | null,
+};
+
+export type Enrollment = {
+  __typename: "Enrollment",
+  id: string,
+  studentId: string,
+  planType?: string | null,
+  course?: Course | null,
+  semester?: Semester | null,
+  createdAt: string,
+  updatedAt: string,
+  semesterEnrollmentsId?: string | null,
+  courseEnrollmentsId?: string | null,
+};
+
 export type ModelWeeklyPlanConnection = {
   __typename: "ModelWeeklyPlanConnection",
   items:  Array<WeeklyPlan | null >,
@@ -261,6 +278,7 @@ export type LessonTemplate = {
   worksheetUrl?: string | null,
   videoUrl?: string | null,
   assignmentType?: string | null,
+  lessonCategory?: string | null,
   course?: Course | null,
   questions?: ModelAssignmentQuestionConnection | null,
   createdAt: string,
@@ -303,7 +321,16 @@ export type CreateSemesterInput = {
   startDate: string,
   endDate: string,
   isActive?: boolean | null,
+  courseId?: string | null,
+  lessonWeightPercent?: number | null,
+  testWeightPercent?: number | null,
+  quizWeightPercent?: number | null,
+  gradeA?: number | null,
+  gradeB?: number | null,
+  gradeC?: number | null,
+  gradeD?: number | null,
   academicYearSemestersId?: string | null,
+  courseSemestersId?: string | null,
 };
 
 export type ModelSemesterConditionInput = {
@@ -311,12 +338,21 @@ export type ModelSemesterConditionInput = {
   startDate?: ModelStringInput | null,
   endDate?: ModelStringInput | null,
   isActive?: ModelBooleanInput | null,
+  courseId?: ModelIDInput | null,
+  lessonWeightPercent?: ModelIntInput | null,
+  testWeightPercent?: ModelIntInput | null,
+  quizWeightPercent?: ModelIntInput | null,
+  gradeA?: ModelIntInput | null,
+  gradeB?: ModelIntInput | null,
+  gradeC?: ModelIntInput | null,
+  gradeD?: ModelIntInput | null,
   and?: Array< ModelSemesterConditionInput | null > | null,
   or?: Array< ModelSemesterConditionInput | null > | null,
   not?: ModelSemesterConditionInput | null,
   createdAt?: ModelStringInput | null,
   updatedAt?: ModelStringInput | null,
   academicYearSemestersId?: ModelIDInput | null,
+  courseSemestersId?: ModelIDInput | null,
 };
 
 export type ModelBooleanInput = {
@@ -342,13 +378,34 @@ export type ModelIDInput = {
   size?: ModelSizeInput | null,
 };
 
+export type ModelIntInput = {
+  ne?: number | null,
+  eq?: number | null,
+  le?: number | null,
+  lt?: number | null,
+  ge?: number | null,
+  gt?: number | null,
+  between?: Array< number | null > | null,
+  attributeExists?: boolean | null,
+  attributeType?: ModelAttributeTypes | null,
+};
+
 export type UpdateSemesterInput = {
   id: string,
   name?: string | null,
   startDate?: string | null,
   endDate?: string | null,
   isActive?: boolean | null,
+  courseId?: string | null,
+  lessonWeightPercent?: number | null,
+  testWeightPercent?: number | null,
+  quizWeightPercent?: number | null,
+  gradeA?: number | null,
+  gradeB?: number | null,
+  gradeC?: number | null,
+  gradeD?: number | null,
   academicYearSemestersId?: string | null,
+  courseSemestersId?: string | null,
 };
 
 export type DeleteSemesterInput = {
@@ -411,18 +468,6 @@ export type ModelLessonConditionInput = {
   courseLessonsId?: ModelIDInput | null,
 };
 
-export type ModelIntInput = {
-  ne?: number | null,
-  eq?: number | null,
-  le?: number | null,
-  lt?: number | null,
-  ge?: number | null,
-  gt?: number | null,
-  between?: Array< number | null > | null,
-  attributeExists?: boolean | null,
-  attributeType?: ModelAttributeTypes | null,
-};
-
 export type UpdateLessonInput = {
   id: string,
   title?: string | null,
@@ -440,12 +485,14 @@ export type DeleteLessonInput = {
 export type CreateWeeklyPlanInput = {
   id?: string | null,
   weekStartDate: string,
+  assignedStudentIds?: string | null,
   semesterWeeklyPlansId?: string | null,
   courseWeeklyPlansId?: string | null,
 };
 
 export type ModelWeeklyPlanConditionInput = {
   weekStartDate?: ModelStringInput | null,
+  assignedStudentIds?: ModelStringInput | null,
   and?: Array< ModelWeeklyPlanConditionInput | null > | null,
   or?: Array< ModelWeeklyPlanConditionInput | null > | null,
   not?: ModelWeeklyPlanConditionInput | null,
@@ -458,6 +505,7 @@ export type ModelWeeklyPlanConditionInput = {
 export type UpdateWeeklyPlanInput = {
   id: string,
   weekStartDate?: string | null,
+  assignedStudentIds?: string | null,
   semesterWeeklyPlansId?: string | null,
   courseWeeklyPlansId?: string | null,
 };
@@ -549,6 +597,11 @@ export type CreateSubmissionInput = {
   grade?: string | null,
   submittedAt?: string | null,
   teacherComment?: string | null,
+  isArchived?: boolean | null,
+  archivedAt?: string | null,
+  status?: string | null,
+  returnReason?: string | null,
+  returnDueDate?: string | null,
   assignmentSubmissionsId?: string | null,
 };
 
@@ -561,6 +614,11 @@ export type ModelSubmissionConditionInput = {
   grade?: ModelStringInput | null,
   submittedAt?: ModelStringInput | null,
   teacherComment?: ModelStringInput | null,
+  isArchived?: ModelBooleanInput | null,
+  archivedAt?: ModelStringInput | null,
+  status?: ModelStringInput | null,
+  returnReason?: ModelStringInput | null,
+  returnDueDate?: ModelStringInput | null,
   and?: Array< ModelSubmissionConditionInput | null > | null,
   or?: Array< ModelSubmissionConditionInput | null > | null,
   not?: ModelSubmissionConditionInput | null,
@@ -579,6 +637,11 @@ export type UpdateSubmissionInput = {
   grade?: string | null,
   submittedAt?: string | null,
   teacherComment?: string | null,
+  isArchived?: boolean | null,
+  archivedAt?: string | null,
+  status?: string | null,
+  returnReason?: string | null,
+  returnDueDate?: string | null,
   assignmentSubmissionsId?: string | null,
 };
 
@@ -661,6 +724,7 @@ export type CreateLessonTemplateInput = {
   worksheetUrl?: string | null,
   videoUrl?: string | null,
   assignmentType?: string | null,
+  lessonCategory?: string | null,
   courseLessonTemplatesId?: string | null,
 };
 
@@ -671,6 +735,7 @@ export type ModelLessonTemplateConditionInput = {
   worksheetUrl?: ModelStringInput | null,
   videoUrl?: ModelStringInput | null,
   assignmentType?: ModelStringInput | null,
+  lessonCategory?: ModelStringInput | null,
   and?: Array< ModelLessonTemplateConditionInput | null > | null,
   or?: Array< ModelLessonTemplateConditionInput | null > | null,
   not?: ModelLessonTemplateConditionInput | null,
@@ -687,6 +752,7 @@ export type UpdateLessonTemplateInput = {
   worksheetUrl?: string | null,
   videoUrl?: string | null,
   assignmentType?: string | null,
+  lessonCategory?: string | null,
   courseLessonTemplatesId?: string | null,
 };
 
@@ -729,6 +795,124 @@ export type UpdateAssignmentQuestionInput = {
 };
 
 export type DeleteAssignmentQuestionInput = {
+  id: string,
+};
+
+export type CreateTeacherProfileInput = {
+  id?: string | null,
+  userId: string,
+  email: string,
+  displayName?: string | null,
+  bio?: string | null,
+  profilePictureKey?: string | null,
+};
+
+export type ModelTeacherProfileConditionInput = {
+  userId?: ModelStringInput | null,
+  email?: ModelStringInput | null,
+  displayName?: ModelStringInput | null,
+  bio?: ModelStringInput | null,
+  profilePictureKey?: ModelStringInput | null,
+  and?: Array< ModelTeacherProfileConditionInput | null > | null,
+  or?: Array< ModelTeacherProfileConditionInput | null > | null,
+  not?: ModelTeacherProfileConditionInput | null,
+  createdAt?: ModelStringInput | null,
+  updatedAt?: ModelStringInput | null,
+};
+
+export type TeacherProfile = {
+  __typename: "TeacherProfile",
+  id: string,
+  userId: string,
+  email: string,
+  displayName?: string | null,
+  bio?: string | null,
+  profilePictureKey?: string | null,
+  createdAt: string,
+  updatedAt: string,
+};
+
+export type UpdateTeacherProfileInput = {
+  id: string,
+  userId?: string | null,
+  email?: string | null,
+  displayName?: string | null,
+  bio?: string | null,
+  profilePictureKey?: string | null,
+};
+
+export type DeleteTeacherProfileInput = {
+  id: string,
+};
+
+export type CreateVideoWatchInput = {
+  id?: string | null,
+  studentId: string,
+  lessonId: string,
+  weeklyPlanItemId?: string | null,
+  watchedSeconds?: number | null,
+  durationSeconds?: number | null,
+  percentWatched?: number | null,
+  completed?: boolean | null,
+  lastWatchedAt?: string | null,
+};
+
+export type ModelVideoWatchConditionInput = {
+  studentId?: ModelStringInput | null,
+  lessonId?: ModelStringInput | null,
+  weeklyPlanItemId?: ModelStringInput | null,
+  watchedSeconds?: ModelFloatInput | null,
+  durationSeconds?: ModelFloatInput | null,
+  percentWatched?: ModelFloatInput | null,
+  completed?: ModelBooleanInput | null,
+  lastWatchedAt?: ModelStringInput | null,
+  and?: Array< ModelVideoWatchConditionInput | null > | null,
+  or?: Array< ModelVideoWatchConditionInput | null > | null,
+  not?: ModelVideoWatchConditionInput | null,
+  createdAt?: ModelStringInput | null,
+  updatedAt?: ModelStringInput | null,
+};
+
+export type ModelFloatInput = {
+  ne?: number | null,
+  eq?: number | null,
+  le?: number | null,
+  lt?: number | null,
+  ge?: number | null,
+  gt?: number | null,
+  between?: Array< number | null > | null,
+  attributeExists?: boolean | null,
+  attributeType?: ModelAttributeTypes | null,
+};
+
+export type VideoWatch = {
+  __typename: "VideoWatch",
+  id: string,
+  studentId: string,
+  lessonId: string,
+  weeklyPlanItemId?: string | null,
+  watchedSeconds?: number | null,
+  durationSeconds?: number | null,
+  percentWatched?: number | null,
+  completed?: boolean | null,
+  lastWatchedAt?: string | null,
+  createdAt: string,
+  updatedAt: string,
+};
+
+export type UpdateVideoWatchInput = {
+  id: string,
+  studentId?: string | null,
+  lessonId?: string | null,
+  weeklyPlanItemId?: string | null,
+  watchedSeconds?: number | null,
+  durationSeconds?: number | null,
+  percentWatched?: number | null,
+  completed?: boolean | null,
+  lastWatchedAt?: string | null,
+};
+
+export type DeleteVideoWatchInput = {
   id: string,
 };
 
@@ -820,9 +1004,16 @@ export type CreateStudentProfileInput = {
   email: string,
   firstName: string,
   lastName: string,
+  preferredName?: string | null,
   gradeLevel?: string | null,
   courseId?: string | null,
   planType?: string | null,
+  profilePictureKey?: string | null,
+  status?: string | null,
+  parentEmail?: string | null,
+  parentName?: string | null,
+  parentEmail2?: string | null,
+  parentName2?: string | null,
 };
 
 export type ModelStudentProfileConditionInput = {
@@ -830,9 +1021,16 @@ export type ModelStudentProfileConditionInput = {
   email?: ModelStringInput | null,
   firstName?: ModelStringInput | null,
   lastName?: ModelStringInput | null,
+  preferredName?: ModelStringInput | null,
   gradeLevel?: ModelStringInput | null,
   courseId?: ModelStringInput | null,
   planType?: ModelStringInput | null,
+  profilePictureKey?: ModelStringInput | null,
+  status?: ModelStringInput | null,
+  parentEmail?: ModelStringInput | null,
+  parentName?: ModelStringInput | null,
+  parentEmail2?: ModelStringInput | null,
+  parentName2?: ModelStringInput | null,
   and?: Array< ModelStudentProfileConditionInput | null > | null,
   or?: Array< ModelStudentProfileConditionInput | null > | null,
   not?: ModelStudentProfileConditionInput | null,
@@ -847,9 +1045,48 @@ export type StudentProfile = {
   email: string,
   firstName: string,
   lastName: string,
+  preferredName?: string | null,
   gradeLevel?: string | null,
   courseId?: string | null,
   planType?: string | null,
+  profilePictureKey?: string | null,
+  status?: string | null,
+  parentEmail?: string | null,
+  parentName?: string | null,
+  parentEmail2?: string | null,
+  parentName2?: string | null,
+  parentLinks?: ModelParentStudentLinkConnection | null,
+  createdAt: string,
+  updatedAt: string,
+};
+
+export type ModelParentStudentLinkConnection = {
+  __typename: "ModelParentStudentLinkConnection",
+  items:  Array<ParentStudentLink | null >,
+  nextToken?: string | null,
+};
+
+export type ParentStudentLink = {
+  __typename: "ParentStudentLink",
+  id: string,
+  parentProfileId: string,
+  parentProfile?: ParentProfile | null,
+  studentProfileId: string,
+  studentProfile?: StudentProfile | null,
+  createdAt: string,
+  updatedAt: string,
+  studentProfileParentLinksId?: string | null,
+  parentProfileStudentLinksId?: string | null,
+};
+
+export type ParentProfile = {
+  __typename: "ParentProfile",
+  id: string,
+  userId: string,
+  email: string,
+  firstName: string,
+  lastName: string,
+  studentLinks?: ModelParentStudentLinkConnection | null,
   createdAt: string,
   updatedAt: string,
 };
@@ -860,12 +1097,83 @@ export type UpdateStudentProfileInput = {
   email?: string | null,
   firstName?: string | null,
   lastName?: string | null,
+  preferredName?: string | null,
   gradeLevel?: string | null,
   courseId?: string | null,
   planType?: string | null,
+  profilePictureKey?: string | null,
+  status?: string | null,
+  parentEmail?: string | null,
+  parentName?: string | null,
+  parentEmail2?: string | null,
+  parentName2?: string | null,
 };
 
 export type DeleteStudentProfileInput = {
+  id: string,
+};
+
+export type CreateParentProfileInput = {
+  id?: string | null,
+  userId: string,
+  email: string,
+  firstName: string,
+  lastName: string,
+};
+
+export type ModelParentProfileConditionInput = {
+  userId?: ModelStringInput | null,
+  email?: ModelStringInput | null,
+  firstName?: ModelStringInput | null,
+  lastName?: ModelStringInput | null,
+  and?: Array< ModelParentProfileConditionInput | null > | null,
+  or?: Array< ModelParentProfileConditionInput | null > | null,
+  not?: ModelParentProfileConditionInput | null,
+  createdAt?: ModelStringInput | null,
+  updatedAt?: ModelStringInput | null,
+};
+
+export type UpdateParentProfileInput = {
+  id: string,
+  userId?: string | null,
+  email?: string | null,
+  firstName?: string | null,
+  lastName?: string | null,
+};
+
+export type DeleteParentProfileInput = {
+  id: string,
+};
+
+export type CreateParentStudentLinkInput = {
+  id?: string | null,
+  parentProfileId: string,
+  studentProfileId: string,
+  studentProfileParentLinksId?: string | null,
+  parentProfileStudentLinksId?: string | null,
+};
+
+export type ModelParentStudentLinkConditionInput = {
+  parentProfileId?: ModelIDInput | null,
+  studentProfileId?: ModelIDInput | null,
+  and?: Array< ModelParentStudentLinkConditionInput | null > | null,
+  or?: Array< ModelParentStudentLinkConditionInput | null > | null,
+  not?: ModelParentStudentLinkConditionInput | null,
+  createdAt?: ModelStringInput | null,
+  updatedAt?: ModelStringInput | null,
+  studentProfileParentLinksId?: ModelIDInput | null,
+  parentProfileStudentLinksId?: ModelIDInput | null,
+};
+
+export type UpdateParentStudentLinkInput = {
+  id: string,
+  parentProfileId?: string | null,
+  studentProfileId?: string | null,
+  studentProfileParentLinksId?: string | null,
+  parentProfileStudentLinksId?: string | null,
+};
+
+export type DeleteParentStudentLinkInput = {
   id: string,
 };
 
@@ -891,12 +1199,21 @@ export type ModelSemesterFilterInput = {
   startDate?: ModelStringInput | null,
   endDate?: ModelStringInput | null,
   isActive?: ModelBooleanInput | null,
+  courseId?: ModelIDInput | null,
+  lessonWeightPercent?: ModelIntInput | null,
+  testWeightPercent?: ModelIntInput | null,
+  quizWeightPercent?: ModelIntInput | null,
+  gradeA?: ModelIntInput | null,
+  gradeB?: ModelIntInput | null,
+  gradeC?: ModelIntInput | null,
+  gradeD?: ModelIntInput | null,
   createdAt?: ModelStringInput | null,
   updatedAt?: ModelStringInput | null,
   and?: Array< ModelSemesterFilterInput | null > | null,
   or?: Array< ModelSemesterFilterInput | null > | null,
   not?: ModelSemesterFilterInput | null,
   academicYearSemestersId?: ModelIDInput | null,
+  courseSemestersId?: ModelIDInput | null,
 };
 
 export type ModelCourseFilterInput = {
@@ -936,6 +1253,7 @@ export type ModelLessonFilterInput = {
 export type ModelWeeklyPlanFilterInput = {
   id?: ModelIDInput | null,
   weekStartDate?: ModelStringInput | null,
+  assignedStudentIds?: ModelStringInput | null,
   createdAt?: ModelStringInput | null,
   updatedAt?: ModelStringInput | null,
   and?: Array< ModelWeeklyPlanFilterInput | null > | null,
@@ -984,6 +1302,11 @@ export type ModelSubmissionFilterInput = {
   grade?: ModelStringInput | null,
   submittedAt?: ModelStringInput | null,
   teacherComment?: ModelStringInput | null,
+  isArchived?: ModelBooleanInput | null,
+  archivedAt?: ModelStringInput | null,
+  status?: ModelStringInput | null,
+  returnReason?: ModelStringInput | null,
+  returnDueDate?: ModelStringInput | null,
   createdAt?: ModelStringInput | null,
   updatedAt?: ModelStringInput | null,
   and?: Array< ModelSubmissionFilterInput | null > | null,
@@ -1027,6 +1350,7 @@ export type ModelLessonTemplateFilterInput = {
   worksheetUrl?: ModelStringInput | null,
   videoUrl?: ModelStringInput | null,
   assignmentType?: ModelStringInput | null,
+  lessonCategory?: ModelStringInput | null,
   createdAt?: ModelStringInput | null,
   updatedAt?: ModelStringInput | null,
   and?: Array< ModelLessonTemplateFilterInput | null > | null,
@@ -1048,6 +1372,49 @@ export type ModelAssignmentQuestionFilterInput = {
   or?: Array< ModelAssignmentQuestionFilterInput | null > | null,
   not?: ModelAssignmentQuestionFilterInput | null,
   lessonTemplateQuestionsId?: ModelIDInput | null,
+};
+
+export type ModelTeacherProfileFilterInput = {
+  id?: ModelIDInput | null,
+  userId?: ModelStringInput | null,
+  email?: ModelStringInput | null,
+  displayName?: ModelStringInput | null,
+  bio?: ModelStringInput | null,
+  profilePictureKey?: ModelStringInput | null,
+  createdAt?: ModelStringInput | null,
+  updatedAt?: ModelStringInput | null,
+  and?: Array< ModelTeacherProfileFilterInput | null > | null,
+  or?: Array< ModelTeacherProfileFilterInput | null > | null,
+  not?: ModelTeacherProfileFilterInput | null,
+};
+
+export type ModelTeacherProfileConnection = {
+  __typename: "ModelTeacherProfileConnection",
+  items:  Array<TeacherProfile | null >,
+  nextToken?: string | null,
+};
+
+export type ModelVideoWatchFilterInput = {
+  id?: ModelIDInput | null,
+  studentId?: ModelStringInput | null,
+  lessonId?: ModelStringInput | null,
+  weeklyPlanItemId?: ModelStringInput | null,
+  watchedSeconds?: ModelFloatInput | null,
+  durationSeconds?: ModelFloatInput | null,
+  percentWatched?: ModelFloatInput | null,
+  completed?: ModelBooleanInput | null,
+  lastWatchedAt?: ModelStringInput | null,
+  createdAt?: ModelStringInput | null,
+  updatedAt?: ModelStringInput | null,
+  and?: Array< ModelVideoWatchFilterInput | null > | null,
+  or?: Array< ModelVideoWatchFilterInput | null > | null,
+  not?: ModelVideoWatchFilterInput | null,
+};
+
+export type ModelVideoWatchConnection = {
+  __typename: "ModelVideoWatchConnection",
+  items:  Array<VideoWatch | null >,
+  nextToken?: string | null,
 };
 
 export type ModelParentInviteFilterInput = {
@@ -1093,9 +1460,16 @@ export type ModelStudentProfileFilterInput = {
   email?: ModelStringInput | null,
   firstName?: ModelStringInput | null,
   lastName?: ModelStringInput | null,
+  preferredName?: ModelStringInput | null,
   gradeLevel?: ModelStringInput | null,
   courseId?: ModelStringInput | null,
   planType?: ModelStringInput | null,
+  profilePictureKey?: ModelStringInput | null,
+  status?: ModelStringInput | null,
+  parentEmail?: ModelStringInput | null,
+  parentName?: ModelStringInput | null,
+  parentEmail2?: ModelStringInput | null,
+  parentName2?: ModelStringInput | null,
   createdAt?: ModelStringInput | null,
   updatedAt?: ModelStringInput | null,
   and?: Array< ModelStudentProfileFilterInput | null > | null,
@@ -1107,6 +1481,38 @@ export type ModelStudentProfileConnection = {
   __typename: "ModelStudentProfileConnection",
   items:  Array<StudentProfile | null >,
   nextToken?: string | null,
+};
+
+export type ModelParentProfileFilterInput = {
+  id?: ModelIDInput | null,
+  userId?: ModelStringInput | null,
+  email?: ModelStringInput | null,
+  firstName?: ModelStringInput | null,
+  lastName?: ModelStringInput | null,
+  createdAt?: ModelStringInput | null,
+  updatedAt?: ModelStringInput | null,
+  and?: Array< ModelParentProfileFilterInput | null > | null,
+  or?: Array< ModelParentProfileFilterInput | null > | null,
+  not?: ModelParentProfileFilterInput | null,
+};
+
+export type ModelParentProfileConnection = {
+  __typename: "ModelParentProfileConnection",
+  items:  Array<ParentProfile | null >,
+  nextToken?: string | null,
+};
+
+export type ModelParentStudentLinkFilterInput = {
+  id?: ModelIDInput | null,
+  parentProfileId?: ModelIDInput | null,
+  studentProfileId?: ModelIDInput | null,
+  createdAt?: ModelStringInput | null,
+  updatedAt?: ModelStringInput | null,
+  and?: Array< ModelParentStudentLinkFilterInput | null > | null,
+  or?: Array< ModelParentStudentLinkFilterInput | null > | null,
+  not?: ModelParentStudentLinkFilterInput | null,
+  studentProfileParentLinksId?: ModelIDInput | null,
+  parentProfileStudentLinksId?: ModelIDInput | null,
 };
 
 export type ModelSubscriptionAcademicYearFilterInput = {
@@ -1155,6 +1561,14 @@ export type ModelSubscriptionSemesterFilterInput = {
   startDate?: ModelSubscriptionStringInput | null,
   endDate?: ModelSubscriptionStringInput | null,
   isActive?: ModelSubscriptionBooleanInput | null,
+  courseId?: ModelSubscriptionIDInput | null,
+  lessonWeightPercent?: ModelSubscriptionIntInput | null,
+  testWeightPercent?: ModelSubscriptionIntInput | null,
+  quizWeightPercent?: ModelSubscriptionIntInput | null,
+  gradeA?: ModelSubscriptionIntInput | null,
+  gradeB?: ModelSubscriptionIntInput | null,
+  gradeC?: ModelSubscriptionIntInput | null,
+  gradeD?: ModelSubscriptionIntInput | null,
   createdAt?: ModelSubscriptionStringInput | null,
   updatedAt?: ModelSubscriptionStringInput | null,
   and?: Array< ModelSubscriptionSemesterFilterInput | null > | null,
@@ -1166,6 +1580,18 @@ export type ModelSubscriptionSemesterFilterInput = {
 export type ModelSubscriptionBooleanInput = {
   ne?: boolean | null,
   eq?: boolean | null,
+};
+
+export type ModelSubscriptionIntInput = {
+  ne?: number | null,
+  eq?: number | null,
+  le?: number | null,
+  lt?: number | null,
+  ge?: number | null,
+  gt?: number | null,
+  between?: Array< number | null > | null,
+  in?: Array< number | null > | null,
+  notIn?: Array< number | null > | null,
 };
 
 export type ModelSubscriptionCourseFilterInput = {
@@ -1183,6 +1609,7 @@ export type ModelSubscriptionCourseFilterInput = {
   courseEnrollmentsId?: ModelSubscriptionIDInput | null,
   courseWeeklyPlansId?: ModelSubscriptionIDInput | null,
   courseLessonTemplatesId?: ModelSubscriptionIDInput | null,
+  courseSemestersId?: ModelSubscriptionIDInput | null,
 };
 
 export type ModelSubscriptionLessonFilterInput = {
@@ -1199,21 +1626,10 @@ export type ModelSubscriptionLessonFilterInput = {
   lessonWeeklyPlanItemsId?: ModelSubscriptionIDInput | null,
 };
 
-export type ModelSubscriptionIntInput = {
-  ne?: number | null,
-  eq?: number | null,
-  le?: number | null,
-  lt?: number | null,
-  ge?: number | null,
-  gt?: number | null,
-  between?: Array< number | null > | null,
-  in?: Array< number | null > | null,
-  notIn?: Array< number | null > | null,
-};
-
 export type ModelSubscriptionWeeklyPlanFilterInput = {
   id?: ModelSubscriptionIDInput | null,
   weekStartDate?: ModelSubscriptionStringInput | null,
+  assignedStudentIds?: ModelSubscriptionStringInput | null,
   createdAt?: ModelSubscriptionStringInput | null,
   updatedAt?: ModelSubscriptionStringInput | null,
   and?: Array< ModelSubscriptionWeeklyPlanFilterInput | null > | null,
@@ -1256,6 +1672,11 @@ export type ModelSubscriptionSubmissionFilterInput = {
   grade?: ModelSubscriptionStringInput | null,
   submittedAt?: ModelSubscriptionStringInput | null,
   teacherComment?: ModelSubscriptionStringInput | null,
+  isArchived?: ModelSubscriptionBooleanInput | null,
+  archivedAt?: ModelSubscriptionStringInput | null,
+  status?: ModelSubscriptionStringInput | null,
+  returnReason?: ModelSubscriptionStringInput | null,
+  returnDueDate?: ModelSubscriptionStringInput | null,
   createdAt?: ModelSubscriptionStringInput | null,
   updatedAt?: ModelSubscriptionStringInput | null,
   and?: Array< ModelSubscriptionSubmissionFilterInput | null > | null,
@@ -1293,6 +1714,7 @@ export type ModelSubscriptionLessonTemplateFilterInput = {
   worksheetUrl?: ModelSubscriptionStringInput | null,
   videoUrl?: ModelSubscriptionStringInput | null,
   assignmentType?: ModelSubscriptionStringInput | null,
+  lessonCategory?: ModelSubscriptionStringInput | null,
   createdAt?: ModelSubscriptionStringInput | null,
   updatedAt?: ModelSubscriptionStringInput | null,
   and?: Array< ModelSubscriptionLessonTemplateFilterInput | null > | null,
@@ -1311,6 +1733,47 @@ export type ModelSubscriptionAssignmentQuestionFilterInput = {
   updatedAt?: ModelSubscriptionStringInput | null,
   and?: Array< ModelSubscriptionAssignmentQuestionFilterInput | null > | null,
   or?: Array< ModelSubscriptionAssignmentQuestionFilterInput | null > | null,
+};
+
+export type ModelSubscriptionTeacherProfileFilterInput = {
+  id?: ModelSubscriptionIDInput | null,
+  userId?: ModelSubscriptionStringInput | null,
+  email?: ModelSubscriptionStringInput | null,
+  displayName?: ModelSubscriptionStringInput | null,
+  bio?: ModelSubscriptionStringInput | null,
+  profilePictureKey?: ModelSubscriptionStringInput | null,
+  createdAt?: ModelSubscriptionStringInput | null,
+  updatedAt?: ModelSubscriptionStringInput | null,
+  and?: Array< ModelSubscriptionTeacherProfileFilterInput | null > | null,
+  or?: Array< ModelSubscriptionTeacherProfileFilterInput | null > | null,
+};
+
+export type ModelSubscriptionVideoWatchFilterInput = {
+  id?: ModelSubscriptionIDInput | null,
+  studentId?: ModelSubscriptionStringInput | null,
+  lessonId?: ModelSubscriptionStringInput | null,
+  weeklyPlanItemId?: ModelSubscriptionStringInput | null,
+  watchedSeconds?: ModelSubscriptionFloatInput | null,
+  durationSeconds?: ModelSubscriptionFloatInput | null,
+  percentWatched?: ModelSubscriptionFloatInput | null,
+  completed?: ModelSubscriptionBooleanInput | null,
+  lastWatchedAt?: ModelSubscriptionStringInput | null,
+  createdAt?: ModelSubscriptionStringInput | null,
+  updatedAt?: ModelSubscriptionStringInput | null,
+  and?: Array< ModelSubscriptionVideoWatchFilterInput | null > | null,
+  or?: Array< ModelSubscriptionVideoWatchFilterInput | null > | null,
+};
+
+export type ModelSubscriptionFloatInput = {
+  ne?: number | null,
+  eq?: number | null,
+  le?: number | null,
+  lt?: number | null,
+  ge?: number | null,
+  gt?: number | null,
+  between?: Array< number | null > | null,
+  in?: Array< number | null > | null,
+  notIn?: Array< number | null > | null,
 };
 
 export type ModelSubscriptionParentInviteFilterInput = {
@@ -1342,13 +1805,44 @@ export type ModelSubscriptionStudentProfileFilterInput = {
   email?: ModelSubscriptionStringInput | null,
   firstName?: ModelSubscriptionStringInput | null,
   lastName?: ModelSubscriptionStringInput | null,
+  preferredName?: ModelSubscriptionStringInput | null,
   gradeLevel?: ModelSubscriptionStringInput | null,
   courseId?: ModelSubscriptionStringInput | null,
   planType?: ModelSubscriptionStringInput | null,
+  profilePictureKey?: ModelSubscriptionStringInput | null,
+  status?: ModelSubscriptionStringInput | null,
+  parentEmail?: ModelSubscriptionStringInput | null,
+  parentName?: ModelSubscriptionStringInput | null,
+  parentEmail2?: ModelSubscriptionStringInput | null,
+  parentName2?: ModelSubscriptionStringInput | null,
   createdAt?: ModelSubscriptionStringInput | null,
   updatedAt?: ModelSubscriptionStringInput | null,
   and?: Array< ModelSubscriptionStudentProfileFilterInput | null > | null,
   or?: Array< ModelSubscriptionStudentProfileFilterInput | null > | null,
+  studentProfileParentLinksId?: ModelSubscriptionIDInput | null,
+};
+
+export type ModelSubscriptionParentProfileFilterInput = {
+  id?: ModelSubscriptionIDInput | null,
+  userId?: ModelSubscriptionStringInput | null,
+  email?: ModelSubscriptionStringInput | null,
+  firstName?: ModelSubscriptionStringInput | null,
+  lastName?: ModelSubscriptionStringInput | null,
+  createdAt?: ModelSubscriptionStringInput | null,
+  updatedAt?: ModelSubscriptionStringInput | null,
+  and?: Array< ModelSubscriptionParentProfileFilterInput | null > | null,
+  or?: Array< ModelSubscriptionParentProfileFilterInput | null > | null,
+  parentProfileStudentLinksId?: ModelSubscriptionIDInput | null,
+};
+
+export type ModelSubscriptionParentStudentLinkFilterInput = {
+  id?: ModelSubscriptionIDInput | null,
+  parentProfileId?: ModelSubscriptionIDInput | null,
+  studentProfileId?: ModelSubscriptionIDInput | null,
+  createdAt?: ModelSubscriptionStringInput | null,
+  updatedAt?: ModelSubscriptionStringInput | null,
+  and?: Array< ModelSubscriptionParentStudentLinkFilterInput | null > | null,
+  or?: Array< ModelSubscriptionParentStudentLinkFilterInput | null > | null,
 };
 
 export type CreateAcademicYearMutationVariables = {
@@ -1421,6 +1915,17 @@ export type CreateSemesterMutation = {
     startDate: string,
     endDate: string,
     isActive?: boolean | null,
+    courseId?: string | null,
+    course?:  {
+      __typename: "Course",
+      id: string,
+      title: string,
+      description?: string | null,
+      gradeLevel?: string | null,
+      isArchived?: boolean | null,
+      createdAt: string,
+      updatedAt: string,
+    } | null,
     academicYear?:  {
       __typename: "AcademicYear",
       id: string,
@@ -1436,9 +1941,17 @@ export type CreateSemesterMutation = {
       __typename: "ModelWeeklyPlanConnection",
       nextToken?: string | null,
     } | null,
+    lessonWeightPercent?: number | null,
+    testWeightPercent?: number | null,
+    quizWeightPercent?: number | null,
+    gradeA?: number | null,
+    gradeB?: number | null,
+    gradeC?: number | null,
+    gradeD?: number | null,
     createdAt: string,
     updatedAt: string,
     academicYearSemestersId?: string | null,
+    courseSemestersId?: string | null,
   } | null,
 };
 
@@ -1455,6 +1968,17 @@ export type UpdateSemesterMutation = {
     startDate: string,
     endDate: string,
     isActive?: boolean | null,
+    courseId?: string | null,
+    course?:  {
+      __typename: "Course",
+      id: string,
+      title: string,
+      description?: string | null,
+      gradeLevel?: string | null,
+      isArchived?: boolean | null,
+      createdAt: string,
+      updatedAt: string,
+    } | null,
     academicYear?:  {
       __typename: "AcademicYear",
       id: string,
@@ -1470,9 +1994,17 @@ export type UpdateSemesterMutation = {
       __typename: "ModelWeeklyPlanConnection",
       nextToken?: string | null,
     } | null,
+    lessonWeightPercent?: number | null,
+    testWeightPercent?: number | null,
+    quizWeightPercent?: number | null,
+    gradeA?: number | null,
+    gradeB?: number | null,
+    gradeC?: number | null,
+    gradeD?: number | null,
     createdAt: string,
     updatedAt: string,
     academicYearSemestersId?: string | null,
+    courseSemestersId?: string | null,
   } | null,
 };
 
@@ -1489,6 +2021,17 @@ export type DeleteSemesterMutation = {
     startDate: string,
     endDate: string,
     isActive?: boolean | null,
+    courseId?: string | null,
+    course?:  {
+      __typename: "Course",
+      id: string,
+      title: string,
+      description?: string | null,
+      gradeLevel?: string | null,
+      isArchived?: boolean | null,
+      createdAt: string,
+      updatedAt: string,
+    } | null,
     academicYear?:  {
       __typename: "AcademicYear",
       id: string,
@@ -1504,9 +2047,17 @@ export type DeleteSemesterMutation = {
       __typename: "ModelWeeklyPlanConnection",
       nextToken?: string | null,
     } | null,
+    lessonWeightPercent?: number | null,
+    testWeightPercent?: number | null,
+    quizWeightPercent?: number | null,
+    gradeA?: number | null,
+    gradeB?: number | null,
+    gradeC?: number | null,
+    gradeD?: number | null,
     createdAt: string,
     updatedAt: string,
     academicYearSemestersId?: string | null,
+    courseSemestersId?: string | null,
   } | null,
 };
 
@@ -1541,6 +2092,10 @@ export type CreateCourseMutation = {
     } | null,
     lessonTemplates?:  {
       __typename: "ModelLessonTemplateConnection",
+      nextToken?: string | null,
+    } | null,
+    semesters?:  {
+      __typename: "ModelSemesterConnection",
       nextToken?: string | null,
     } | null,
     createdAt: string,
@@ -1581,6 +2136,10 @@ export type UpdateCourseMutation = {
       __typename: "ModelLessonTemplateConnection",
       nextToken?: string | null,
     } | null,
+    semesters?:  {
+      __typename: "ModelSemesterConnection",
+      nextToken?: string | null,
+    } | null,
     createdAt: string,
     updatedAt: string,
   } | null,
@@ -1617,6 +2176,10 @@ export type DeleteCourseMutation = {
     } | null,
     lessonTemplates?:  {
       __typename: "ModelLessonTemplateConnection",
+      nextToken?: string | null,
+    } | null,
+    semesters?:  {
+      __typename: "ModelSemesterConnection",
       nextToken?: string | null,
     } | null,
     createdAt: string,
@@ -1736,6 +2299,7 @@ export type CreateWeeklyPlanMutation = {
     __typename: "WeeklyPlan",
     id: string,
     weekStartDate: string,
+    assignedStudentIds?: string | null,
     semester?:  {
       __typename: "Semester",
       id: string,
@@ -1743,9 +2307,18 @@ export type CreateWeeklyPlanMutation = {
       startDate: string,
       endDate: string,
       isActive?: boolean | null,
+      courseId?: string | null,
+      lessonWeightPercent?: number | null,
+      testWeightPercent?: number | null,
+      quizWeightPercent?: number | null,
+      gradeA?: number | null,
+      gradeB?: number | null,
+      gradeC?: number | null,
+      gradeD?: number | null,
       createdAt: string,
       updatedAt: string,
       academicYearSemestersId?: string | null,
+      courseSemestersId?: string | null,
     } | null,
     course?:  {
       __typename: "Course",
@@ -1778,6 +2351,7 @@ export type UpdateWeeklyPlanMutation = {
     __typename: "WeeklyPlan",
     id: string,
     weekStartDate: string,
+    assignedStudentIds?: string | null,
     semester?:  {
       __typename: "Semester",
       id: string,
@@ -1785,9 +2359,18 @@ export type UpdateWeeklyPlanMutation = {
       startDate: string,
       endDate: string,
       isActive?: boolean | null,
+      courseId?: string | null,
+      lessonWeightPercent?: number | null,
+      testWeightPercent?: number | null,
+      quizWeightPercent?: number | null,
+      gradeA?: number | null,
+      gradeB?: number | null,
+      gradeC?: number | null,
+      gradeD?: number | null,
       createdAt: string,
       updatedAt: string,
       academicYearSemestersId?: string | null,
+      courseSemestersId?: string | null,
     } | null,
     course?:  {
       __typename: "Course",
@@ -1820,6 +2403,7 @@ export type DeleteWeeklyPlanMutation = {
     __typename: "WeeklyPlan",
     id: string,
     weekStartDate: string,
+    assignedStudentIds?: string | null,
     semester?:  {
       __typename: "Semester",
       id: string,
@@ -1827,9 +2411,18 @@ export type DeleteWeeklyPlanMutation = {
       startDate: string,
       endDate: string,
       isActive?: boolean | null,
+      courseId?: string | null,
+      lessonWeightPercent?: number | null,
+      testWeightPercent?: number | null,
+      quizWeightPercent?: number | null,
+      gradeA?: number | null,
+      gradeB?: number | null,
+      gradeC?: number | null,
+      gradeD?: number | null,
       createdAt: string,
       updatedAt: string,
       academicYearSemestersId?: string | null,
+      courseSemestersId?: string | null,
     } | null,
     course?:  {
       __typename: "Course",
@@ -1881,6 +2474,7 @@ export type CreateWeeklyPlanItemMutation = {
       __typename: "WeeklyPlan",
       id: string,
       weekStartDate: string,
+      assignedStudentIds?: string | null,
       createdAt: string,
       updatedAt: string,
       semesterWeeklyPlansId?: string | null,
@@ -1926,6 +2520,7 @@ export type UpdateWeeklyPlanItemMutation = {
       __typename: "WeeklyPlan",
       id: string,
       weekStartDate: string,
+      assignedStudentIds?: string | null,
       createdAt: string,
       updatedAt: string,
       semesterWeeklyPlansId?: string | null,
@@ -1971,6 +2566,7 @@ export type DeleteWeeklyPlanItemMutation = {
       __typename: "WeeklyPlan",
       id: string,
       weekStartDate: string,
+      assignedStudentIds?: string | null,
       createdAt: string,
       updatedAt: string,
       semesterWeeklyPlansId?: string | null,
@@ -2103,6 +2699,11 @@ export type CreateSubmissionMutation = {
     grade?: string | null,
     submittedAt?: string | null,
     teacherComment?: string | null,
+    isArchived?: boolean | null,
+    archivedAt?: string | null,
+    status?: string | null,
+    returnReason?: string | null,
+    returnDueDate?: string | null,
     assignment?:  {
       __typename: "Assignment",
       id: string,
@@ -2141,6 +2742,11 @@ export type UpdateSubmissionMutation = {
     grade?: string | null,
     submittedAt?: string | null,
     teacherComment?: string | null,
+    isArchived?: boolean | null,
+    archivedAt?: string | null,
+    status?: string | null,
+    returnReason?: string | null,
+    returnDueDate?: string | null,
     assignment?:  {
       __typename: "Assignment",
       id: string,
@@ -2179,6 +2785,11 @@ export type DeleteSubmissionMutation = {
     grade?: string | null,
     submittedAt?: string | null,
     teacherComment?: string | null,
+    isArchived?: boolean | null,
+    archivedAt?: string | null,
+    status?: string | null,
+    returnReason?: string | null,
+    returnDueDate?: string | null,
     assignment?:  {
       __typename: "Assignment",
       id: string,
@@ -2224,6 +2835,11 @@ export type CreateSubmissionMessageMutation = {
       grade?: string | null,
       submittedAt?: string | null,
       teacherComment?: string | null,
+      isArchived?: boolean | null,
+      archivedAt?: string | null,
+      status?: string | null,
+      returnReason?: string | null,
+      returnDueDate?: string | null,
       createdAt: string,
       updatedAt: string,
       assignmentSubmissionsId?: string | null,
@@ -2258,6 +2874,11 @@ export type UpdateSubmissionMessageMutation = {
       grade?: string | null,
       submittedAt?: string | null,
       teacherComment?: string | null,
+      isArchived?: boolean | null,
+      archivedAt?: string | null,
+      status?: string | null,
+      returnReason?: string | null,
+      returnDueDate?: string | null,
       createdAt: string,
       updatedAt: string,
       assignmentSubmissionsId?: string | null,
@@ -2292,6 +2913,11 @@ export type DeleteSubmissionMessageMutation = {
       grade?: string | null,
       submittedAt?: string | null,
       teacherComment?: string | null,
+      isArchived?: boolean | null,
+      archivedAt?: string | null,
+      status?: string | null,
+      returnReason?: string | null,
+      returnDueDate?: string | null,
       createdAt: string,
       updatedAt: string,
       assignmentSubmissionsId?: string | null,
@@ -2330,9 +2956,18 @@ export type CreateEnrollmentMutation = {
       startDate: string,
       endDate: string,
       isActive?: boolean | null,
+      courseId?: string | null,
+      lessonWeightPercent?: number | null,
+      testWeightPercent?: number | null,
+      quizWeightPercent?: number | null,
+      gradeA?: number | null,
+      gradeB?: number | null,
+      gradeC?: number | null,
+      gradeD?: number | null,
       createdAt: string,
       updatedAt: string,
       academicYearSemestersId?: string | null,
+      courseSemestersId?: string | null,
     } | null,
     createdAt: string,
     updatedAt: string,
@@ -2369,9 +3004,18 @@ export type UpdateEnrollmentMutation = {
       startDate: string,
       endDate: string,
       isActive?: boolean | null,
+      courseId?: string | null,
+      lessonWeightPercent?: number | null,
+      testWeightPercent?: number | null,
+      quizWeightPercent?: number | null,
+      gradeA?: number | null,
+      gradeB?: number | null,
+      gradeC?: number | null,
+      gradeD?: number | null,
       createdAt: string,
       updatedAt: string,
       academicYearSemestersId?: string | null,
+      courseSemestersId?: string | null,
     } | null,
     createdAt: string,
     updatedAt: string,
@@ -2408,9 +3052,18 @@ export type DeleteEnrollmentMutation = {
       startDate: string,
       endDate: string,
       isActive?: boolean | null,
+      courseId?: string | null,
+      lessonWeightPercent?: number | null,
+      testWeightPercent?: number | null,
+      quizWeightPercent?: number | null,
+      gradeA?: number | null,
+      gradeB?: number | null,
+      gradeC?: number | null,
+      gradeD?: number | null,
       createdAt: string,
       updatedAt: string,
       academicYearSemestersId?: string | null,
+      courseSemestersId?: string | null,
     } | null,
     createdAt: string,
     updatedAt: string,
@@ -2434,6 +3087,7 @@ export type CreateLessonTemplateMutation = {
     worksheetUrl?: string | null,
     videoUrl?: string | null,
     assignmentType?: string | null,
+    lessonCategory?: string | null,
     course?:  {
       __typename: "Course",
       id: string,
@@ -2469,6 +3123,7 @@ export type UpdateLessonTemplateMutation = {
     worksheetUrl?: string | null,
     videoUrl?: string | null,
     assignmentType?: string | null,
+    lessonCategory?: string | null,
     course?:  {
       __typename: "Course",
       id: string,
@@ -2504,6 +3159,7 @@ export type DeleteLessonTemplateMutation = {
     worksheetUrl?: string | null,
     videoUrl?: string | null,
     assignmentType?: string | null,
+    lessonCategory?: string | null,
     course?:  {
       __typename: "Course",
       id: string,
@@ -2547,6 +3203,7 @@ export type CreateAssignmentQuestionMutation = {
       worksheetUrl?: string | null,
       videoUrl?: string | null,
       assignmentType?: string | null,
+      lessonCategory?: string | null,
       createdAt: string,
       updatedAt: string,
       courseLessonTemplatesId?: string | null,
@@ -2580,6 +3237,7 @@ export type UpdateAssignmentQuestionMutation = {
       worksheetUrl?: string | null,
       videoUrl?: string | null,
       assignmentType?: string | null,
+      lessonCategory?: string | null,
       createdAt: string,
       updatedAt: string,
       courseLessonTemplatesId?: string | null,
@@ -2613,6 +3271,7 @@ export type DeleteAssignmentQuestionMutation = {
       worksheetUrl?: string | null,
       videoUrl?: string | null,
       assignmentType?: string | null,
+      lessonCategory?: string | null,
       createdAt: string,
       updatedAt: string,
       courseLessonTemplatesId?: string | null,
@@ -2620,6 +3279,129 @@ export type DeleteAssignmentQuestionMutation = {
     createdAt: string,
     updatedAt: string,
     lessonTemplateQuestionsId?: string | null,
+  } | null,
+};
+
+export type CreateTeacherProfileMutationVariables = {
+  input: CreateTeacherProfileInput,
+  condition?: ModelTeacherProfileConditionInput | null,
+};
+
+export type CreateTeacherProfileMutation = {
+  createTeacherProfile?:  {
+    __typename: "TeacherProfile",
+    id: string,
+    userId: string,
+    email: string,
+    displayName?: string | null,
+    bio?: string | null,
+    profilePictureKey?: string | null,
+    createdAt: string,
+    updatedAt: string,
+  } | null,
+};
+
+export type UpdateTeacherProfileMutationVariables = {
+  input: UpdateTeacherProfileInput,
+  condition?: ModelTeacherProfileConditionInput | null,
+};
+
+export type UpdateTeacherProfileMutation = {
+  updateTeacherProfile?:  {
+    __typename: "TeacherProfile",
+    id: string,
+    userId: string,
+    email: string,
+    displayName?: string | null,
+    bio?: string | null,
+    profilePictureKey?: string | null,
+    createdAt: string,
+    updatedAt: string,
+  } | null,
+};
+
+export type DeleteTeacherProfileMutationVariables = {
+  input: DeleteTeacherProfileInput,
+  condition?: ModelTeacherProfileConditionInput | null,
+};
+
+export type DeleteTeacherProfileMutation = {
+  deleteTeacherProfile?:  {
+    __typename: "TeacherProfile",
+    id: string,
+    userId: string,
+    email: string,
+    displayName?: string | null,
+    bio?: string | null,
+    profilePictureKey?: string | null,
+    createdAt: string,
+    updatedAt: string,
+  } | null,
+};
+
+export type CreateVideoWatchMutationVariables = {
+  input: CreateVideoWatchInput,
+  condition?: ModelVideoWatchConditionInput | null,
+};
+
+export type CreateVideoWatchMutation = {
+  createVideoWatch?:  {
+    __typename: "VideoWatch",
+    id: string,
+    studentId: string,
+    lessonId: string,
+    weeklyPlanItemId?: string | null,
+    watchedSeconds?: number | null,
+    durationSeconds?: number | null,
+    percentWatched?: number | null,
+    completed?: boolean | null,
+    lastWatchedAt?: string | null,
+    createdAt: string,
+    updatedAt: string,
+  } | null,
+};
+
+export type UpdateVideoWatchMutationVariables = {
+  input: UpdateVideoWatchInput,
+  condition?: ModelVideoWatchConditionInput | null,
+};
+
+export type UpdateVideoWatchMutation = {
+  updateVideoWatch?:  {
+    __typename: "VideoWatch",
+    id: string,
+    studentId: string,
+    lessonId: string,
+    weeklyPlanItemId?: string | null,
+    watchedSeconds?: number | null,
+    durationSeconds?: number | null,
+    percentWatched?: number | null,
+    completed?: boolean | null,
+    lastWatchedAt?: string | null,
+    createdAt: string,
+    updatedAt: string,
+  } | null,
+};
+
+export type DeleteVideoWatchMutationVariables = {
+  input: DeleteVideoWatchInput,
+  condition?: ModelVideoWatchConditionInput | null,
+};
+
+export type DeleteVideoWatchMutation = {
+  deleteVideoWatch?:  {
+    __typename: "VideoWatch",
+    id: string,
+    studentId: string,
+    lessonId: string,
+    weeklyPlanItemId?: string | null,
+    watchedSeconds?: number | null,
+    durationSeconds?: number | null,
+    percentWatched?: number | null,
+    completed?: boolean | null,
+    lastWatchedAt?: string | null,
+    createdAt: string,
+    updatedAt: string,
   } | null,
 };
 
@@ -2741,9 +3523,20 @@ export type CreateStudentProfileMutation = {
     email: string,
     firstName: string,
     lastName: string,
+    preferredName?: string | null,
     gradeLevel?: string | null,
     courseId?: string | null,
     planType?: string | null,
+    profilePictureKey?: string | null,
+    status?: string | null,
+    parentEmail?: string | null,
+    parentName?: string | null,
+    parentEmail2?: string | null,
+    parentName2?: string | null,
+    parentLinks?:  {
+      __typename: "ModelParentStudentLinkConnection",
+      nextToken?: string | null,
+    } | null,
     createdAt: string,
     updatedAt: string,
   } | null,
@@ -2762,9 +3555,20 @@ export type UpdateStudentProfileMutation = {
     email: string,
     firstName: string,
     lastName: string,
+    preferredName?: string | null,
     gradeLevel?: string | null,
     courseId?: string | null,
     planType?: string | null,
+    profilePictureKey?: string | null,
+    status?: string | null,
+    parentEmail?: string | null,
+    parentName?: string | null,
+    parentEmail2?: string | null,
+    parentName2?: string | null,
+    parentLinks?:  {
+      __typename: "ModelParentStudentLinkConnection",
+      nextToken?: string | null,
+    } | null,
     createdAt: string,
     updatedAt: string,
   } | null,
@@ -2783,11 +3587,232 @@ export type DeleteStudentProfileMutation = {
     email: string,
     firstName: string,
     lastName: string,
+    preferredName?: string | null,
     gradeLevel?: string | null,
     courseId?: string | null,
     planType?: string | null,
+    profilePictureKey?: string | null,
+    status?: string | null,
+    parentEmail?: string | null,
+    parentName?: string | null,
+    parentEmail2?: string | null,
+    parentName2?: string | null,
+    parentLinks?:  {
+      __typename: "ModelParentStudentLinkConnection",
+      nextToken?: string | null,
+    } | null,
     createdAt: string,
     updatedAt: string,
+  } | null,
+};
+
+export type CreateParentProfileMutationVariables = {
+  input: CreateParentProfileInput,
+  condition?: ModelParentProfileConditionInput | null,
+};
+
+export type CreateParentProfileMutation = {
+  createParentProfile?:  {
+    __typename: "ParentProfile",
+    id: string,
+    userId: string,
+    email: string,
+    firstName: string,
+    lastName: string,
+    studentLinks?:  {
+      __typename: "ModelParentStudentLinkConnection",
+      nextToken?: string | null,
+    } | null,
+    createdAt: string,
+    updatedAt: string,
+  } | null,
+};
+
+export type UpdateParentProfileMutationVariables = {
+  input: UpdateParentProfileInput,
+  condition?: ModelParentProfileConditionInput | null,
+};
+
+export type UpdateParentProfileMutation = {
+  updateParentProfile?:  {
+    __typename: "ParentProfile",
+    id: string,
+    userId: string,
+    email: string,
+    firstName: string,
+    lastName: string,
+    studentLinks?:  {
+      __typename: "ModelParentStudentLinkConnection",
+      nextToken?: string | null,
+    } | null,
+    createdAt: string,
+    updatedAt: string,
+  } | null,
+};
+
+export type DeleteParentProfileMutationVariables = {
+  input: DeleteParentProfileInput,
+  condition?: ModelParentProfileConditionInput | null,
+};
+
+export type DeleteParentProfileMutation = {
+  deleteParentProfile?:  {
+    __typename: "ParentProfile",
+    id: string,
+    userId: string,
+    email: string,
+    firstName: string,
+    lastName: string,
+    studentLinks?:  {
+      __typename: "ModelParentStudentLinkConnection",
+      nextToken?: string | null,
+    } | null,
+    createdAt: string,
+    updatedAt: string,
+  } | null,
+};
+
+export type CreateParentStudentLinkMutationVariables = {
+  input: CreateParentStudentLinkInput,
+  condition?: ModelParentStudentLinkConditionInput | null,
+};
+
+export type CreateParentStudentLinkMutation = {
+  createParentStudentLink?:  {
+    __typename: "ParentStudentLink",
+    id: string,
+    parentProfileId: string,
+    parentProfile?:  {
+      __typename: "ParentProfile",
+      id: string,
+      userId: string,
+      email: string,
+      firstName: string,
+      lastName: string,
+      createdAt: string,
+      updatedAt: string,
+    } | null,
+    studentProfileId: string,
+    studentProfile?:  {
+      __typename: "StudentProfile",
+      id: string,
+      userId: string,
+      email: string,
+      firstName: string,
+      lastName: string,
+      preferredName?: string | null,
+      gradeLevel?: string | null,
+      courseId?: string | null,
+      planType?: string | null,
+      profilePictureKey?: string | null,
+      status?: string | null,
+      parentEmail?: string | null,
+      parentName?: string | null,
+      parentEmail2?: string | null,
+      parentName2?: string | null,
+      createdAt: string,
+      updatedAt: string,
+    } | null,
+    createdAt: string,
+    updatedAt: string,
+    studentProfileParentLinksId?: string | null,
+    parentProfileStudentLinksId?: string | null,
+  } | null,
+};
+
+export type UpdateParentStudentLinkMutationVariables = {
+  input: UpdateParentStudentLinkInput,
+  condition?: ModelParentStudentLinkConditionInput | null,
+};
+
+export type UpdateParentStudentLinkMutation = {
+  updateParentStudentLink?:  {
+    __typename: "ParentStudentLink",
+    id: string,
+    parentProfileId: string,
+    parentProfile?:  {
+      __typename: "ParentProfile",
+      id: string,
+      userId: string,
+      email: string,
+      firstName: string,
+      lastName: string,
+      createdAt: string,
+      updatedAt: string,
+    } | null,
+    studentProfileId: string,
+    studentProfile?:  {
+      __typename: "StudentProfile",
+      id: string,
+      userId: string,
+      email: string,
+      firstName: string,
+      lastName: string,
+      preferredName?: string | null,
+      gradeLevel?: string | null,
+      courseId?: string | null,
+      planType?: string | null,
+      profilePictureKey?: string | null,
+      status?: string | null,
+      parentEmail?: string | null,
+      parentName?: string | null,
+      parentEmail2?: string | null,
+      parentName2?: string | null,
+      createdAt: string,
+      updatedAt: string,
+    } | null,
+    createdAt: string,
+    updatedAt: string,
+    studentProfileParentLinksId?: string | null,
+    parentProfileStudentLinksId?: string | null,
+  } | null,
+};
+
+export type DeleteParentStudentLinkMutationVariables = {
+  input: DeleteParentStudentLinkInput,
+  condition?: ModelParentStudentLinkConditionInput | null,
+};
+
+export type DeleteParentStudentLinkMutation = {
+  deleteParentStudentLink?:  {
+    __typename: "ParentStudentLink",
+    id: string,
+    parentProfileId: string,
+    parentProfile?:  {
+      __typename: "ParentProfile",
+      id: string,
+      userId: string,
+      email: string,
+      firstName: string,
+      lastName: string,
+      createdAt: string,
+      updatedAt: string,
+    } | null,
+    studentProfileId: string,
+    studentProfile?:  {
+      __typename: "StudentProfile",
+      id: string,
+      userId: string,
+      email: string,
+      firstName: string,
+      lastName: string,
+      preferredName?: string | null,
+      gradeLevel?: string | null,
+      courseId?: string | null,
+      planType?: string | null,
+      profilePictureKey?: string | null,
+      status?: string | null,
+      parentEmail?: string | null,
+      parentName?: string | null,
+      parentEmail2?: string | null,
+      parentName2?: string | null,
+      createdAt: string,
+      updatedAt: string,
+    } | null,
+    createdAt: string,
+    updatedAt: string,
+    studentProfileParentLinksId?: string | null,
+    parentProfileStudentLinksId?: string | null,
   } | null,
 };
 
@@ -2841,6 +3866,17 @@ export type GetSemesterQuery = {
     startDate: string,
     endDate: string,
     isActive?: boolean | null,
+    courseId?: string | null,
+    course?:  {
+      __typename: "Course",
+      id: string,
+      title: string,
+      description?: string | null,
+      gradeLevel?: string | null,
+      isArchived?: boolean | null,
+      createdAt: string,
+      updatedAt: string,
+    } | null,
     academicYear?:  {
       __typename: "AcademicYear",
       id: string,
@@ -2856,9 +3892,17 @@ export type GetSemesterQuery = {
       __typename: "ModelWeeklyPlanConnection",
       nextToken?: string | null,
     } | null,
+    lessonWeightPercent?: number | null,
+    testWeightPercent?: number | null,
+    quizWeightPercent?: number | null,
+    gradeA?: number | null,
+    gradeB?: number | null,
+    gradeC?: number | null,
+    gradeD?: number | null,
     createdAt: string,
     updatedAt: string,
     academicYearSemestersId?: string | null,
+    courseSemestersId?: string | null,
   } | null,
 };
 
@@ -2878,9 +3922,18 @@ export type ListSemestersQuery = {
       startDate: string,
       endDate: string,
       isActive?: boolean | null,
+      courseId?: string | null,
+      lessonWeightPercent?: number | null,
+      testWeightPercent?: number | null,
+      quizWeightPercent?: number | null,
+      gradeA?: number | null,
+      gradeB?: number | null,
+      gradeC?: number | null,
+      gradeD?: number | null,
       createdAt: string,
       updatedAt: string,
       academicYearSemestersId?: string | null,
+      courseSemestersId?: string | null,
     } | null >,
     nextToken?: string | null,
   } | null,
@@ -2916,6 +3969,10 @@ export type GetCourseQuery = {
     } | null,
     lessonTemplates?:  {
       __typename: "ModelLessonTemplateConnection",
+      nextToken?: string | null,
+    } | null,
+    semesters?:  {
+      __typename: "ModelSemesterConnection",
       nextToken?: string | null,
     } | null,
     createdAt: string,
@@ -3013,6 +4070,7 @@ export type GetWeeklyPlanQuery = {
     __typename: "WeeklyPlan",
     id: string,
     weekStartDate: string,
+    assignedStudentIds?: string | null,
     semester?:  {
       __typename: "Semester",
       id: string,
@@ -3020,9 +4078,18 @@ export type GetWeeklyPlanQuery = {
       startDate: string,
       endDate: string,
       isActive?: boolean | null,
+      courseId?: string | null,
+      lessonWeightPercent?: number | null,
+      testWeightPercent?: number | null,
+      quizWeightPercent?: number | null,
+      gradeA?: number | null,
+      gradeB?: number | null,
+      gradeC?: number | null,
+      gradeD?: number | null,
       createdAt: string,
       updatedAt: string,
       academicYearSemestersId?: string | null,
+      courseSemestersId?: string | null,
     } | null,
     course?:  {
       __typename: "Course",
@@ -3058,6 +4125,7 @@ export type ListWeeklyPlansQuery = {
       __typename: "WeeklyPlan",
       id: string,
       weekStartDate: string,
+      assignedStudentIds?: string | null,
       createdAt: string,
       updatedAt: string,
       semesterWeeklyPlansId?: string | null,
@@ -3095,6 +4163,7 @@ export type GetWeeklyPlanItemQuery = {
       __typename: "WeeklyPlan",
       id: string,
       weekStartDate: string,
+      assignedStudentIds?: string | null,
       createdAt: string,
       updatedAt: string,
       semesterWeeklyPlansId?: string | null,
@@ -3208,6 +4277,11 @@ export type GetSubmissionQuery = {
     grade?: string | null,
     submittedAt?: string | null,
     teacherComment?: string | null,
+    isArchived?: boolean | null,
+    archivedAt?: string | null,
+    status?: string | null,
+    returnReason?: string | null,
+    returnDueDate?: string | null,
     assignment?:  {
       __typename: "Assignment",
       id: string,
@@ -3249,6 +4323,11 @@ export type ListSubmissionsQuery = {
       grade?: string | null,
       submittedAt?: string | null,
       teacherComment?: string | null,
+      isArchived?: boolean | null,
+      archivedAt?: string | null,
+      status?: string | null,
+      returnReason?: string | null,
+      returnDueDate?: string | null,
       createdAt: string,
       updatedAt: string,
       assignmentSubmissionsId?: string | null,
@@ -3280,6 +4359,11 @@ export type GetSubmissionMessageQuery = {
       grade?: string | null,
       submittedAt?: string | null,
       teacherComment?: string | null,
+      isArchived?: boolean | null,
+      archivedAt?: string | null,
+      status?: string | null,
+      returnReason?: string | null,
+      returnDueDate?: string | null,
       createdAt: string,
       updatedAt: string,
       assignmentSubmissionsId?: string | null,
@@ -3341,9 +4425,18 @@ export type GetEnrollmentQuery = {
       startDate: string,
       endDate: string,
       isActive?: boolean | null,
+      courseId?: string | null,
+      lessonWeightPercent?: number | null,
+      testWeightPercent?: number | null,
+      quizWeightPercent?: number | null,
+      gradeA?: number | null,
+      gradeB?: number | null,
+      gradeC?: number | null,
+      gradeD?: number | null,
       createdAt: string,
       updatedAt: string,
       academicYearSemestersId?: string | null,
+      courseSemestersId?: string | null,
     } | null,
     createdAt: string,
     updatedAt: string,
@@ -3389,6 +4482,7 @@ export type GetLessonTemplateQuery = {
     worksheetUrl?: string | null,
     videoUrl?: string | null,
     assignmentType?: string | null,
+    lessonCategory?: string | null,
     course?:  {
       __typename: "Course",
       id: string,
@@ -3427,6 +4521,7 @@ export type ListLessonTemplatesQuery = {
       worksheetUrl?: string | null,
       videoUrl?: string | null,
       assignmentType?: string | null,
+      lessonCategory?: string | null,
       createdAt: string,
       updatedAt: string,
       courseLessonTemplatesId?: string | null,
@@ -3457,6 +4552,7 @@ export type GetAssignmentQuestionQuery = {
       worksheetUrl?: string | null,
       videoUrl?: string | null,
       assignmentType?: string | null,
+      lessonCategory?: string | null,
       createdAt: string,
       updatedAt: string,
       courseLessonTemplatesId?: string | null,
@@ -3487,6 +4583,96 @@ export type ListAssignmentQuestionsQuery = {
       createdAt: string,
       updatedAt: string,
       lessonTemplateQuestionsId?: string | null,
+    } | null >,
+    nextToken?: string | null,
+  } | null,
+};
+
+export type GetTeacherProfileQueryVariables = {
+  id: string,
+};
+
+export type GetTeacherProfileQuery = {
+  getTeacherProfile?:  {
+    __typename: "TeacherProfile",
+    id: string,
+    userId: string,
+    email: string,
+    displayName?: string | null,
+    bio?: string | null,
+    profilePictureKey?: string | null,
+    createdAt: string,
+    updatedAt: string,
+  } | null,
+};
+
+export type ListTeacherProfilesQueryVariables = {
+  filter?: ModelTeacherProfileFilterInput | null,
+  limit?: number | null,
+  nextToken?: string | null,
+};
+
+export type ListTeacherProfilesQuery = {
+  listTeacherProfiles?:  {
+    __typename: "ModelTeacherProfileConnection",
+    items:  Array< {
+      __typename: "TeacherProfile",
+      id: string,
+      userId: string,
+      email: string,
+      displayName?: string | null,
+      bio?: string | null,
+      profilePictureKey?: string | null,
+      createdAt: string,
+      updatedAt: string,
+    } | null >,
+    nextToken?: string | null,
+  } | null,
+};
+
+export type GetVideoWatchQueryVariables = {
+  id: string,
+};
+
+export type GetVideoWatchQuery = {
+  getVideoWatch?:  {
+    __typename: "VideoWatch",
+    id: string,
+    studentId: string,
+    lessonId: string,
+    weeklyPlanItemId?: string | null,
+    watchedSeconds?: number | null,
+    durationSeconds?: number | null,
+    percentWatched?: number | null,
+    completed?: boolean | null,
+    lastWatchedAt?: string | null,
+    createdAt: string,
+    updatedAt: string,
+  } | null,
+};
+
+export type ListVideoWatchesQueryVariables = {
+  filter?: ModelVideoWatchFilterInput | null,
+  limit?: number | null,
+  nextToken?: string | null,
+};
+
+export type ListVideoWatchesQuery = {
+  listVideoWatches?:  {
+    __typename: "ModelVideoWatchConnection",
+    items:  Array< {
+      __typename: "VideoWatch",
+      id: string,
+      studentId: string,
+      lessonId: string,
+      weeklyPlanItemId?: string | null,
+      watchedSeconds?: number | null,
+      durationSeconds?: number | null,
+      percentWatched?: number | null,
+      completed?: boolean | null,
+      lastWatchedAt?: string | null,
+      createdAt: string,
+      updatedAt: string,
     } | null >,
     nextToken?: string | null,
   } | null,
@@ -3582,9 +4768,20 @@ export type GetStudentProfileQuery = {
     email: string,
     firstName: string,
     lastName: string,
+    preferredName?: string | null,
     gradeLevel?: string | null,
     courseId?: string | null,
     planType?: string | null,
+    profilePictureKey?: string | null,
+    status?: string | null,
+    parentEmail?: string | null,
+    parentName?: string | null,
+    parentEmail2?: string | null,
+    parentName2?: string | null,
+    parentLinks?:  {
+      __typename: "ModelParentStudentLinkConnection",
+      nextToken?: string | null,
+    } | null,
     createdAt: string,
     updatedAt: string,
   } | null,
@@ -3606,11 +4803,132 @@ export type ListStudentProfilesQuery = {
       email: string,
       firstName: string,
       lastName: string,
+      preferredName?: string | null,
       gradeLevel?: string | null,
       courseId?: string | null,
       planType?: string | null,
+      profilePictureKey?: string | null,
+      status?: string | null,
+      parentEmail?: string | null,
+      parentName?: string | null,
+      parentEmail2?: string | null,
+      parentName2?: string | null,
       createdAt: string,
       updatedAt: string,
+    } | null >,
+    nextToken?: string | null,
+  } | null,
+};
+
+export type GetParentProfileQueryVariables = {
+  id: string,
+};
+
+export type GetParentProfileQuery = {
+  getParentProfile?:  {
+    __typename: "ParentProfile",
+    id: string,
+    userId: string,
+    email: string,
+    firstName: string,
+    lastName: string,
+    studentLinks?:  {
+      __typename: "ModelParentStudentLinkConnection",
+      nextToken?: string | null,
+    } | null,
+    createdAt: string,
+    updatedAt: string,
+  } | null,
+};
+
+export type ListParentProfilesQueryVariables = {
+  filter?: ModelParentProfileFilterInput | null,
+  limit?: number | null,
+  nextToken?: string | null,
+};
+
+export type ListParentProfilesQuery = {
+  listParentProfiles?:  {
+    __typename: "ModelParentProfileConnection",
+    items:  Array< {
+      __typename: "ParentProfile",
+      id: string,
+      userId: string,
+      email: string,
+      firstName: string,
+      lastName: string,
+      createdAt: string,
+      updatedAt: string,
+    } | null >,
+    nextToken?: string | null,
+  } | null,
+};
+
+export type GetParentStudentLinkQueryVariables = {
+  id: string,
+};
+
+export type GetParentStudentLinkQuery = {
+  getParentStudentLink?:  {
+    __typename: "ParentStudentLink",
+    id: string,
+    parentProfileId: string,
+    parentProfile?:  {
+      __typename: "ParentProfile",
+      id: string,
+      userId: string,
+      email: string,
+      firstName: string,
+      lastName: string,
+      createdAt: string,
+      updatedAt: string,
+    } | null,
+    studentProfileId: string,
+    studentProfile?:  {
+      __typename: "StudentProfile",
+      id: string,
+      userId: string,
+      email: string,
+      firstName: string,
+      lastName: string,
+      preferredName?: string | null,
+      gradeLevel?: string | null,
+      courseId?: string | null,
+      planType?: string | null,
+      profilePictureKey?: string | null,
+      status?: string | null,
+      parentEmail?: string | null,
+      parentName?: string | null,
+      parentEmail2?: string | null,
+      parentName2?: string | null,
+      createdAt: string,
+      updatedAt: string,
+    } | null,
+    createdAt: string,
+    updatedAt: string,
+    studentProfileParentLinksId?: string | null,
+    parentProfileStudentLinksId?: string | null,
+  } | null,
+};
+
+export type ListParentStudentLinksQueryVariables = {
+  filter?: ModelParentStudentLinkFilterInput | null,
+  limit?: number | null,
+  nextToken?: string | null,
+};
+
+export type ListParentStudentLinksQuery = {
+  listParentStudentLinks?:  {
+    __typename: "ModelParentStudentLinkConnection",
+    items:  Array< {
+      __typename: "ParentStudentLink",
+      id: string,
+      parentProfileId: string,
+      studentProfileId: string,
+      createdAt: string,
+      updatedAt: string,
+      studentProfileParentLinksId?: string | null,
+      parentProfileStudentLinksId?: string | null,
     } | null >,
     nextToken?: string | null,
   } | null,
@@ -3682,6 +5000,17 @@ export type OnCreateSemesterSubscription = {
     startDate: string,
     endDate: string,
     isActive?: boolean | null,
+    courseId?: string | null,
+    course?:  {
+      __typename: "Course",
+      id: string,
+      title: string,
+      description?: string | null,
+      gradeLevel?: string | null,
+      isArchived?: boolean | null,
+      createdAt: string,
+      updatedAt: string,
+    } | null,
     academicYear?:  {
       __typename: "AcademicYear",
       id: string,
@@ -3697,9 +5026,17 @@ export type OnCreateSemesterSubscription = {
       __typename: "ModelWeeklyPlanConnection",
       nextToken?: string | null,
     } | null,
+    lessonWeightPercent?: number | null,
+    testWeightPercent?: number | null,
+    quizWeightPercent?: number | null,
+    gradeA?: number | null,
+    gradeB?: number | null,
+    gradeC?: number | null,
+    gradeD?: number | null,
     createdAt: string,
     updatedAt: string,
     academicYearSemestersId?: string | null,
+    courseSemestersId?: string | null,
   } | null,
 };
 
@@ -3715,6 +5052,17 @@ export type OnUpdateSemesterSubscription = {
     startDate: string,
     endDate: string,
     isActive?: boolean | null,
+    courseId?: string | null,
+    course?:  {
+      __typename: "Course",
+      id: string,
+      title: string,
+      description?: string | null,
+      gradeLevel?: string | null,
+      isArchived?: boolean | null,
+      createdAt: string,
+      updatedAt: string,
+    } | null,
     academicYear?:  {
       __typename: "AcademicYear",
       id: string,
@@ -3730,9 +5078,17 @@ export type OnUpdateSemesterSubscription = {
       __typename: "ModelWeeklyPlanConnection",
       nextToken?: string | null,
     } | null,
+    lessonWeightPercent?: number | null,
+    testWeightPercent?: number | null,
+    quizWeightPercent?: number | null,
+    gradeA?: number | null,
+    gradeB?: number | null,
+    gradeC?: number | null,
+    gradeD?: number | null,
     createdAt: string,
     updatedAt: string,
     academicYearSemestersId?: string | null,
+    courseSemestersId?: string | null,
   } | null,
 };
 
@@ -3748,6 +5104,17 @@ export type OnDeleteSemesterSubscription = {
     startDate: string,
     endDate: string,
     isActive?: boolean | null,
+    courseId?: string | null,
+    course?:  {
+      __typename: "Course",
+      id: string,
+      title: string,
+      description?: string | null,
+      gradeLevel?: string | null,
+      isArchived?: boolean | null,
+      createdAt: string,
+      updatedAt: string,
+    } | null,
     academicYear?:  {
       __typename: "AcademicYear",
       id: string,
@@ -3763,9 +5130,17 @@ export type OnDeleteSemesterSubscription = {
       __typename: "ModelWeeklyPlanConnection",
       nextToken?: string | null,
     } | null,
+    lessonWeightPercent?: number | null,
+    testWeightPercent?: number | null,
+    quizWeightPercent?: number | null,
+    gradeA?: number | null,
+    gradeB?: number | null,
+    gradeC?: number | null,
+    gradeD?: number | null,
     createdAt: string,
     updatedAt: string,
     academicYearSemestersId?: string | null,
+    courseSemestersId?: string | null,
   } | null,
 };
 
@@ -3799,6 +5174,10 @@ export type OnCreateCourseSubscription = {
     } | null,
     lessonTemplates?:  {
       __typename: "ModelLessonTemplateConnection",
+      nextToken?: string | null,
+    } | null,
+    semesters?:  {
+      __typename: "ModelSemesterConnection",
       nextToken?: string | null,
     } | null,
     createdAt: string,
@@ -3838,6 +5217,10 @@ export type OnUpdateCourseSubscription = {
       __typename: "ModelLessonTemplateConnection",
       nextToken?: string | null,
     } | null,
+    semesters?:  {
+      __typename: "ModelSemesterConnection",
+      nextToken?: string | null,
+    } | null,
     createdAt: string,
     updatedAt: string,
   } | null,
@@ -3873,6 +5256,10 @@ export type OnDeleteCourseSubscription = {
     } | null,
     lessonTemplates?:  {
       __typename: "ModelLessonTemplateConnection",
+      nextToken?: string | null,
+    } | null,
+    semesters?:  {
+      __typename: "ModelSemesterConnection",
       nextToken?: string | null,
     } | null,
     createdAt: string,
@@ -3988,6 +5375,7 @@ export type OnCreateWeeklyPlanSubscription = {
     __typename: "WeeklyPlan",
     id: string,
     weekStartDate: string,
+    assignedStudentIds?: string | null,
     semester?:  {
       __typename: "Semester",
       id: string,
@@ -3995,9 +5383,18 @@ export type OnCreateWeeklyPlanSubscription = {
       startDate: string,
       endDate: string,
       isActive?: boolean | null,
+      courseId?: string | null,
+      lessonWeightPercent?: number | null,
+      testWeightPercent?: number | null,
+      quizWeightPercent?: number | null,
+      gradeA?: number | null,
+      gradeB?: number | null,
+      gradeC?: number | null,
+      gradeD?: number | null,
       createdAt: string,
       updatedAt: string,
       academicYearSemestersId?: string | null,
+      courseSemestersId?: string | null,
     } | null,
     course?:  {
       __typename: "Course",
@@ -4029,6 +5426,7 @@ export type OnUpdateWeeklyPlanSubscription = {
     __typename: "WeeklyPlan",
     id: string,
     weekStartDate: string,
+    assignedStudentIds?: string | null,
     semester?:  {
       __typename: "Semester",
       id: string,
@@ -4036,9 +5434,18 @@ export type OnUpdateWeeklyPlanSubscription = {
       startDate: string,
       endDate: string,
       isActive?: boolean | null,
+      courseId?: string | null,
+      lessonWeightPercent?: number | null,
+      testWeightPercent?: number | null,
+      quizWeightPercent?: number | null,
+      gradeA?: number | null,
+      gradeB?: number | null,
+      gradeC?: number | null,
+      gradeD?: number | null,
       createdAt: string,
       updatedAt: string,
       academicYearSemestersId?: string | null,
+      courseSemestersId?: string | null,
     } | null,
     course?:  {
       __typename: "Course",
@@ -4070,6 +5477,7 @@ export type OnDeleteWeeklyPlanSubscription = {
     __typename: "WeeklyPlan",
     id: string,
     weekStartDate: string,
+    assignedStudentIds?: string | null,
     semester?:  {
       __typename: "Semester",
       id: string,
@@ -4077,9 +5485,18 @@ export type OnDeleteWeeklyPlanSubscription = {
       startDate: string,
       endDate: string,
       isActive?: boolean | null,
+      courseId?: string | null,
+      lessonWeightPercent?: number | null,
+      testWeightPercent?: number | null,
+      quizWeightPercent?: number | null,
+      gradeA?: number | null,
+      gradeB?: number | null,
+      gradeC?: number | null,
+      gradeD?: number | null,
       createdAt: string,
       updatedAt: string,
       academicYearSemestersId?: string | null,
+      courseSemestersId?: string | null,
     } | null,
     course?:  {
       __typename: "Course",
@@ -4130,6 +5547,7 @@ export type OnCreateWeeklyPlanItemSubscription = {
       __typename: "WeeklyPlan",
       id: string,
       weekStartDate: string,
+      assignedStudentIds?: string | null,
       createdAt: string,
       updatedAt: string,
       semesterWeeklyPlansId?: string | null,
@@ -4174,6 +5592,7 @@ export type OnUpdateWeeklyPlanItemSubscription = {
       __typename: "WeeklyPlan",
       id: string,
       weekStartDate: string,
+      assignedStudentIds?: string | null,
       createdAt: string,
       updatedAt: string,
       semesterWeeklyPlansId?: string | null,
@@ -4218,6 +5637,7 @@ export type OnDeleteWeeklyPlanItemSubscription = {
       __typename: "WeeklyPlan",
       id: string,
       weekStartDate: string,
+      assignedStudentIds?: string | null,
       createdAt: string,
       updatedAt: string,
       semesterWeeklyPlansId?: string | null,
@@ -4346,6 +5766,11 @@ export type OnCreateSubmissionSubscription = {
     grade?: string | null,
     submittedAt?: string | null,
     teacherComment?: string | null,
+    isArchived?: boolean | null,
+    archivedAt?: string | null,
+    status?: string | null,
+    returnReason?: string | null,
+    returnDueDate?: string | null,
     assignment?:  {
       __typename: "Assignment",
       id: string,
@@ -4383,6 +5808,11 @@ export type OnUpdateSubmissionSubscription = {
     grade?: string | null,
     submittedAt?: string | null,
     teacherComment?: string | null,
+    isArchived?: boolean | null,
+    archivedAt?: string | null,
+    status?: string | null,
+    returnReason?: string | null,
+    returnDueDate?: string | null,
     assignment?:  {
       __typename: "Assignment",
       id: string,
@@ -4420,6 +5850,11 @@ export type OnDeleteSubmissionSubscription = {
     grade?: string | null,
     submittedAt?: string | null,
     teacherComment?: string | null,
+    isArchived?: boolean | null,
+    archivedAt?: string | null,
+    status?: string | null,
+    returnReason?: string | null,
+    returnDueDate?: string | null,
     assignment?:  {
       __typename: "Assignment",
       id: string,
@@ -4464,6 +5899,11 @@ export type OnCreateSubmissionMessageSubscription = {
       grade?: string | null,
       submittedAt?: string | null,
       teacherComment?: string | null,
+      isArchived?: boolean | null,
+      archivedAt?: string | null,
+      status?: string | null,
+      returnReason?: string | null,
+      returnDueDate?: string | null,
       createdAt: string,
       updatedAt: string,
       assignmentSubmissionsId?: string | null,
@@ -4497,6 +5937,11 @@ export type OnUpdateSubmissionMessageSubscription = {
       grade?: string | null,
       submittedAt?: string | null,
       teacherComment?: string | null,
+      isArchived?: boolean | null,
+      archivedAt?: string | null,
+      status?: string | null,
+      returnReason?: string | null,
+      returnDueDate?: string | null,
       createdAt: string,
       updatedAt: string,
       assignmentSubmissionsId?: string | null,
@@ -4530,6 +5975,11 @@ export type OnDeleteSubmissionMessageSubscription = {
       grade?: string | null,
       submittedAt?: string | null,
       teacherComment?: string | null,
+      isArchived?: boolean | null,
+      archivedAt?: string | null,
+      status?: string | null,
+      returnReason?: string | null,
+      returnDueDate?: string | null,
       createdAt: string,
       updatedAt: string,
       assignmentSubmissionsId?: string | null,
@@ -4567,9 +6017,18 @@ export type OnCreateEnrollmentSubscription = {
       startDate: string,
       endDate: string,
       isActive?: boolean | null,
+      courseId?: string | null,
+      lessonWeightPercent?: number | null,
+      testWeightPercent?: number | null,
+      quizWeightPercent?: number | null,
+      gradeA?: number | null,
+      gradeB?: number | null,
+      gradeC?: number | null,
+      gradeD?: number | null,
       createdAt: string,
       updatedAt: string,
       academicYearSemestersId?: string | null,
+      courseSemestersId?: string | null,
     } | null,
     createdAt: string,
     updatedAt: string,
@@ -4605,9 +6064,18 @@ export type OnUpdateEnrollmentSubscription = {
       startDate: string,
       endDate: string,
       isActive?: boolean | null,
+      courseId?: string | null,
+      lessonWeightPercent?: number | null,
+      testWeightPercent?: number | null,
+      quizWeightPercent?: number | null,
+      gradeA?: number | null,
+      gradeB?: number | null,
+      gradeC?: number | null,
+      gradeD?: number | null,
       createdAt: string,
       updatedAt: string,
       academicYearSemestersId?: string | null,
+      courseSemestersId?: string | null,
     } | null,
     createdAt: string,
     updatedAt: string,
@@ -4643,9 +6111,18 @@ export type OnDeleteEnrollmentSubscription = {
       startDate: string,
       endDate: string,
       isActive?: boolean | null,
+      courseId?: string | null,
+      lessonWeightPercent?: number | null,
+      testWeightPercent?: number | null,
+      quizWeightPercent?: number | null,
+      gradeA?: number | null,
+      gradeB?: number | null,
+      gradeC?: number | null,
+      gradeD?: number | null,
       createdAt: string,
       updatedAt: string,
       academicYearSemestersId?: string | null,
+      courseSemestersId?: string | null,
     } | null,
     createdAt: string,
     updatedAt: string,
@@ -4668,6 +6145,7 @@ export type OnCreateLessonTemplateSubscription = {
     worksheetUrl?: string | null,
     videoUrl?: string | null,
     assignmentType?: string | null,
+    lessonCategory?: string | null,
     course?:  {
       __typename: "Course",
       id: string,
@@ -4702,6 +6180,7 @@ export type OnUpdateLessonTemplateSubscription = {
     worksheetUrl?: string | null,
     videoUrl?: string | null,
     assignmentType?: string | null,
+    lessonCategory?: string | null,
     course?:  {
       __typename: "Course",
       id: string,
@@ -4736,6 +6215,7 @@ export type OnDeleteLessonTemplateSubscription = {
     worksheetUrl?: string | null,
     videoUrl?: string | null,
     assignmentType?: string | null,
+    lessonCategory?: string | null,
     course?:  {
       __typename: "Course",
       id: string,
@@ -4778,6 +6258,7 @@ export type OnCreateAssignmentQuestionSubscription = {
       worksheetUrl?: string | null,
       videoUrl?: string | null,
       assignmentType?: string | null,
+      lessonCategory?: string | null,
       createdAt: string,
       updatedAt: string,
       courseLessonTemplatesId?: string | null,
@@ -4810,6 +6291,7 @@ export type OnUpdateAssignmentQuestionSubscription = {
       worksheetUrl?: string | null,
       videoUrl?: string | null,
       assignmentType?: string | null,
+      lessonCategory?: string | null,
       createdAt: string,
       updatedAt: string,
       courseLessonTemplatesId?: string | null,
@@ -4842,6 +6324,7 @@ export type OnDeleteAssignmentQuestionSubscription = {
       worksheetUrl?: string | null,
       videoUrl?: string | null,
       assignmentType?: string | null,
+      lessonCategory?: string | null,
       createdAt: string,
       updatedAt: string,
       courseLessonTemplatesId?: string | null,
@@ -4849,6 +6332,123 @@ export type OnDeleteAssignmentQuestionSubscription = {
     createdAt: string,
     updatedAt: string,
     lessonTemplateQuestionsId?: string | null,
+  } | null,
+};
+
+export type OnCreateTeacherProfileSubscriptionVariables = {
+  filter?: ModelSubscriptionTeacherProfileFilterInput | null,
+};
+
+export type OnCreateTeacherProfileSubscription = {
+  onCreateTeacherProfile?:  {
+    __typename: "TeacherProfile",
+    id: string,
+    userId: string,
+    email: string,
+    displayName?: string | null,
+    bio?: string | null,
+    profilePictureKey?: string | null,
+    createdAt: string,
+    updatedAt: string,
+  } | null,
+};
+
+export type OnUpdateTeacherProfileSubscriptionVariables = {
+  filter?: ModelSubscriptionTeacherProfileFilterInput | null,
+};
+
+export type OnUpdateTeacherProfileSubscription = {
+  onUpdateTeacherProfile?:  {
+    __typename: "TeacherProfile",
+    id: string,
+    userId: string,
+    email: string,
+    displayName?: string | null,
+    bio?: string | null,
+    profilePictureKey?: string | null,
+    createdAt: string,
+    updatedAt: string,
+  } | null,
+};
+
+export type OnDeleteTeacherProfileSubscriptionVariables = {
+  filter?: ModelSubscriptionTeacherProfileFilterInput | null,
+};
+
+export type OnDeleteTeacherProfileSubscription = {
+  onDeleteTeacherProfile?:  {
+    __typename: "TeacherProfile",
+    id: string,
+    userId: string,
+    email: string,
+    displayName?: string | null,
+    bio?: string | null,
+    profilePictureKey?: string | null,
+    createdAt: string,
+    updatedAt: string,
+  } | null,
+};
+
+export type OnCreateVideoWatchSubscriptionVariables = {
+  filter?: ModelSubscriptionVideoWatchFilterInput | null,
+};
+
+export type OnCreateVideoWatchSubscription = {
+  onCreateVideoWatch?:  {
+    __typename: "VideoWatch",
+    id: string,
+    studentId: string,
+    lessonId: string,
+    weeklyPlanItemId?: string | null,
+    watchedSeconds?: number | null,
+    durationSeconds?: number | null,
+    percentWatched?: number | null,
+    completed?: boolean | null,
+    lastWatchedAt?: string | null,
+    createdAt: string,
+    updatedAt: string,
+  } | null,
+};
+
+export type OnUpdateVideoWatchSubscriptionVariables = {
+  filter?: ModelSubscriptionVideoWatchFilterInput | null,
+};
+
+export type OnUpdateVideoWatchSubscription = {
+  onUpdateVideoWatch?:  {
+    __typename: "VideoWatch",
+    id: string,
+    studentId: string,
+    lessonId: string,
+    weeklyPlanItemId?: string | null,
+    watchedSeconds?: number | null,
+    durationSeconds?: number | null,
+    percentWatched?: number | null,
+    completed?: boolean | null,
+    lastWatchedAt?: string | null,
+    createdAt: string,
+    updatedAt: string,
+  } | null,
+};
+
+export type OnDeleteVideoWatchSubscriptionVariables = {
+  filter?: ModelSubscriptionVideoWatchFilterInput | null,
+};
+
+export type OnDeleteVideoWatchSubscription = {
+  onDeleteVideoWatch?:  {
+    __typename: "VideoWatch",
+    id: string,
+    studentId: string,
+    lessonId: string,
+    weeklyPlanItemId?: string | null,
+    watchedSeconds?: number | null,
+    durationSeconds?: number | null,
+    percentWatched?: number | null,
+    completed?: boolean | null,
+    lastWatchedAt?: string | null,
+    createdAt: string,
+    updatedAt: string,
   } | null,
 };
 
@@ -4963,9 +6563,20 @@ export type OnCreateStudentProfileSubscription = {
     email: string,
     firstName: string,
     lastName: string,
+    preferredName?: string | null,
     gradeLevel?: string | null,
     courseId?: string | null,
     planType?: string | null,
+    profilePictureKey?: string | null,
+    status?: string | null,
+    parentEmail?: string | null,
+    parentName?: string | null,
+    parentEmail2?: string | null,
+    parentName2?: string | null,
+    parentLinks?:  {
+      __typename: "ModelParentStudentLinkConnection",
+      nextToken?: string | null,
+    } | null,
     createdAt: string,
     updatedAt: string,
   } | null,
@@ -4983,9 +6594,20 @@ export type OnUpdateStudentProfileSubscription = {
     email: string,
     firstName: string,
     lastName: string,
+    preferredName?: string | null,
     gradeLevel?: string | null,
     courseId?: string | null,
     planType?: string | null,
+    profilePictureKey?: string | null,
+    status?: string | null,
+    parentEmail?: string | null,
+    parentName?: string | null,
+    parentEmail2?: string | null,
+    parentName2?: string | null,
+    parentLinks?:  {
+      __typename: "ModelParentStudentLinkConnection",
+      nextToken?: string | null,
+    } | null,
     createdAt: string,
     updatedAt: string,
   } | null,
@@ -5003,10 +6625,225 @@ export type OnDeleteStudentProfileSubscription = {
     email: string,
     firstName: string,
     lastName: string,
+    preferredName?: string | null,
     gradeLevel?: string | null,
     courseId?: string | null,
     planType?: string | null,
+    profilePictureKey?: string | null,
+    status?: string | null,
+    parentEmail?: string | null,
+    parentName?: string | null,
+    parentEmail2?: string | null,
+    parentName2?: string | null,
+    parentLinks?:  {
+      __typename: "ModelParentStudentLinkConnection",
+      nextToken?: string | null,
+    } | null,
     createdAt: string,
     updatedAt: string,
+  } | null,
+};
+
+export type OnCreateParentProfileSubscriptionVariables = {
+  filter?: ModelSubscriptionParentProfileFilterInput | null,
+};
+
+export type OnCreateParentProfileSubscription = {
+  onCreateParentProfile?:  {
+    __typename: "ParentProfile",
+    id: string,
+    userId: string,
+    email: string,
+    firstName: string,
+    lastName: string,
+    studentLinks?:  {
+      __typename: "ModelParentStudentLinkConnection",
+      nextToken?: string | null,
+    } | null,
+    createdAt: string,
+    updatedAt: string,
+  } | null,
+};
+
+export type OnUpdateParentProfileSubscriptionVariables = {
+  filter?: ModelSubscriptionParentProfileFilterInput | null,
+};
+
+export type OnUpdateParentProfileSubscription = {
+  onUpdateParentProfile?:  {
+    __typename: "ParentProfile",
+    id: string,
+    userId: string,
+    email: string,
+    firstName: string,
+    lastName: string,
+    studentLinks?:  {
+      __typename: "ModelParentStudentLinkConnection",
+      nextToken?: string | null,
+    } | null,
+    createdAt: string,
+    updatedAt: string,
+  } | null,
+};
+
+export type OnDeleteParentProfileSubscriptionVariables = {
+  filter?: ModelSubscriptionParentProfileFilterInput | null,
+};
+
+export type OnDeleteParentProfileSubscription = {
+  onDeleteParentProfile?:  {
+    __typename: "ParentProfile",
+    id: string,
+    userId: string,
+    email: string,
+    firstName: string,
+    lastName: string,
+    studentLinks?:  {
+      __typename: "ModelParentStudentLinkConnection",
+      nextToken?: string | null,
+    } | null,
+    createdAt: string,
+    updatedAt: string,
+  } | null,
+};
+
+export type OnCreateParentStudentLinkSubscriptionVariables = {
+  filter?: ModelSubscriptionParentStudentLinkFilterInput | null,
+};
+
+export type OnCreateParentStudentLinkSubscription = {
+  onCreateParentStudentLink?:  {
+    __typename: "ParentStudentLink",
+    id: string,
+    parentProfileId: string,
+    parentProfile?:  {
+      __typename: "ParentProfile",
+      id: string,
+      userId: string,
+      email: string,
+      firstName: string,
+      lastName: string,
+      createdAt: string,
+      updatedAt: string,
+    } | null,
+    studentProfileId: string,
+    studentProfile?:  {
+      __typename: "StudentProfile",
+      id: string,
+      userId: string,
+      email: string,
+      firstName: string,
+      lastName: string,
+      preferredName?: string | null,
+      gradeLevel?: string | null,
+      courseId?: string | null,
+      planType?: string | null,
+      profilePictureKey?: string | null,
+      status?: string | null,
+      parentEmail?: string | null,
+      parentName?: string | null,
+      parentEmail2?: string | null,
+      parentName2?: string | null,
+      createdAt: string,
+      updatedAt: string,
+    } | null,
+    createdAt: string,
+    updatedAt: string,
+    studentProfileParentLinksId?: string | null,
+    parentProfileStudentLinksId?: string | null,
+  } | null,
+};
+
+export type OnUpdateParentStudentLinkSubscriptionVariables = {
+  filter?: ModelSubscriptionParentStudentLinkFilterInput | null,
+};
+
+export type OnUpdateParentStudentLinkSubscription = {
+  onUpdateParentStudentLink?:  {
+    __typename: "ParentStudentLink",
+    id: string,
+    parentProfileId: string,
+    parentProfile?:  {
+      __typename: "ParentProfile",
+      id: string,
+      userId: string,
+      email: string,
+      firstName: string,
+      lastName: string,
+      createdAt: string,
+      updatedAt: string,
+    } | null,
+    studentProfileId: string,
+    studentProfile?:  {
+      __typename: "StudentProfile",
+      id: string,
+      userId: string,
+      email: string,
+      firstName: string,
+      lastName: string,
+      preferredName?: string | null,
+      gradeLevel?: string | null,
+      courseId?: string | null,
+      planType?: string | null,
+      profilePictureKey?: string | null,
+      status?: string | null,
+      parentEmail?: string | null,
+      parentName?: string | null,
+      parentEmail2?: string | null,
+      parentName2?: string | null,
+      createdAt: string,
+      updatedAt: string,
+    } | null,
+    createdAt: string,
+    updatedAt: string,
+    studentProfileParentLinksId?: string | null,
+    parentProfileStudentLinksId?: string | null,
+  } | null,
+};
+
+export type OnDeleteParentStudentLinkSubscriptionVariables = {
+  filter?: ModelSubscriptionParentStudentLinkFilterInput | null,
+};
+
+export type OnDeleteParentStudentLinkSubscription = {
+  onDeleteParentStudentLink?:  {
+    __typename: "ParentStudentLink",
+    id: string,
+    parentProfileId: string,
+    parentProfile?:  {
+      __typename: "ParentProfile",
+      id: string,
+      userId: string,
+      email: string,
+      firstName: string,
+      lastName: string,
+      createdAt: string,
+      updatedAt: string,
+    } | null,
+    studentProfileId: string,
+    studentProfile?:  {
+      __typename: "StudentProfile",
+      id: string,
+      userId: string,
+      email: string,
+      firstName: string,
+      lastName: string,
+      preferredName?: string | null,
+      gradeLevel?: string | null,
+      courseId?: string | null,
+      planType?: string | null,
+      profilePictureKey?: string | null,
+      status?: string | null,
+      parentEmail?: string | null,
+      parentName?: string | null,
+      parentEmail2?: string | null,
+      parentName2?: string | null,
+      createdAt: string,
+      updatedAt: string,
+    } | null,
+    createdAt: string,
+    updatedAt: string,
+    studentProfileParentLinksId?: string | null,
+    parentProfileStudentLinksId?: string | null,
   } | null,
 };
