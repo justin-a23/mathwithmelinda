@@ -227,8 +227,9 @@ export default function TeacherProfilePage() {
       formData.append('file', blob, 'profile.jpg')
       formData.append('userId', userId)
       const uploadRes = await fetch('/api/profile-pic', { method: 'POST', body: formData })
-      if (!uploadRes.ok) throw new Error('Upload failed: ' + uploadRes.status)
-      const { key } = await uploadRes.json()
+      const uploadData = await uploadRes.json()
+      if (!uploadRes.ok) throw new Error(uploadData.error || 'Upload failed: ' + uploadRes.status)
+      const { key } = uploadData
 
       // Save key to DynamoDB
       const updateResult = await client.graphql({
