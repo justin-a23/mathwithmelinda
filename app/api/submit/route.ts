@@ -1,7 +1,6 @@
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
+import { PutObjectCommand } from '@aws-sdk/client-s3'
 import { NextRequest, NextResponse } from 'next/server'
-
-const s3 = new S3Client({ region: 'us-east-1' })
+import { s3 } from '../../lib/s3'
 
 export async function POST(request: NextRequest) {
   try {
