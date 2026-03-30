@@ -70,9 +70,13 @@ export default function TeacherNav({ ungradedCount: propUngraded, unreadCount: p
       if (!p) return
       if (p.displayName) setDisplayName(p.displayName)
       if (p.profilePictureKey) {
-        const res = await fetch('/api/profile-pic?key=' + encodeURIComponent(p.profilePictureKey))
-        const { url } = await res.json()
-        setPicUrl(url)
+        if (p.profilePictureKey.startsWith('data:')) {
+          setPicUrl(p.profilePictureKey)
+        } else {
+          const res = await fetch('/api/profile-pic?key=' + encodeURIComponent(p.profilePictureKey))
+          const { url } = await res.json()
+          setPicUrl(url)
+        }
       }
     } catch { /* silent */ }
   }

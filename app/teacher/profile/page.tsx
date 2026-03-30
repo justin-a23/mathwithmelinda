@@ -132,9 +132,14 @@ export default function TeacherProfilePage() {
           setDisplayName(p.displayName || '')
           setBio(p.bio || '')
           if (p.profilePictureKey) {
-            const res = await fetch('/api/profile-pic?key=' + encodeURIComponent(p.profilePictureKey))
-            const { url } = await res.json()
-            setProfilePicUrl(url)
+            // Base64 data URLs are used directly; legacy S3 keys fetch a signed URL
+            if (p.profilePictureKey.startsWith('data:')) {
+              setProfilePicUrl(p.profilePictureKey)
+            } else {
+              const res = await fetch('/api/profile-pic?key=' + encodeURIComponent(p.profilePictureKey))
+              const { url } = await res.json()
+              setProfilePicUrl(url)
+            }
           }
         } else {
           // Auto-create profile for teacher on first visit (or after migration)
@@ -220,36 +225,28 @@ export default function TeacherProfilePage() {
     setUploadingPic(true)
     setSaveError('')
     try {
-      const userId = user?.userId || user?.username || ''
+      // Convert blob to base64 data URL — stored directly in DynamoDB, no S3 needed
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result as string)
+        reader.onerror = reject
+        reader.readAsDataURL(blob)
+      })
 
-      // Upload image server-side (avoids S3 CORS issues with signed URLs)
-      const formData = new FormData()
-      formData.append('file', blob, 'profile.jpg')
-      formData.append('userId', userId)
-      const uploadRes = await fetch('/api/profile-pic', { method: 'POST', body: formData })
-      const uploadData = await uploadRes.json()
-      if (!uploadRes.ok) throw new Error(uploadData.error || 'Upload failed: ' + uploadRes.status)
-      const { key } = uploadData
-
-      // Save key to DynamoDB
       const updateResult = await client.graphql({
         query: updateTeacherProfileMutation,
-        variables: { input: { id: profile.id, profilePictureKey: key } },
+        variables: { input: { id: profile.id, profilePictureKey: dataUrl } },
       }) as any
 
       if (updateResult.errors && updateResult.errors.length > 0) {
         throw new Error(updateResult.errors[0].message)
       }
 
-      setProfile(prev => prev ? { ...prev, profilePictureKey: key } : prev)
-
-      // Get a signed read URL to display the image
-      const viewRes = await fetch('/api/profile-pic?key=' + encodeURIComponent(key))
-      const { url } = await viewRes.json()
-      setProfilePicUrl(url)
+      setProfile(prev => prev ? { ...prev, profilePictureKey: dataUrl } : prev)
+      setProfilePicUrl(dataUrl)
     } catch (err: any) {
-      console.error('Error uploading picture:', err)
-      setSaveError('Photo upload failed: ' + (err?.message || 'Please try again.'))
+      console.error('Error saving picture:', err)
+      setSaveError('Photo save failed: ' + (err?.message || 'Please try again.'))
     } finally {
       setUploadingPic(false)
     }
