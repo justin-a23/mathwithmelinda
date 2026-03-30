@@ -622,7 +622,7 @@ export default function StudentsPage() {
                       )}
                       {courseSemesters.length === 0 && s.courseId && (
                         <p style={{ fontSize: '11px', color: 'var(--gray-mid)', margin: '12px 0 0', fontStyle: 'italic' }}>
-                          No terms exist for this course yet. Create one under Terms.
+                          No terms exist for this course yet. Create one under Academic Year.
                         </p>
                       )}
 

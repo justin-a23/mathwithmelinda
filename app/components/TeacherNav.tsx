@@ -209,7 +209,7 @@ export default function TeacherNav({ ungradedCount: propUngraded, unreadCount: p
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexShrink: 0 }}>
         {secondaryLink('Gradebook', '/teacher/gradebook', isGradebook)}
         {secondaryLink('Students', '/teacher/students', isStudents)}
-        {secondaryLink('Terms', '/teacher/semesters', isTerms)}
+        {secondaryLink('Academic Year', '/teacher/semesters', isTerms)}
       </div>
 
       {/* Spacer */}

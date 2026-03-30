@@ -282,7 +282,7 @@ export default function SemestersPage() {
         {/* Page header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
           <div>
-            <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '32px', color: 'var(--foreground)', marginBottom: '8px' }}>Terms</h1>
+            <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '32px', color: 'var(--foreground)', marginBottom: '8px' }}>Academic Year</h1>
             <p style={{ color: 'var(--gray-mid)', margin: 0 }}>Manage academic terms and grading weights.</p>
           </div>
           {!showForm && (
