@@ -199,6 +199,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   useTheme() // keeps dark mode active via ThemeProvider context
 
+  const [hasProfile, setHasProfile] = useState<boolean | null>(null)
   const [profileId, setProfileId] = useState<string | null>(null)
   const [profileName, setProfileName] = useState('')
   const [profilePicKey, setProfilePicKey] = useState<string | null>(null)
@@ -233,21 +234,23 @@ export default function Dashboard() {
         if (profileItems.length > 0) {
           const p = profileItems[0]
           if (p.status === 'removed') { signOut(); return }
+          setHasProfile(true)
           setProfileId(p.id)
           setProfileName((p.preferredName || p.firstName) + ' ' + p.lastName)
           studentCourseId = p.courseId || ''
           if (p.profilePictureKey) {
             setProfilePicKey(p.profilePictureKey)
-            const res = await fetch('/api/profile-pic', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ action: 'view', key: p.profilePictureKey })
-            })
-            const { url } = await res.json()
-            setProfilePicUrl(url)
+            if (p.profilePictureKey.startsWith('data:')) {
+              setProfilePicUrl(p.profilePictureKey)
+            } else {
+              const res = await fetch('/api/profile-pic?key=' + encodeURIComponent(p.profilePictureKey))
+              const { url } = await res.json()
+              setProfilePicUrl(url)
+            }
           }
-        } else if (loginId) {
-          setProfileName(loginId.split('@')[0])
+        } else {
+          setHasProfile(false)
+          if (loginId) setProfileName(loginId.split('@')[0])
         }
 
         // 2. Fetch plans + submissions in parallel, now that we have courseId
@@ -627,6 +630,16 @@ export default function Dashboard() {
 
         {loading ? (
           <p style={{ color: 'var(--gray-mid)' }}>Loading your lessons...</p>
+        ) : hasProfile === false ? (
+          <div style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', padding: '48px 32px', textAlign: 'center', maxWidth: '480px', margin: '0 auto' }}>
+            <div style={{ width: '56px', height: '56px', background: 'var(--plum-light)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--plum)" strokeWidth="1.8"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            </div>
+            <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', color: 'var(--foreground)', marginBottom: '8px' }}>Not enrolled yet</h2>
+            <p style={{ color: 'var(--gray-mid)', fontSize: '14px', lineHeight: '1.6', margin: '0 auto' }}>
+              Your account is set up but you haven't been added to a course yet. Reach out to your teacher to get enrolled — your lessons will appear here once you're set up.
+            </p>
+          </div>
         ) : weeklyPlans.length === 0 ? (
           <p style={{ color: 'var(--gray-mid)' }}>No lessons scheduled yet. Check back soon!</p>
         ) : (

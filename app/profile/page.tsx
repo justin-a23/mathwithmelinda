@@ -251,7 +251,18 @@ export default function ProfilePage() {
         {loading ? (
           <p style={{ color: 'var(--gray-mid)' }}>Loading...</p>
         ) : !profile ? (
-          <p style={{ color: 'var(--gray-mid)' }}>Profile not found. Please contact your teacher.</p>
+          <div style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', padding: '40px 32px', textAlign: 'center' }}>
+            <div style={{ width: '56px', height: '56px', background: 'var(--plum-light)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--plum)" strokeWidth="1.8"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            </div>
+            <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', color: 'var(--foreground)', marginBottom: '8px' }}>Not enrolled yet</h2>
+            <p style={{ color: 'var(--gray-mid)', fontSize: '14px', lineHeight: '1.6', maxWidth: '360px', margin: '0 auto 24px' }}>
+              Your account is created but you haven't been added to a course yet. Your teacher will set up your profile and enroll you — reach out to let them know you're ready!
+            </p>
+            <p style={{ fontSize: '13px', color: 'var(--gray-mid)', background: 'var(--page-bg)', borderRadius: '8px', padding: '12px 16px', display: 'inline-block' }}>
+              Signed in as <strong>{user?.signInDetails?.loginId}</strong>
+            </p>
+          </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
 
