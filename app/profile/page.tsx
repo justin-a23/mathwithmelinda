@@ -110,13 +110,13 @@ export default function ProfilePage() {
           // Default to first name if no preferred name set yet
           setPreferredName(p.preferredName || p.firstName)
           if (p.profilePictureKey) {
-            const res = await fetch('/api/profile-pic', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ action: 'view', key: p.profilePictureKey }),
-            })
-            const { url } = await res.json()
-            setProfilePicUrl(url)
+            if (p.profilePictureKey.startsWith('data:')) {
+              setProfilePicUrl(p.profilePictureKey)
+            } else {
+              const res = await fetch('/api/profile-pic?key=' + encodeURIComponent(p.profilePictureKey))
+              const { url } = await res.json()
+              setProfilePicUrl(url)
+            }
           }
           if (p.courseId) {
             const courses = courseRes.data.listCourses.items as { id: string; title: string; isArchived: boolean | null }[]

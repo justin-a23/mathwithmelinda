@@ -114,7 +114,7 @@ function ScheduleWeekInner() {
       try {
         const result = await client.graphql({
           query: listStudentProfiles,
-          variables: { filter: { courseId: { eq: selectedCourseId } }, limit: 200 }
+          variables: { filter: { courseId: { eq: selectedCourseId }, status: { ne: 'removed' } }, limit: 200 }
         }) as any
         const items = result.data.listStudentProfiles.items as StudentProfile[]
         setStudents(items)

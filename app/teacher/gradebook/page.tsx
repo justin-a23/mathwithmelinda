@@ -49,7 +49,7 @@ const LIST_LESSON_TEMPLATES = /* GraphQL */ `
 const LIST_STUDENTS = /* GraphQL */ `
   query ListStudents($filter: ModelStudentProfileFilterInput) {
     listStudentProfiles(filter: $filter, limit: 200) {
-      items { id userId email firstName lastName courseId }
+      items { id userId email firstName lastName courseId status }
     }
   }
 `
@@ -107,6 +107,7 @@ type StudentProfile = {
   firstName: string
   lastName: string
   courseId: string | null
+  status: string | null
 }
 
 type Submission = {
@@ -265,9 +266,11 @@ export default function GradebookPage() {
       // 7. Load students
       const studentsRes = await (client.graphql({
         query: LIST_STUDENTS,
-        variables: { filter: { courseId: { eq: sem.courseId } } },
+        variables: { filter: { courseId: { eq: sem.courseId }, status: { ne: 'removed' } } },
       }) as any)
-      const students: StudentProfile[] = studentsRes.data.listStudentProfiles.items
+      const students: StudentProfile[] = studentsRes.data.listStudentProfiles.items.filter(
+        (s: StudentProfile) => s.status !== 'removed'
+      )
 
       // 8. Load all submissions
       const subsRes = await (client.graphql({ query: LIST_ALL_SUBMISSIONS }) as any)
