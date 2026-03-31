@@ -369,12 +369,13 @@ export default function Dashboard() {
     if (!file || !profileId) return
     setUploadingPic(true)
     try {
-      // Convert to base64 data URL and store directly in DynamoDB (no S3 needed)
+      // Compress to max 200×200 JPEG first, then base64 encode for DynamoDB
+      const compressed = await compressImage(file)
       const dataUrl = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader()
         reader.onload = () => resolve(reader.result as string)
         reader.onerror = reject
-        reader.readAsDataURL(file)
+        reader.readAsDataURL(compressed)
       })
       const { updateStudentProfile } = await import('../../src/graphql/mutations')
       await client.graphql({
