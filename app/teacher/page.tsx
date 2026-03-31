@@ -86,6 +86,14 @@ function GradingBar({ graded, received }: { graded: number; received: number }) 
   )
 }
 
+const listPendingStudentsQuery = /* GraphQL */`
+  query ListPendingStudents {
+    listStudentProfiles(limit: 50, filter: { status: { eq: "pending" } }) {
+      items { id firstName lastName email gradeLevel }
+    }
+  }
+`
+
 export default function TeacherDashboard() {
   const router = useRouter()
   const { checking } = useRoleGuard('teacher')
@@ -96,11 +104,20 @@ export default function TeacherDashboard() {
   const [saving, setSaving] = useState(false)
   const [weekStats, setWeekStats] = useState<CourseWeekStats[]>([])
   const [statsLoading, setStatsLoading] = useState(true)
+  const [pendingStudents, setPendingStudents] = useState<{ id: string; firstName: string; lastName: string; email: string; gradeLevel: string | null }[]>([])
 
   useEffect(() => {
     fetchCourses()
     fetchWeekStats()
+    fetchPendingStudents()
   }, [])
+
+  async function fetchPendingStudents() {
+    try {
+      const result = await (client.graphql({ query: listPendingStudentsQuery }) as any)
+      setPendingStudents(result.data.listStudentProfiles.items)
+    } catch { /* silent */ }
+  }
 
   async function fetchCourses() {
     try {
@@ -184,6 +201,37 @@ export default function TeacherDashboard() {
       <TeacherNav />
 
       <main style={{ maxWidth: '1100px', margin: '0 auto', padding: '40px 24px' }}>
+
+        {/* ── PENDING STUDENTS BANNER ── */}
+        {pendingStudents.length > 0 && (
+          <div
+            onClick={() => router.push('/teacher/students')}
+            style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: '12px', padding: '16px 20px', marginBottom: '28px', display: 'flex', alignItems: 'center', gap: '14px', cursor: 'pointer' }}
+          >
+            <div style={{ width: '36px', height: '36px', background: '#FEF3C7', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#D97706" strokeWidth="2">
+                <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
+                <circle cx="9" cy="7" r="4"/>
+                <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/>
+              </svg>
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 700, fontSize: '14px', color: '#92400E' }}>
+                {pendingStudents.length === 1
+                  ? `${pendingStudents[0].firstName} ${pendingStudents[0].lastName} is waiting to join`
+                  : `${pendingStudents.length} students are waiting for approval`}
+              </div>
+              <div style={{ fontSize: '12px', color: '#B45309', marginTop: '2px' }}>
+                {pendingStudents.length === 1
+                  ? `${pendingStudents[0].email}${pendingStudents[0].gradeLevel ? ` · Grade ${pendingStudents[0].gradeLevel}` : ''} — click to review`
+                  : pendingStudents.slice(0, 3).map(s => s.firstName).join(', ') + (pendingStudents.length > 3 ? ` and ${pendingStudents.length - 3} more` : '') + ' — click to review'}
+              </div>
+            </div>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#D97706" strokeWidth="2">
+              <path d="M9 18l6-6-6-6"/>
+            </svg>
+          </div>
+        )}
 
         {/* ── THIS WEEK ── */}
         <div style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', padding: '24px 28px', marginBottom: '40px' }}>

@@ -16,6 +16,9 @@ const NAV_COUNTS_QUERY = /* GraphQL */`
     listMessages(limit: 200, filter: { isRead: { eq: false } }) {
       items { id }
     }
+    listStudentProfiles(limit: 200, filter: { status: { eq: "pending" } }) {
+      items { id }
+    }
   }
 `
 
@@ -40,6 +43,7 @@ export default function TeacherNav({ ungradedCount: propUngraded, unreadCount: p
 
   const [ungraded, setUngraded] = useState(propUngraded ?? 0)
   const [unread, setUnread] = useState(propUnread ?? 0)
+  const [pendingStudents, setPendingStudents] = useState(0)
   const [displayName, setDisplayName] = useState('')
   const [picUrl, setPicUrl] = useState<string | null>(null)
 
@@ -58,6 +62,7 @@ export default function TeacherNav({ ungradedCount: propUngraded, unreadCount: p
       const msgs = result.data.listMessages.items
       setUngraded(subs.filter((s: any) => !s.grade && s.status !== 'returned').length)
       setUnread(msgs.length)
+      setPendingStudents(result.data.listStudentProfiles.items.length)
     } catch { /* silent — nav badges are non-critical */ }
   }
 
@@ -138,7 +143,7 @@ export default function TeacherNav({ ungradedCount: propUngraded, unreadCount: p
     )
   }
 
-  function secondaryLink(label: string, path: string, active: boolean) {
+  function secondaryLink(label: string, path: string, active: boolean, badge?: number) {
     return (
       <button
         key={path}
@@ -155,11 +160,27 @@ export default function TeacherNav({ ungradedCount: propUngraded, unreadCount: p
           textDecoration: active ? 'underline' : 'none',
           textUnderlineOffset: '3px',
           whiteSpace: 'nowrap',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '5px',
         }}
         onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = 'white' }}
         onMouseLeave={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.color = 'rgba(255,255,255,0.55)' }}
       >
         {label}
+        {badge && badge > 0 ? (
+          <span style={{
+            background: '#f59e0b',
+            color: 'white',
+            fontSize: '10px',
+            fontWeight: 700,
+            padding: '1px 6px',
+            borderRadius: '20px',
+            lineHeight: 1.4,
+          }}>
+            {badge}
+          </span>
+        ) : null}
       </button>
     )
   }
@@ -210,7 +231,7 @@ export default function TeacherNav({ ungradedCount: propUngraded, unreadCount: p
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexShrink: 0 }}>
         {secondaryLink('Assigned Work', '/teacher/plans', isPlans)}
         {secondaryLink('Gradebook', '/teacher/gradebook', isGradebook)}
-        {secondaryLink('Students', '/teacher/students', isStudents)}
+        {secondaryLink('Students', '/teacher/students', isStudents, pendingStudents)}
         {secondaryLink('Academic Year', '/teacher/semesters', isTerms)}
       </div>
 
@@ -243,7 +264,7 @@ export default function TeacherNav({ ungradedCount: propUngraded, unreadCount: p
         </button>
 
         <button
-          onClick={async () => { await signOut(); router.replace('/login') }}
+          onClick={() => signOut()}
           style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.7)', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontFamily: 'var(--font-body)', whiteSpace: 'nowrap' }}
         >
           Sign out
