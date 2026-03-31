@@ -365,7 +365,7 @@ export default function StudentGradesPage() {
         ) : !profile ? (
           <p style={{ color: 'var(--gray-mid)', textAlign: 'center', padding: '80px 0' }}>No student profile found.</p>
         ) : semesters.length === 0 ? (
-          <p style={{ color: 'var(--gray-mid)', textAlign: 'center', padding: '80px 0' }}>No terms set up for your course yet.</p>
+          <p style={{ color: 'var(--gray-mid)', textAlign: 'center', padding: '80px 0' }}>No academic year set up for your course yet.</p>
         ) : (
           <>
             {/* Semester tabs */}
@@ -450,7 +450,7 @@ export default function StudentGradesPage() {
                 {/* ── ASSIGNMENT LIST ── */}
                 {assignments.length === 0 ? (
                   <p style={{ color: 'var(--gray-mid)', textAlign: 'center', padding: '32px 0' }}>
-                    No assignments found in this term's date range.
+                    No assignments found in this academic year's date range.
                   </p>
                 ) : (
                   <div style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: '12px', overflow: 'hidden' }}>

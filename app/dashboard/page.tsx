@@ -527,7 +527,7 @@ export default function Dashboard() {
                 My Profile
               </button>
               <ThemeToggle />
-              <button onClick={async () => { await signOut(); router.replace('/login') }} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'white', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '14px' }}>
+              <button onClick={async () => { await signOut(); router.replace('/login') }} style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.4)', padding: '8px 4px', cursor: 'pointer', fontSize: '13px' }}>
                 Sign out
               </button>
             </div>

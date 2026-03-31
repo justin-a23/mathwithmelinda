@@ -220,4 +220,5 @@ type Message @model {
   isRead: Boolean
   teacherReply: String
   repliedAt: String
+  isArchivedByTeacher: Boolean
 }
