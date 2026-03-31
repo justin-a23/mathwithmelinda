@@ -199,6 +199,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   useTheme() // keeps dark mode active via ThemeProvider context
 
+  const [pendingApproval, setPendingApproval] = useState(false)
   const [hasProfile, setHasProfile] = useState<boolean | null>(null)
   const [profileId, setProfileId] = useState<string | null>(null)
   const [profileName, setProfileName] = useState('')
@@ -234,6 +235,7 @@ export default function Dashboard() {
         if (profileItems.length > 0) {
           const p = profileItems[0]
           if (p.status === 'removed') { signOut(); return }
+          if (p.status === 'pending') { setPendingApproval(true); setLoading(false); return }
           setHasProfile(true)
           setProfileId(p.id)
           setProfileName((p.preferredName || p.firstName) + ' ' + p.lastName)
@@ -346,6 +348,12 @@ export default function Dashboard() {
           setMyMessages(msgItems)
         } catch { /* non-critical */ }
         setMessagesLoaded(true)
+        // Badge: count replies the student hasn't seen yet (tracked in localStorage)
+        try {
+          const lastVisited = parseInt(localStorage.getItem('mwm:messagesLastVisited') || '0')
+          // side-effect only — unreadReplies is derived in render
+          void lastVisited
+        } catch { /* localStorage unavailable */ }
       } catch (err) {
         console.error('Error loading dashboard:', err)
       } finally {
@@ -361,40 +369,20 @@ export default function Dashboard() {
     if (!file || !profileId) return
     setUploadingPic(true)
     try {
-      const userId = user?.userId || user?.username || ''
-      // 1. Get presigned upload URL
-      const res = await fetch('/api/profile-pic', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'upload', userId })
+      // Convert to base64 data URL and store directly in DynamoDB (no S3 needed)
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result as string)
+        reader.onerror = reject
+        reader.readAsDataURL(file)
       })
-      const { signedUrl, key } = await res.json()
-
-      // 2. Compress image client-side
-      const compressed = await compressImage(file)
-
-      // 3. Upload to S3
-      await fetch(signedUrl, {
-        method: 'PUT',
-        body: compressed,
-        headers: { 'Content-Type': 'image/jpeg' }
-      })
-
-      // 4. Save key to StudentProfile
       const { updateStudentProfile } = await import('../../src/graphql/mutations')
       await client.graphql({
         query: updateStudentProfile,
-        variables: { input: { id: profileId, profilePictureKey: key } }
+        variables: { input: { id: profileId, profilePictureKey: dataUrl } }
       })
-
-      setProfilePicKey(key)
-      const viewRes = await fetch('/api/profile-pic', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'view', key })
-      })
-      const { url } = await viewRes.json()
-      setProfilePicUrl(url)
+      setProfilePicKey(dataUrl)
+      setProfilePicUrl(dataUrl)
     } catch (err) {
       console.error('Error uploading profile pic:', err)
     } finally {
@@ -447,6 +435,52 @@ export default function Dashboard() {
     if (isNaN(d.getTime())) return iso
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) +
       ' at ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+  }
+
+  // Pending approval waiting room
+  if (pendingApproval) {
+    return (
+      <div style={{ fontFamily: 'var(--font-body)', background: 'var(--page-bg)', minHeight: '100vh' }}>
+        <nav style={{ background: 'var(--nav-bg)', padding: '0 48px', height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ width: '36px', height: '36px', background: 'var(--plum)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <svg width="20" height="20" viewBox="0 0 40 40" fill="none">
+                <rect x="17" y="6" width="6" height="28" rx="3" fill="white"/>
+                <rect x="6" y="17" width="28" height="6" rx="3" fill="white"/>
+              </svg>
+            </div>
+            <span style={{ fontFamily: 'var(--font-display)', color: 'white', fontSize: '20px' }}>Math with Melinda</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <ThemeToggle />
+            <button onClick={() => signOut()} style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.4)', padding: '8px 4px', cursor: 'pointer', fontSize: '13px' }}>
+              Sign out
+            </button>
+          </div>
+        </nav>
+        <main style={{ maxWidth: '520px', margin: '0 auto', padding: '80px 24px', textAlign: 'center' }}>
+          <div style={{ width: '72px', height: '72px', background: '#FEF3C7', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 28px' }}>
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#D97706" strokeWidth="2">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M12 6v6l4 2"/>
+            </svg>
+          </div>
+          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '28px', color: 'var(--foreground)', marginBottom: '12px' }}>
+            Waiting for approval
+          </h1>
+          <p style={{ color: 'var(--gray-mid)', fontSize: '15px', lineHeight: '1.6', marginBottom: '32px' }}>
+            Your request to join Math with Melinda is pending.<br/>
+            Melinda will review your request and set up your course. Come back once she&apos;s approved you!
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            style={{ background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '8px', fontSize: '14px', padding: '10px 24px', cursor: 'pointer', fontFamily: 'var(--font-body)' }}
+          >
+            Check for approval
+          </button>
+        </main>
+      </div>
+    )
   }
 
   return (
@@ -522,20 +556,64 @@ export default function Dashboard() {
               <button onClick={() => router.push('/student/grades')} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'white', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '14px' }}>
                 My Grades
               </button>
-              <button onClick={() => { setShowAskModal(true); setAskSent(false) }} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'white', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
-                Ask a Question
-              </button>
+              {(() => {
+                const lastVisited = typeof window !== 'undefined'
+                  ? parseInt(localStorage.getItem('mwm:messagesLastVisited') || '0')
+                  : 0
+                const unreadReplies = myMessages.filter(m =>
+                  m.teacherReply && m.repliedAt && new Date(m.repliedAt).getTime() > lastVisited
+                ).length
+                return (
+                  <button
+                    onClick={() => router.push('/student/messages')}
+                    style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'white', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px', position: 'relative' }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                    Messages
+                    {unreadReplies > 0 && (
+                      <span style={{ background: '#ef4444', color: 'white', fontSize: '10px', fontWeight: 700, borderRadius: '10px', padding: '1px 6px', lineHeight: 1.4 }}>
+                        {unreadReplies}
+                      </span>
+                    )}
+                  </button>
+                )
+              })()}
               <button onClick={() => router.push('/profile')} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'white', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '14px' }}>
                 My Profile
               </button>
               <ThemeToggle />
-              <button onClick={async () => { await signOut(); router.replace('/login') }} style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.4)', padding: '8px 4px', cursor: 'pointer', fontSize: '13px' }}>
+              <button onClick={() => signOut()} style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.4)', padding: '8px 4px', cursor: 'pointer', fontSize: '13px' }}>
                 Sign out
               </button>
             </div>
         </div>
       </nav>
+
+      {/* Unread replies banner — shown just below nav */}
+      {messagesLoaded && (() => {
+        const lastVisited = typeof window !== 'undefined'
+          ? parseInt(localStorage.getItem('mwm:messagesLastVisited') || '0')
+          : 0
+        const unreadReplies = myMessages.filter(m =>
+          m.teacherReply && m.repliedAt && new Date(m.repliedAt).getTime() > lastVisited
+        ).length
+        if (unreadReplies === 0) return null
+        return (
+          <div
+            onClick={() => router.push('/student/messages')}
+            style={{
+              background: 'var(--plum)', color: 'white',
+              padding: '12px 48px', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
+              fontSize: '14px', fontWeight: 500,
+            }}
+          >
+            <span style={{ fontSize: '18px' }}>💬</span>
+            Melinda replied to {unreadReplies === 1 ? 'your message' : `${unreadReplies} messages`} — tap to read
+            <span style={{ marginLeft: '4px', fontSize: '13px', opacity: 0.8 }}>→</span>
+          </div>
+        )
+      })()}
 
       <main style={{ maxWidth: '960px', margin: '0 auto', padding: '48px 24px' }}>
 
@@ -713,29 +791,68 @@ export default function Dashboard() {
           })
         )}
 
-        {/* My Messages section */}
-        {messagesLoaded && myMessages.length > 0 && (
+        {/* Messages preview — latest message only, links to full page */}
+        {messagesLoaded && (
           <div style={{ marginTop: '48px' }}>
-            <h2 style={{ fontSize: '13px', fontWeight: 500, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--plum)', marginBottom: '16px' }}>
-              My Messages
-            </h2>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {myMessages.map(msg => (
-                <div key={msg.id} style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', padding: '18px 22px' }}>
-                  <div style={{ fontSize: '14px', color: 'var(--foreground)', lineHeight: '1.6', marginBottom: '6px' }}>{msg.content}</div>
-                  <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginBottom: msg.teacherReply ? '12px' : '0' }}>{fmtMsgDate(msg.sentAt)}</div>
-                  {msg.teacherReply && (
-                    <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '12px 14px' }}>
-                      <div style={{ fontSize: '11px', fontWeight: 700, color: '#15803d', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '6px' }}>Melinda replied</div>
-                      <div style={{ fontSize: '14px', color: '#15803d', lineHeight: '1.6' }}>{msg.teacherReply}</div>
-                      {msg.repliedAt && (
-                        <div style={{ fontSize: '11px', color: '#16a34a', marginTop: '6px', opacity: 0.7 }}>{fmtMsgDate(msg.repliedAt)}</div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+              <h2 style={{ fontSize: '13px', fontWeight: 500, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--plum)', margin: 0 }}>
+                Messages
+              </h2>
+              <button
+                onClick={() => router.push('/student/messages')}
+                style={{ background: 'none', border: 'none', color: 'var(--plum)', cursor: 'pointer', fontSize: '13px', fontWeight: 500, padding: 0 }}
+              >
+                View all →
+              </button>
             </div>
+            {myMessages.length === 0 ? (
+              <button
+                onClick={() => router.push('/student/messages')}
+                style={{
+                  width: '100%', background: 'var(--background)', border: '1px dashed var(--gray-light)',
+                  borderRadius: 'var(--radius)', padding: '18px 22px', cursor: 'pointer',
+                  color: 'var(--gray-mid)', fontSize: '14px', textAlign: 'left', fontFamily: 'var(--font-body)'
+                }}
+              >
+                💬 Send Melinda a question…
+              </button>
+            ) : (() => {
+              const latest = myMessages[0]
+              const hasUnread = (() => {
+                const lastVisited = typeof window !== 'undefined'
+                  ? parseInt(localStorage.getItem('mwm:messagesLastVisited') || '0')
+                  : 0
+                return latest.teacherReply && latest.repliedAt && new Date(latest.repliedAt).getTime() > lastVisited
+              })()
+              return (
+                <button
+                  onClick={() => router.push('/student/messages')}
+                  style={{
+                    width: '100%', background: 'var(--background)',
+                    border: `1px solid ${hasUnread ? 'var(--plum)' : 'var(--gray-light)'}`,
+                    borderRadius: 'var(--radius)', padding: '16px 20px', cursor: 'pointer',
+                    textAlign: 'left', fontFamily: 'var(--font-body)',
+                    display: 'flex', alignItems: 'flex-start', gap: '12px',
+                  }}
+                >
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '13px', color: 'var(--foreground)', lineHeight: '1.5', marginBottom: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {latest.content}
+                    </div>
+                    {latest.teacherReply ? (
+                      <div style={{ fontSize: '12px', color: '#15803d', fontWeight: hasUnread ? 600 : 400 }}>
+                        {hasUnread ? '● ' : ''}Melinda replied · {fmtMsgDate(latest.repliedAt || latest.sentAt)}
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: '12px', color: 'var(--gray-mid)', fontStyle: 'italic' }}>Waiting for reply · {fmtMsgDate(latest.sentAt)}</div>
+                    )}
+                  </div>
+                  <div style={{ fontSize: '13px', color: 'var(--gray-mid)', flexShrink: 0 }}>
+                    {myMessages.length > 1 ? `+${myMessages.length - 1} more` : ''}
+                  </div>
+                </button>
+              )
+            })()}
           </div>
         )}
       </main>

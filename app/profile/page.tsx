@@ -166,24 +166,17 @@ export default function ProfilePage() {
     setCropperSrc(null)
     setUploadingPic(true)
     try {
-      const userId = user?.userId || user?.username || ''
-      const res = await fetch('/api/profile-pic', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'upload', userId }),
+      // Convert blob → base64 data URL and store directly in DynamoDB (no S3)
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result as string)
+        reader.onerror = reject
+        reader.readAsDataURL(blob)
       })
-      const { signedUrl, key } = await res.json()
-      await fetch(signedUrl, { method: 'PUT', body: blob, headers: { 'Content-Type': 'image/jpeg' } })
       const { updateStudentProfile } = await import('../../src/graphql/mutations')
-      await client.graphql({ query: updateStudentProfile, variables: { input: { id: profile.id, profilePictureKey: key } } })
-      const viewRes = await fetch('/api/profile-pic', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'view', key }),
-      })
-      const { url } = await viewRes.json()
-      setProfilePicUrl(url)
-      setProfile(prev => prev ? { ...prev, profilePictureKey: key } : prev)
+      await client.graphql({ query: updateStudentProfile, variables: { input: { id: profile.id, profilePictureKey: dataUrl } } })
+      setProfilePicUrl(dataUrl)
+      setProfile(prev => prev ? { ...prev, profilePictureKey: dataUrl } : prev)
     } catch (err) {
       console.error('Error uploading picture:', err)
     } finally {

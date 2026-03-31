@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef } from 'react'
+import MathRenderer from './MathRenderer'
 
 const SYMBOLS = [
   { label: '²', insert: '\\(^2\\)', title: 'Squared' },
@@ -71,7 +72,7 @@ export default function MathToolbar({ textareaRef, value, onChange }: Props) {
 
   const btnStyle: React.CSSProperties = {
     padding: '4px 8px', borderRadius: '4px', border: '1px solid var(--gray-light)',
-    background: 'var(--white)', color: 'var(--foreground)',
+    background: 'var(--background)', color: 'var(--foreground)',
     cursor: 'pointer', fontSize: '13px', fontWeight: 500,
     minWidth: '32px', textAlign: 'center', lineHeight: 1,
     fontFamily: 'var(--font-body)'
@@ -79,17 +80,25 @@ export default function MathToolbar({ textareaRef, value, onChange }: Props) {
 
   const popupStyle: React.CSSProperties = {
     position: 'absolute', top: '100%', left: 0, zIndex: 100,
-    background: 'var(--white)', border: '1px solid var(--gray-light)',
+    background: 'var(--background)', border: '1px solid var(--gray-light)',
     borderRadius: '8px', padding: '14px', boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
-    minWidth: '220px', marginTop: '4px'
+    minWidth: '240px', marginTop: '4px'
   }
 
   const popupInputStyle: React.CSSProperties = {
     width: '100%', padding: '6px 10px', borderRadius: '6px',
     border: '1px solid var(--gray-light)', fontSize: '14px',
-    background: 'var(--white)', color: 'var(--foreground)',
+    background: 'var(--background)', color: 'var(--foreground)',
     fontFamily: 'var(--font-body)', boxSizing: 'border-box'
   }
+
+  const fracPreview = fracNumer || fracDenom
+    ? `\\(\\frac{${fracNumer || '\\square'}}{${fracDenom || '\\square'}}\\)`
+    : null
+
+  const expPreview = expBase || expPower
+    ? `\\(${expBase || '\\square'}^{${expPower || '\\square'}}\\)`
+    : null
 
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', padding: '8px', background: 'var(--background)', borderRadius: '6px', border: '1px solid var(--gray-light)', marginBottom: '6px', position: 'relative' }}>
@@ -100,7 +109,7 @@ export default function MathToolbar({ textareaRef, value, onChange }: Props) {
           type="button"
           title="Insert fraction"
           onClick={() => { setShowFractionPopup(v => !v); setShowExponentPopup(false); setTimeout(() => numerRef.current?.focus(), 50) }}
-          style={{ ...btnStyle, background: showFractionPopup ? 'var(--plum)' : 'var(--white)', color: showFractionPopup ? 'white' : 'var(--foreground)', fontWeight: 700 }}
+          style={{ ...btnStyle, background: showFractionPopup ? 'var(--plum)' : 'var(--background)', color: showFractionPopup ? 'white' : 'var(--foreground)', fontWeight: 700 }}
         >
           a/b
         </button>
@@ -108,21 +117,25 @@ export default function MathToolbar({ textareaRef, value, onChange }: Props) {
           <div style={popupStyle}>
             <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--gray-dark)', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Insert Fraction</div>
             <div style={{ marginBottom: '8px' }}>
-              <label style={{ fontSize: '12px', color: 'var(--gray-dark)', display: 'block', marginBottom: '4px' }}>Numerator (top)</label>
-              <input ref={numerRef} value={fracNumer} onChange={e => setFracNumer(e.target.value)} onKeyDown={e => e.key === 'Enter' && insertFraction()} style={popupInputStyle} placeholder="e.g. 7" />
+              <label style={{ fontSize: '12px', color: 'var(--gray-dark)', display: 'block', marginBottom: '4px' }}>
+                Numerator (top) — use x^{'{2}'} for exponents
+              </label>
+              <input ref={numerRef} value={fracNumer} onChange={e => setFracNumer(e.target.value)} onKeyDown={e => e.key === 'Enter' && insertFraction()} style={popupInputStyle} placeholder="e.g. x^{2} + 5a" />
             </div>
             <div style={{ marginBottom: '12px' }}>
-              <label style={{ fontSize: '12px', color: 'var(--gray-dark)', display: 'block', marginBottom: '4px' }}>Denominator (bottom)</label>
-              <input value={fracDenom} onChange={e => setFracDenom(e.target.value)} onKeyDown={e => e.key === 'Enter' && insertFraction()} style={popupInputStyle} placeholder="e.g. 8" />
+              <label style={{ fontSize: '12px', color: 'var(--gray-dark)', display: 'block', marginBottom: '4px' }}>
+                Denominator (bottom)
+              </label>
+              <input value={fracDenom} onChange={e => setFracDenom(e.target.value)} onKeyDown={e => e.key === 'Enter' && insertFraction()} style={popupInputStyle} placeholder="e.g. 2x + 6" />
             </div>
-            {fracNumer && fracDenom && (
-              <div style={{ textAlign: 'center', fontSize: '18px', marginBottom: '10px', padding: '8px', background: 'var(--background)', borderRadius: '6px' }}>
-                <sup>{fracNumer}</sup>/<sub>{fracDenom}</sub>
+            {fracPreview && (
+              <div style={{ textAlign: 'center', fontSize: '20px', marginBottom: '12px', padding: '10px', background: 'var(--page-bg)', borderRadius: '6px', border: '1px solid var(--plum-mid)' }}>
+                <MathRenderer text={fracPreview} />
               </div>
             )}
             <div style={{ display: 'flex', gap: '8px' }}>
-              <button onClick={insertFraction} disabled={!fracNumer.trim() || !fracDenom.trim()} style={{ flex: 1, background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '6px', padding: '7px', cursor: 'pointer', fontSize: '13px', fontWeight: 500, fontFamily: 'var(--font-body)' }}>Insert</button>
-              <button onClick={() => setShowFractionPopup(false)} style={{ flex: 1, background: 'none', border: '1px solid var(--gray-light)', color: 'var(--gray-dark)', borderRadius: '6px', padding: '7px', cursor: 'pointer', fontSize: '13px', fontFamily: 'var(--font-body)' }}>Cancel</button>
+              <button onClick={insertFraction} disabled={!fracNumer.trim() || !fracDenom.trim()} style={{ flex: 1, background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '6px', padding: '7px', cursor: 'pointer', fontSize: '13px', fontWeight: 500, fontFamily: 'var(--font-body)', opacity: (!fracNumer.trim() || !fracDenom.trim()) ? 0.5 : 1 }}>Insert</button>
+              <button onClick={() => { setShowFractionPopup(false); setFracNumer(''); setFracDenom('') }} style={{ flex: 1, background: 'none', border: '1px solid var(--gray-light)', color: 'var(--gray-dark)', borderRadius: '6px', padding: '7px', cursor: 'pointer', fontSize: '13px', fontFamily: 'var(--font-body)' }}>Cancel</button>
             </div>
           </div>
         )}
@@ -134,7 +147,7 @@ export default function MathToolbar({ textareaRef, value, onChange }: Props) {
           type="button"
           title="Insert exponent"
           onClick={() => { setShowExponentPopup(v => !v); setShowFractionPopup(false); setTimeout(() => baseRef.current?.focus(), 50) }}
-          style={{ ...btnStyle, background: showExponentPopup ? 'var(--plum)' : 'var(--white)', color: showExponentPopup ? 'white' : 'var(--foreground)', fontWeight: 700 }}
+          style={{ ...btnStyle, background: showExponentPopup ? 'var(--plum)' : 'var(--background)', color: showExponentPopup ? 'white' : 'var(--foreground)', fontWeight: 700 }}
         >
           xⁿ
         </button>
@@ -142,21 +155,21 @@ export default function MathToolbar({ textareaRef, value, onChange }: Props) {
           <div style={popupStyle}>
             <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--gray-dark)', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Insert Exponent</div>
             <div style={{ marginBottom: '8px' }}>
-              <label style={{ fontSize: '12px', color: 'var(--gray-dark)', display: 'block', marginBottom: '4px' }}>Base</label>
-              <input ref={baseRef} value={expBase} onChange={e => setExpBase(e.target.value)} onKeyDown={e => e.key === 'Enter' && insertExponent()} style={popupInputStyle} placeholder="e.g. x" />
+              <label style={{ fontSize: '12px', color: 'var(--gray-dark)', display: 'block', marginBottom: '4px' }}>Base — can be an expression</label>
+              <input ref={baseRef} value={expBase} onChange={e => setExpBase(e.target.value)} onKeyDown={e => e.key === 'Enter' && insertExponent()} style={popupInputStyle} placeholder="e.g. x or (2x+1)" />
             </div>
             <div style={{ marginBottom: '12px' }}>
               <label style={{ fontSize: '12px', color: 'var(--gray-dark)', display: 'block', marginBottom: '4px' }}>Power</label>
               <input value={expPower} onChange={e => setExpPower(e.target.value)} onKeyDown={e => e.key === 'Enter' && insertExponent()} style={popupInputStyle} placeholder="e.g. 2" />
             </div>
-            {expBase && expPower && (
-              <div style={{ textAlign: 'center', fontSize: '18px', marginBottom: '10px', padding: '8px', background: 'var(--background)', borderRadius: '6px' }}>
-                {expBase}<sup>{expPower}</sup>
+            {expPreview && (
+              <div style={{ textAlign: 'center', fontSize: '20px', marginBottom: '12px', padding: '10px', background: 'var(--page-bg)', borderRadius: '6px', border: '1px solid var(--plum-mid)' }}>
+                <MathRenderer text={expPreview} />
               </div>
             )}
             <div style={{ display: 'flex', gap: '8px' }}>
-              <button onClick={insertExponent} disabled={!expBase.trim() || !expPower.trim()} style={{ flex: 1, background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '6px', padding: '7px', cursor: 'pointer', fontSize: '13px', fontWeight: 500, fontFamily: 'var(--font-body)' }}>Insert</button>
-              <button onClick={() => setShowExponentPopup(false)} style={{ flex: 1, background: 'none', border: '1px solid var(--gray-light)', color: 'var(--gray-dark)', borderRadius: '6px', padding: '7px', cursor: 'pointer', fontSize: '13px', fontFamily: 'var(--font-body)' }}>Cancel</button>
+              <button onClick={insertExponent} disabled={!expBase.trim() || !expPower.trim()} style={{ flex: 1, background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '6px', padding: '7px', cursor: 'pointer', fontSize: '13px', fontWeight: 500, fontFamily: 'var(--font-body)', opacity: (!expBase.trim() || !expPower.trim()) ? 0.5 : 1 }}>Insert</button>
+              <button onClick={() => { setShowExponentPopup(false); setExpBase(''); setExpPower('') }} style={{ flex: 1, background: 'none', border: '1px solid var(--gray-light)', color: 'var(--gray-dark)', borderRadius: '6px', padding: '7px', cursor: 'pointer', fontSize: '13px', fontFamily: 'var(--font-body)' }}>Cancel</button>
             </div>
           </div>
         )}

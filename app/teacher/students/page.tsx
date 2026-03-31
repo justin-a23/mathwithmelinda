@@ -194,6 +194,13 @@ export default function StudentsPage() {
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
 
+  // Pending approval modal
+  const [approveStudent, setApproveStudent] = useState<Student | null>(null)
+  const [approveCourseId, setApproveCourseId] = useState('')
+  const [approvePlanType, setApprovePlanType] = useState('')
+  const [approveGradeLevel, setApproveGradeLevel] = useState('')
+  const [approving, setApproving] = useState(false)
+
   // Parent invite form
   const [studentName, setStudentName] = useState('')
   const [studentEmail, setStudentEmail] = useState('')
@@ -219,10 +226,14 @@ export default function StudentsPage() {
       const entries = await Promise.all(
         withPics.map(async s => {
           try {
+            const key = s.profilePictureKey!
+            // Base64 data URLs stored directly — use as-is
+            if (key.startsWith('data:')) return [s.id, key] as [string, string]
+            // Legacy S3 key — fetch presigned URL
             const res = await fetch('/api/profile-pic', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ action: 'view', key: s.profilePictureKey })
+              body: JSON.stringify({ action: 'view', key })
             })
             const { url } = await res.json()
             return [s.id, url] as [string, string]
@@ -337,6 +348,49 @@ export default function StudentsPage() {
     }
   }
 
+  async function approveStudentFn() {
+    if (!approveStudent || !approveCourseId || !approvePlanType) return
+    setApproving(true)
+    try {
+      const { updateStudentProfile } = await import('../../../src/graphql/mutations')
+      await client.graphql({
+        query: updateStudentProfile,
+        variables: {
+          input: {
+            id: approveStudent.id,
+            status: 'active',
+            courseId: approveCourseId,
+            planType: approvePlanType,
+            gradeLevel: approveGradeLevel || approveStudent.gradeLevel || null,
+          }
+        }
+      })
+      // Create enrollment
+      await client.graphql({
+        query: createEnrollmentMutation,
+        variables: {
+          input: {
+            studentId: approveStudent.userId,
+            planType: approvePlanType,
+            courseEnrollmentsId: approveCourseId,
+          }
+        }
+      })
+      setStudents(prev => prev.map(s => s.id === approveStudent.id
+        ? { ...s, status: 'active', courseId: approveCourseId, planType: approvePlanType, gradeLevel: approveGradeLevel || s.gradeLevel }
+        : s
+      ))
+      setApproveStudent(null)
+      setApproveCourseId('')
+      setApprovePlanType('')
+      setApproveGradeLevel('')
+    } catch (err) {
+      console.error('Error approving student:', err)
+    } finally {
+      setApproving(false)
+    }
+  }
+
   async function deleteStudentCompletely(s: Student) {
     setDeleting(true)
     setDeleteError(null)
@@ -344,7 +398,7 @@ export default function StudentsPage() {
       const res = await fetch('/api/delete-student', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: s.email, profileId: s.id }),
+        body: JSON.stringify({ username: s.userId, profileId: s.id }),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || 'Delete failed')
@@ -395,7 +449,8 @@ export default function StudentsPage() {
   const inviteMap: Record<string, Invite> = {}
   for (const inv of invites) inviteMap[inv.studentEmail.toLowerCase()] = inv
 
-  const activeStudents = students.filter(s => s.status !== 'removed')
+  const pendingStudents = students.filter(s => s.status === 'pending')
+  const activeStudents = students.filter(s => s.status !== 'removed' && s.status !== 'pending')
   const removedStudents = students.filter(s => s.status === 'removed')
 
   const filteredStudents = activeStudents
@@ -435,6 +490,100 @@ export default function StudentsPage() {
       <TeacherNav />
 
       <main style={{ maxWidth: '1000px', margin: '0 auto', padding: '48px 24px' }}>
+
+        {/* ── PENDING APPROVAL ── */}
+        {pendingStudents.length > 0 && (
+          <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: '12px', padding: '20px 24px', marginBottom: '32px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#D97706" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+              <span style={{ fontWeight: 700, fontSize: '14px', color: '#92400E' }}>
+                {pendingStudents.length} student{pendingStudents.length !== 1 ? 's' : ''} waiting for approval
+              </span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {pendingStudents.map(s => (
+                <div key={s.id} style={{ background: 'white', border: '1px solid #FDE68A', borderRadius: '8px', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '14px' }}>
+                  <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <span style={{ fontSize: '13px', fontWeight: 700, color: '#D97706' }}>{s.firstName.charAt(0)}{s.lastName.charAt(0)}</span>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--foreground)' }}>{s.firstName} {s.lastName}</div>
+                    <div style={{ fontSize: '12px', color: 'var(--gray-mid)' }}>
+                      {s.email}
+                      {s.gradeLevel ? ` · Grade ${s.gradeLevel}` : ''}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setApproveStudent(s)
+                      setApproveCourseId(s.courseId || '')
+                      setApprovePlanType(s.planType || '')
+                      setApproveGradeLevel(s.gradeLevel || '')
+                    }}
+                    style={{ background: '#D97706', color: 'white', border: 'none', borderRadius: '6px', padding: '7px 16px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font-body)', flexShrink: 0 }}
+                  >
+                    Approve
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── APPROVAL MODAL ── */}
+        {approveStudent && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}
+            onClick={e => { if (e.target === e.currentTarget) setApproveStudent(null) }}>
+            <div style={{ background: 'var(--background)', borderRadius: '16px', padding: '32px', maxWidth: '460px', width: '100%', boxShadow: '0 24px 64px rgba(0,0,0,0.2)' }}>
+              <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', color: 'var(--foreground)', marginBottom: '6px' }}>Approve Student</h2>
+              <p style={{ fontSize: '14px', color: 'var(--gray-mid)', marginBottom: '24px' }}>
+                Set up <strong>{approveStudent.firstName} {approveStudent.lastName}</strong>&apos;s course and plan before granting access.
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div>
+                  <label style={{ fontSize: '13px', fontWeight: 500, color: 'var(--foreground)', display: 'block', marginBottom: '6px' }}>Course <span style={{ color: '#c0392b' }}>*</span></label>
+                  <select value={approveCourseId} onChange={e => setApproveCourseId(e.target.value)}
+                    style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--gray-light)', borderRadius: '8px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)', boxSizing: 'border-box' }}>
+                    <option value="">Select a course…</option>
+                    {courses.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: '13px', fontWeight: 500, color: 'var(--foreground)', display: 'block', marginBottom: '8px' }}>Plan Type <span style={{ color: '#c0392b' }}>*</span></label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {['Video Only', 'Virtual Student', 'Co-op Student'].map(pt => (
+                      <label key={pt} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px', color: 'var(--foreground)' }}>
+                        <input type="radio" name="approvePlanType" value={pt} checked={approvePlanType === pt} onChange={e => setApprovePlanType(e.target.value)}
+                          style={{ accentColor: 'var(--plum)', width: '16px', height: '16px' }} />
+                        {pt}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label style={{ fontSize: '13px', fontWeight: 500, color: 'var(--foreground)', display: 'block', marginBottom: '6px' }}>Grade Level</label>
+                  <select value={approveGradeLevel} onChange={e => setApproveGradeLevel(e.target.value)}
+                    style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--gray-light)', borderRadius: '8px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)', boxSizing: 'border-box' }}>
+                    <option value="">Select grade…</option>
+                    {['5th','6th','7th','8th','9th','10th','11th','12th'].map(g => <option key={g} value={g}>{g} Grade</option>)}
+                  </select>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '10px', marginTop: '28px' }}>
+                <button onClick={() => setApproveStudent(null)}
+                  style={{ flex: 1, padding: '11px', borderRadius: '8px', border: '1px solid var(--gray-light)', background: 'transparent', color: 'var(--gray-mid)', fontSize: '14px', cursor: 'pointer', fontFamily: 'var(--font-body)' }}>
+                  Cancel
+                </button>
+                <button
+                  onClick={approveStudentFn}
+                  disabled={approving || !approveCourseId || !approvePlanType}
+                  style={{ flex: 2, padding: '11px', borderRadius: '8px', border: 'none', background: approveCourseId && approvePlanType ? 'var(--plum)' : 'var(--gray-light)', color: approveCourseId && approvePlanType ? 'white' : 'var(--gray-mid)', fontSize: '14px', fontWeight: 600, cursor: approveCourseId && approvePlanType ? 'pointer' : 'not-allowed', fontFamily: 'var(--font-body)' }}>
+                  {approving ? 'Approving…' : 'Approve & Grant Access'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ── STUDENTS ROSTER ── */}
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '24px' }}>

@@ -252,13 +252,25 @@ function AnswersSection({ questions, content, showWorkImageUrls }: {
   return (
     <div style={{ marginBottom: '24px' }}>
       <div style={{ fontSize: '11px', fontWeight: 500, color: 'var(--gray-mid)', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '1px' }}>Student answers</div>
-      {questions.map((q, idx) => {
+      {(() => {
+        let qNum = 0
+        return questions.map((q, idx) => {
+        const isHeader = q.questionType === 'section_header'
+        if (!isHeader) qNum++
+        const displayNum = qNum
+        if (isHeader) {
+          return (
+            <div key={q.id} style={{ marginTop: idx === 0 ? 0 : '20px', marginBottom: '10px', fontSize: '11px', fontWeight: 700, color: 'var(--plum)', textTransform: 'uppercase', letterSpacing: '0.8px', borderBottom: '1px solid var(--plum-mid)', paddingBottom: '4px' }}>
+              {q.questionText}
+            </div>
+          )
+        }
         const answer = answers[q.id]
         const swUrls = showWorkImageUrls[q.id] || []
         return (
           <div key={q.id} style={{ marginBottom: '16px', paddingBottom: '16px', borderBottom: idx < questions.length - 1 ? '1px solid var(--gray-light)' : 'none' }}>
             <div style={{ display: 'flex', gap: '10px', marginBottom: '8px' }}>
-              <span style={{ fontWeight: 700, color: 'var(--plum)', fontSize: '14px', minWidth: '24px' }}>{idx + 1}.</span>
+              <span style={{ fontWeight: 700, color: 'var(--plum)', fontSize: '14px', minWidth: '24px' }}>{displayNum}.</span>
               <span style={{ fontSize: '14px', color: 'var(--gray-dark)' }}><MathRenderer text={q.questionText} /></span>
             </div>
             {q.questionType === 'show_work' ? (
@@ -278,7 +290,8 @@ function AnswersSection({ questions, content, showWorkImageUrls }: {
             )}
           </div>
         )
-      })}
+        })
+      })()}
     </div>
   )
 }

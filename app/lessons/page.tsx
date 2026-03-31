@@ -665,7 +665,12 @@ function LessonPageInner() {
     const printDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
     const sorted = [...questions].sort((a, b) => a.order - b.order)
 
-    const questionsHTML = sorted.map((q, idx) => {
+    let printQNum = 0
+    const questionsHTML = sorted.map((q) => {
+      if (q.questionType === 'section_header') {
+        return `<div class="section-header">${q.questionText}</div>`
+      }
+      printQNum++
       const qHtml = renderMath(q.questionText)
       let answerArea = ''
 
@@ -688,7 +693,7 @@ function LessonPageInner() {
 
       return `<div class="question">
         <div class="question-text">
-          <span class="qnum">${idx + 1}.</span>
+          <span class="qnum">${printQNum}.</span>
           <span>${qHtml}</span>
         </div>
         ${answerArea}
@@ -717,9 +722,10 @@ function LessonPageInner() {
         .choice{display:flex;gap:10px;align-items:baseline;line-height:1.6}
         .bubble{font-size:17px;line-height:1;flex-shrink:0}
         .work-box{border:1px solid #bbb;border-radius:4px;height:130px;margin-left:22px;padding:8px 12px;color:#bbb;font-size:12px;font-style:italic}
+        .section-header{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#5b2d8e;border-bottom:2px solid #d8b4fe;padding-bottom:5px;margin:28px 0 16px;page-break-after:avoid}
         @media print{body{padding:20px}@page{margin:.75in}}
       </style>
-    </head><body onload="window.print()">
+    </head><body onload="setTimeout(function(){window.print()},1200)">
       <div class="header">
         ${lessonNum != null ? `<div class="lessonnum">Lesson ${lessonNum}</div>` : ''}
         <h1>${title}</h1>
@@ -831,7 +837,15 @@ function LessonPageInner() {
             {videoSrc && (
               <div style={{ marginBottom: '32px' }}>
                 <div style={{ background: '#000', borderRadius: showResumeBanner ? 'var(--radius) var(--radius) 0 0' : 'var(--radius)', overflow: 'hidden', aspectRatio: '16/9' }}>
-                  <video ref={videoRef} controls style={{ width: '100%', height: '100%' }} src={videoSrc}>
+                  <video
+                    ref={videoRef}
+                    controls
+                    controlsList="nodownload"
+                    disablePictureInPicture
+                    onContextMenu={e => e.preventDefault()}
+                    style={{ width: '100%', height: '100%' }}
+                    src={videoSrc}
+                  >
                     Your browser does not support the video tag.
                   </video>
                 </div>
@@ -915,10 +929,30 @@ function LessonPageInner() {
 
                   {showQuestions && (
                     <div style={{ marginBottom: '28px' }}>
-                      {questions.map((q, idx) => (
-                        <div key={q.id} style={{ marginBottom: '24px', paddingBottom: '24px', borderBottom: idx < questions.length - 1 ? '1px solid var(--gray-light)' : 'none' }}>
+                      {(() => {
+                        let qNum = 0
+                        return questions.map((q, idx) => {
+                          const isHeader = q.questionType === 'section_header'
+                          if (!isHeader) qNum++
+                          const displayNum = qNum
+                          if (isHeader) {
+                            return (
+                              <div key={q.id} style={{ marginTop: idx === 0 ? 0 : '28px', marginBottom: '16px' }}>
+                                <div style={{
+                                  fontSize: '13px', fontWeight: 700, color: 'var(--plum)',
+                                  textTransform: 'uppercase', letterSpacing: '0.8px',
+                                  borderBottom: '2px solid var(--plum-mid)',
+                                  paddingBottom: '6px', paddingTop: '4px'
+                                }}>
+                                  {q.questionText}
+                                </div>
+                              </div>
+                            )
+                          }
+                          return (
+                          <div key={q.id} style={{ marginBottom: '24px', paddingBottom: '24px', borderBottom: idx < questions.length - 1 ? '1px solid var(--gray-light)' : 'none' }}>
                           <div style={{ display: 'flex', gap: '12px', marginBottom: '12px' }}>
-                            <span style={{ fontWeight: 700, color: 'var(--plum)', fontSize: '16px', minWidth: '28px' }}>{idx + 1}.</span>
+                            <span style={{ fontWeight: 700, color: 'var(--plum)', fontSize: '16px', minWidth: '28px' }}>{displayNum}.</span>
                             <div style={{ fontSize: '15px', color: 'var(--foreground)', lineHeight: '1.6', flex: 1 }}>
                               <MathRenderer text={q.questionText} />
                             </div>
@@ -967,7 +1001,9 @@ function LessonPageInner() {
                             </div>
                           )}
                         </div>
-                      ))}
+                          )
+                        })
+                      })()}
                     </div>
                   )}
 

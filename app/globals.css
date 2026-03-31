@@ -55,3 +55,37 @@ body {
   --charcoal: #1E1E2E;
   --nav-bg: #1E1E2E;
 }
+
+/* ── Amplify Authenticator fixes ─────────────────────────────────────── */
+/* Ensure error alerts are always legible regardless of theme */
+[data-amplify-authenticator] .amplify-alert,
+[data-amplify-authenticator] [data-variation="error"],
+.amplify-alert--error {
+  color: #b91c1c !important;
+  background-color: #FEF2F2 !important;
+}
+
+[data-amplify-authenticator] .amplify-alert__body,
+[data-amplify-authenticator] .amplify-text {
+  color: inherit;
+}
+
+/* Prevent our dark-mode div reset from clobbering Amplify backgrounds */
+[data-theme="dark"] [data-amplify-authenticator] div {
+  background-color: revert;
+  color: revert;
+}
+[data-theme="dark"] [data-amplify-authenticator] .amplify-card,
+[data-theme="dark"] [data-amplify-authenticator] [data-amplify-router] {
+  background-color: #28283C;
+  color: #FAFAFA;
+}
+[data-theme="dark"] [data-amplify-authenticator] input {
+  background-color: #1E1E2E;
+  color: #FAFAFA;
+  border-color: #2E2E42;
+}
+[data-theme="dark"] [data-amplify-authenticator] .amplify-alert--error {
+  color: #fca5a5 !important;
+  background-color: #3B1212 !important;
+}

@@ -110,6 +110,10 @@ export default function LessonLibraryPage() {
   const correctAnswerInputRef = useRef<HTMLTextAreaElement>(null)
   const editCorrectAnswerInputRef = useRef<HTMLTextAreaElement>(null)
 
+  // Dirty-state tracking for unsaved changes warning
+  const [isDirty, setIsDirty] = useState(false)
+  const editFormLoadedRef = useRef(false)
+
   useEffect(() => {
     if (user === null) router.replace('/login')
   }, [user, router])
@@ -120,6 +124,26 @@ export default function LessonLibraryPage() {
       fetchLessons()
     }
   }, [courseId])
+
+  // Mark dirty whenever editForm changes, but skip the initial population from startEdit
+  useEffect(() => {
+    if (!editFormLoadedRef.current) {
+      editFormLoadedRef.current = true
+      return
+    }
+    if (editingId) setIsDirty(true)
+  }, [editForm]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Browser-tab close warning when there are unsaved changes
+  useEffect(() => {
+    function handleBeforeUnload(e: BeforeUnloadEvent) {
+      if (!isDirty) return
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [isDirty])
 
   async function fetchCourse() {
     try {
@@ -183,6 +207,8 @@ export default function LessonLibraryPage() {
   }
 
   function startEdit(lesson: LessonTemplate) {
+    editFormLoadedRef.current = false
+    setIsDirty(false)
     setEditingId(lesson.id)
     setEditForm({
       title: lesson.title,
@@ -203,7 +229,9 @@ export default function LessonLibraryPage() {
   }
 
   function cancelEdit() {
+    if (isDirty && !window.confirm('You have unsaved changes. Leave without saving?')) return
     setEditingId(null)
+    setIsDirty(false)
     setVideoFile(null)
     setWorksheetFile(null)
     setQuestions([])
@@ -248,6 +276,7 @@ export default function LessonLibraryPage() {
       const filename = `${course.title} - Lesson ${lesson.lessonNumber} - ${lesson.title}.mp4`
       const key = await uploadFile(videoFile, courseFolder, filename, 'video/mp4', setVideoUpload)
       setEditForm(f => ({ ...f, videoUrl: key }))
+      setIsDirty(true)
       setVideoFile(null)
     } catch (err) {
       setVideoUpload({ uploading: false, progress: 0, error: 'Upload failed. Please try again.' })
@@ -262,6 +291,7 @@ export default function LessonLibraryPage() {
       const key = await uploadFile(worksheetFile, `worksheets/${courseFolder}`, filename, 'application/pdf', setWorksheetUpload)
       const url = `${CLOUDFRONT}/worksheets/${courseFolder}/${filename}`
       setEditForm(f => ({ ...f, worksheetUrl: url }))
+      setIsDirty(true)
       setWorksheetFile(null)
     } catch (err) {
       setWorksheetUpload({ uploading: false, progress: 0, error: 'Upload failed. Please try again.' })
@@ -296,6 +326,7 @@ export default function LessonLibraryPage() {
         assignmentType: editForm.assignmentType || 'none',
         lessonCategory: editForm.lessonCategory || 'lesson'
       } : l).sort((a, b) => a.lessonNumber - b.lessonNumber))
+      setIsDirty(false)
       setEditingId(null)
     } catch (err) {
       console.error('Error saving lesson:', err)
@@ -332,9 +363,48 @@ export default function LessonLibraryPage() {
         lessonTemplateAssignmentQuestionsId: lessonId
       }
       setQuestions(prev => [...prev, newQ])
+      setIsDirty(true)
       setNewQuestion({ questionText: '', questionType: 'number', choices: '', correctAnswer: '' })
     } catch (err) {
       console.error('Error adding question:', err)
+    } finally {
+      setAddingQuestion(false)
+    }
+  }
+
+  async function handleAddSectionHeader(lessonId: string) {
+    setAddingQuestion(true)
+    try {
+      const result: any = await client.graphql({
+        query: createAssignmentQuestion,
+        variables: {
+          input: {
+            questionText: 'Section Header',
+            questionType: 'section_header',
+            choices: null,
+            correctAnswer: null,
+            order: questions.length + 1,
+            lessonTemplateQuestionsId: lessonId
+          }
+        }
+      })
+      const created = result.data.createAssignmentQuestion
+      const newQ: AssignmentQuestion = {
+        id: created.id,
+        order: created.order,
+        questionText: created.questionText,
+        questionType: created.questionType,
+        choices: null,
+        correctAnswer: null,
+        lessonTemplateAssignmentQuestionsId: lessonId
+      }
+      setQuestions(prev => [...prev, newQ])
+      setIsDirty(true)
+      // Auto-open edit so teacher can type the header text
+      setEditingQuestionId(created.id)
+      setEditingQuestionForm({ questionText: 'Section Header', questionType: 'section_header', choices: '', correctAnswer: '' })
+    } catch (err) {
+      console.error('Error adding section header:', err)
     } finally {
       setAddingQuestion(false)
     }
@@ -348,6 +418,7 @@ export default function LessonLibraryPage() {
         variables: { input: { id: questionId } }
       })
       setQuestions(prev => prev.filter(q => q.id !== questionId))
+      setIsDirty(true)
     } catch (err) {
       console.error('Error deleting question:', err)
     }
@@ -382,6 +453,7 @@ export default function LessonLibraryPage() {
       })
       const updated = result.data.updateAssignmentQuestion
       setQuestions(prev => prev.map(q => q.id === questionId ? { ...q, ...updated } : q))
+      setIsDirty(true)
       setEditingQuestionId(null)
     } catch (err) {
       console.error('Error updating question:', err)
@@ -591,9 +663,9 @@ export default function LessonLibraryPage() {
                       </div>
 
                       {/* Assignment Type Picker */}
-                      <div style={{ marginBottom: '8px' }}>
+                      <div style={{ marginBottom: '16px' }}>
                         <label style={labelStyle}>Assignment Type</label>
-                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '10px' }}>
                           {assignmentTypes.map(at => (
                             <button
                               key={at.value}
@@ -614,6 +686,48 @@ export default function LessonLibraryPage() {
                               {at.label}
                             </button>
                           ))}
+                        </div>
+
+                        {/* Add Question / Add Section Header — always visible so teacher can jump straight in */}
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button
+                            onClick={() => {
+                              // Auto-enable digital questions if not already
+                              if (editForm.assignmentType !== 'questions' && editForm.assignmentType !== 'both') {
+                                setEditForm(f => ({ ...f, assignmentType: 'questions' }))
+                              }
+                              // Scroll the question builder into view after state update
+                              setTimeout(() => {
+                                document.getElementById(`question-builder-${lesson.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+                              }, 100)
+                            }}
+                            style={{
+                              background: 'var(--white)', border: '1px solid var(--plum)', color: 'var(--plum)',
+                              borderRadius: '6px', padding: '6px 14px', cursor: 'pointer',
+                              fontSize: '12px', fontWeight: 600, fontFamily: 'var(--font-body)',
+                              display: 'flex', alignItems: 'center', gap: '5px'
+                            }}
+                          >
+                            + Add Question
+                          </button>
+                          <button
+                            onClick={() => {
+                              // Auto-enable digital questions if not already
+                              if (editForm.assignmentType !== 'questions' && editForm.assignmentType !== 'both') {
+                                setEditForm(f => ({ ...f, assignmentType: 'questions' }))
+                              }
+                              handleAddSectionHeader(lesson.id)
+                            }}
+                            disabled={addingQuestion}
+                            style={{
+                              background: 'var(--white)', border: '1px dashed var(--plum)', color: 'var(--plum)',
+                              borderRadius: '6px', padding: '6px 14px', cursor: 'pointer',
+                              fontSize: '12px', fontWeight: 600, fontFamily: 'var(--font-body)',
+                              display: 'flex', alignItems: 'center', gap: '5px'
+                            }}
+                          >
+                            § Add Section Header
+                          </button>
                         </div>
                       </div>
 
@@ -704,7 +818,7 @@ export default function LessonLibraryPage() {
                       {/* Assignment Questions */}
                       {showQuestionBuilder && (
                         <>
-                          <div style={sectionHeadStyle}>Assignment Questions</div>
+                          <div id={`question-builder-${lesson.id}`} style={sectionHeadStyle}>Assignment Questions</div>
 
                           {/* Existing questions list */}
                           {loadingQuestions ? (
@@ -715,12 +829,43 @@ export default function LessonLibraryPage() {
                             </div>
                           ) : (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
-                              {questions.map((q, qIdx) => (
-                                <div key={q.id} style={{ background: 'var(--white)', border: `1px solid ${editingQuestionId === q.id ? 'var(--plum)' : 'var(--gray-light)'}`, borderRadius: '8px', padding: '14px 16px' }}>
-                                  {editingQuestionId === q.id ? (
-                                    /* Inline edit form */
-                                    <div>
-                                      <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--plum)', marginBottom: '10px' }}>Editing Question {qIdx + 1}</div>
+                              {(() => {
+                                let qNum = 0
+                                return questions.map((q) => {
+                                  const isHeader = q.questionType === 'section_header'
+                                  if (!isHeader) qNum++
+                                  const displayNum = qNum
+                                  return (
+                                    <div key={q.id} style={{ background: isHeader ? 'var(--background)' : 'var(--white)', border: `1px solid ${editingQuestionId === q.id ? 'var(--plum)' : isHeader ? 'var(--plum-mid)' : 'var(--gray-light)'}`, borderRadius: '8px', padding: '14px 16px' }}>
+                                      {editingQuestionId === q.id ? (
+                                        isHeader ? (
+                                          /* Section header edit */
+                                          <div>
+                                            <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--plum)', marginBottom: '10px' }}>Editing Section Header</div>
+                                            <textarea
+                                              ref={editQuestionTextareaRef}
+                                              autoFocus
+                                              value={editingQuestionForm.questionText}
+                                              onChange={e => setEditingQuestionForm(f => ({ ...f, questionText: e.target.value }))}
+                                              rows={2}
+                                              placeholder="Section header text (e.g. Part A, Word Problems, etc.)"
+                                              style={{ ...inputStyle, resize: 'vertical', marginBottom: '10px' }}
+                                            />
+                                            <div style={{ display: 'flex', gap: '8px' }}>
+                                              <button onClick={() => handleUpdateQuestion(q.id)} disabled={savingQuestion || !editingQuestionForm.questionText.trim()}
+                                                style={{ background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '6px', padding: '7px 18px', cursor: 'pointer', fontSize: '13px', fontWeight: 500, fontFamily: 'var(--font-body)' }}>
+                                                {savingQuestion ? 'Saving...' : 'Save'}
+                                              </button>
+                                              <button onClick={() => setEditingQuestionId(null)}
+                                                style={{ background: 'none', border: '1px solid var(--gray-light)', color: 'var(--gray-dark)', borderRadius: '6px', padding: '7px 18px', cursor: 'pointer', fontSize: '13px', fontFamily: 'var(--font-body)' }}>
+                                                Cancel
+                                              </button>
+                                            </div>
+                                          </div>
+                                        ) : (
+                                        /* Inline edit form */
+                                        <div>
+                                          <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--plum)', marginBottom: '10px' }}>Editing Question {displayNum}</div>
                                       <MathToolbar
                                         textareaRef={editQuestionTextareaRef}
                                         value={editingQuestionForm.questionText}
@@ -763,42 +908,66 @@ export default function LessonLibraryPage() {
                                           )}
                                         </div>
                                       )}
-                                      <div style={{ display: 'flex', gap: '8px' }}>
-                                        <button onClick={() => handleUpdateQuestion(q.id)} disabled={savingQuestion || !editingQuestionForm.questionText.trim()}
-                                          style={{ background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '6px', padding: '7px 18px', cursor: 'pointer', fontSize: '13px', fontWeight: 500, fontFamily: 'var(--font-body)' }}>
-                                          {savingQuestion ? 'Saving...' : 'Save'}
-                                        </button>
-                                        <button onClick={() => setEditingQuestionId(null)}
-                                          style={{ background: 'none', border: '1px solid var(--gray-light)', color: 'var(--gray-dark)', borderRadius: '6px', padding: '7px 18px', cursor: 'pointer', fontSize: '13px', fontFamily: 'var(--font-body)' }}>
-                                          Cancel
-                                        </button>
-                                      </div>
+                                          <div style={{ display: 'flex', gap: '8px' }}>
+                                            <button onClick={() => handleUpdateQuestion(q.id)} disabled={savingQuestion || !editingQuestionForm.questionText.trim()}
+                                              style={{ background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '6px', padding: '7px 18px', cursor: 'pointer', fontSize: '13px', fontWeight: 500, fontFamily: 'var(--font-body)' }}>
+                                              {savingQuestion ? 'Saving...' : 'Save'}
+                                            </button>
+                                            <button onClick={() => setEditingQuestionId(null)}
+                                              style={{ background: 'none', border: '1px solid var(--gray-light)', color: 'var(--gray-dark)', borderRadius: '6px', padding: '7px 18px', cursor: 'pointer', fontSize: '13px', fontFamily: 'var(--font-body)' }}>
+                                              Cancel
+                                            </button>
+                                          </div>
+                                        </div>
+                                        )
+                                      ) : isHeader ? (
+                                        /* Section header read-only view */
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                          <div style={{ color: 'var(--gray-mid)', fontSize: '16px', cursor: 'grab', userSelect: 'none' }}>⠿</div>
+                                          <div style={{ flex: 1, minWidth: 0 }}>
+                                            <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--plum)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                              <span style={{ fontSize: '10px', background: 'var(--plum)', color: 'white', padding: '1px 6px', borderRadius: '4px', letterSpacing: '0.5px', flexShrink: 0 }}>HEADER</span>
+                                              <span style={{ textTransform: 'uppercase', letterSpacing: '0.6px' }}>{q.questionText}</span>
+                                            </div>
+                                          </div>
+                                          <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                                            <button onClick={() => startEditQuestion(q)}
+                                              style={{ background: 'none', border: '1px solid var(--plum)', color: 'var(--plum)', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', padding: '4px 10px' }}>
+                                              Edit
+                                            </button>
+                                            <button onClick={() => handleDeleteQuestion(q.id)}
+                                              style={{ background: 'none', border: '1px solid #e05252', color: '#e05252', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', padding: '4px 10px' }}>
+                                              Delete
+                                            </button>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        /* Regular question read-only view */
+                                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                                          <div style={{ color: 'var(--gray-mid)', fontSize: '16px', cursor: 'grab', paddingTop: '2px', userSelect: 'none' }}>⠿</div>
+                                          <div style={{ fontWeight: 700, color: 'var(--plum)', fontSize: '14px', minWidth: '24px', paddingTop: '1px' }}>{displayNum}.</div>
+                                          <div style={{ flex: 1, minWidth: 0 }}>
+                                            <div style={{ fontSize: '14px', color: 'var(--foreground)', marginBottom: '6px', lineHeight: '1.6' }}><MathRenderer text={q.questionText} /></div>
+                                            <span style={{ fontSize: '11px', fontWeight: 600, padding: '2px 8px', borderRadius: '12px', background: 'var(--background)', color: 'var(--gray-dark)', border: '1px solid var(--gray-light)' }}>
+                                              {QUESTION_TYPE_LABELS[q.questionType] || q.questionType}
+                                            </span>
+                                          </div>
+                                          <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                                            <button onClick={() => startEditQuestion(q)}
+                                              style={{ background: 'none', border: '1px solid var(--plum)', color: 'var(--plum)', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', padding: '4px 10px' }}>
+                                              Edit
+                                            </button>
+                                            <button onClick={() => handleDeleteQuestion(q.id)}
+                                              style={{ background: 'none', border: '1px solid #e05252', color: '#e05252', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', padding: '4px 10px' }}>
+                                              Delete
+                                            </button>
+                                          </div>
+                                        </div>
+                                      )}
                                     </div>
-                                  ) : (
-                                    /* Read-only view */
-                                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-                                      <div style={{ color: 'var(--gray-mid)', fontSize: '16px', cursor: 'grab', paddingTop: '2px', userSelect: 'none' }}>⠿</div>
-                                      <div style={{ fontWeight: 700, color: 'var(--plum)', fontSize: '14px', minWidth: '24px', paddingTop: '1px' }}>{qIdx + 1}.</div>
-                                      <div style={{ flex: 1, minWidth: 0 }}>
-                                        <div style={{ fontSize: '14px', color: 'var(--foreground)', marginBottom: '6px', lineHeight: '1.6' }}><MathRenderer text={q.questionText} /></div>
-                                        <span style={{ fontSize: '11px', fontWeight: 600, padding: '2px 8px', borderRadius: '12px', background: 'var(--background)', color: 'var(--gray-dark)', border: '1px solid var(--gray-light)' }}>
-                                          {QUESTION_TYPE_LABELS[q.questionType] || q.questionType}
-                                        </span>
-                                      </div>
-                                      <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
-                                        <button onClick={() => startEditQuestion(q)}
-                                          style={{ background: 'none', border: '1px solid var(--plum)', color: 'var(--plum)', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', padding: '4px 10px' }}>
-                                          Edit
-                                        </button>
-                                        <button onClick={() => handleDeleteQuestion(q.id)}
-                                          style={{ background: 'none', border: '1px solid #e05252', color: '#e05252', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', padding: '4px 10px' }}>
-                                          Delete
-                                        </button>
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-                              ))}
+                                  )
+                                })
+                              })()}
                             </div>
                           )}
 
@@ -896,13 +1065,16 @@ export default function LessonLibraryPage() {
                       )}
 
                       {/* Save */}
-                      <div style={{ marginTop: '24px', paddingTop: '20px', borderTop: '1px solid var(--gray-light)', display: 'flex', gap: '12px' }}>
+                      <div style={{ marginTop: '24px', paddingTop: '20px', borderTop: '1px solid var(--gray-light)', display: 'flex', gap: '12px', alignItems: 'center' }}>
                         <button onClick={() => saveEdit(lesson.id)} disabled={saving} style={{ background: 'var(--plum)', color: 'white', padding: '10px 28px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '14px', fontWeight: 500 }}>
                           {saving ? 'Saving...' : 'Save Changes'}
                         </button>
                         <button onClick={cancelEdit} style={{ background: 'none', border: '1px solid var(--gray-light)', color: 'var(--gray-mid)', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>
                           Cancel
                         </button>
+                        {isDirty && (
+                          <span style={{ fontSize: '12px', color: '#e07b00', fontWeight: 500 }}>● Unsaved changes</span>
+                        )}
                       </div>
                     </div>
                   )}

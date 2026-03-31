@@ -147,7 +147,7 @@ export default function StudentGradesPage() {
   }, [user, router])
 
   useEffect(() => {
-    const userId = user?.signInDetails?.loginId || user?.userId
+    const userId = user?.userId || user?.username || ''
     if (!userId) return
     loadProfile(userId)
   }, [user?.userId])
@@ -342,17 +342,24 @@ export default function StudentGradesPage() {
       `}</style>
 
       {/* Nav */}
-      <nav style={{ background: 'var(--nav-bg)', padding: '0 40px', height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <nav style={{ background: 'var(--nav-bg)', padding: '0 48px', height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ width: '36px', height: '36px', background: 'var(--plum)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <svg width="20" height="20" viewBox="0 0 40 40" fill="none">
+              <rect x="17" y="6" width="6" height="28" rx="3" fill="white"/>
+              <rect x="6" y="17" width="28" height="6" rx="3" fill="white"/>
+            </svg>
+          </div>
+          <span style={{ fontFamily: 'var(--font-display)', color: 'white', fontSize: '20px' }}>Math with Melinda</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <ThemeToggle />
           <button onClick={() => router.push('/dashboard')}
-            style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px', padding: 0 }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
+            style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'white', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
             Dashboard
           </button>
-          <span style={{ color: 'rgba(255,255,255,0.25)' }}>/</span>
-          <span style={{ fontFamily: 'var(--font-display)', color: 'white', fontSize: '18px' }}>My Grades</span>
         </div>
-        <ThemeToggle />
       </nav>
 
       <main style={{ padding: '32px 40px 80px', maxWidth: '760px', margin: '0 auto' }}>
