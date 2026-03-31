@@ -251,8 +251,9 @@ export default function Dashboard() {
             }
           }
         } else {
-          setHasProfile(false)
-          if (loginId) setProfileName(loginId.split('@')[0])
+          // No profile found — student was deleted or revoked. Sign them out.
+          signOut()
+          return
         }
 
         // 2. Fetch plans + submissions in parallel, now that we have courseId

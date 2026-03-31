@@ -404,6 +404,10 @@ export default function StudentsPage() {
       if (!res.ok) throw new Error(json.error || 'Delete failed')
       setStudents(prev => prev.filter(st => st.id !== s.id))
       setDeleteConfirmId(null)
+      if (json.cognitoError) {
+        // Profile deleted but Cognito removal failed — show persistent warning
+        setDeleteError(`Profile removed from app. Note: Cognito account deletion failed (${json.cognitoError}) — you may need to remove them manually in the AWS console.`)
+      }
     } catch (err: any) {
       console.error(err)
       setDeleteError(err.message || 'Something went wrong')
@@ -490,6 +494,15 @@ export default function StudentsPage() {
       <TeacherNav />
 
       <main style={{ maxWidth: '1000px', margin: '0 auto', padding: '48px 24px' }}>
+
+        {/* ── DELETE ERROR BANNER ── */}
+        {deleteError && !deleteConfirmId && (
+          <div style={{ background: '#FEF2F2', border: '1px solid #fca5a5', borderRadius: '10px', padding: '14px 18px', marginBottom: '20px', display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#b91c1c" strokeWidth="2" style={{ flexShrink: 0, marginTop: '2px' }}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <span style={{ fontSize: '13px', color: '#b91c1c', flex: 1 }}>{deleteError}</span>
+            <button onClick={() => setDeleteError(null)} style={{ background: 'none', border: 'none', color: '#b91c1c', cursor: 'pointer', fontSize: '16px', lineHeight: 1, padding: 0 }}>×</button>
+          </div>
+        )}
 
         {/* ── PENDING APPROVAL ── */}
         {pendingStudents.length > 0 && (

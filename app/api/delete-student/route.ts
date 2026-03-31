@@ -1,7 +1,10 @@
-import { CognitoIdentityProviderClient, AdminDeleteUserCommand } from '@aws-sdk/client-cognito-identity-provider'
+import {
+  CognitoIdentityProviderClient,
+  AdminDeleteUserCommand,
+  ListUsersCommand,
+} from '@aws-sdk/client-cognito-identity-provider'
 import { NextRequest, NextResponse } from 'next/server'
 
-// Use env var credentials when available (Amplify), fall back to IAM role
 function makeCognitoClient() {
   const { AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY } = process.env
   if (AWS_ACCESS_KEY_ID && AWS_SECRET_ACCESS_KEY) {
@@ -35,27 +38,53 @@ async function deleteStudentProfile(profileId: string) {
   return json.data
 }
 
-export async function POST(request: NextRequest) {
-  const { username, profileId } = await request.json()
+/**
+ * Find the Cognito Username for a user by their sub (userId).
+ * Cognito's AdminDeleteUser requires the pool Username, not the sub.
+ * We use ListUsers with a sub filter to get the real Username.
+ */
+async function findCognitoUsername(cognito: CognitoIdentityProviderClient, sub: string): Promise<string | null> {
+  const result = await cognito.send(new ListUsersCommand({
+    UserPoolId: USER_POOL_ID,
+    Filter: `sub = "${sub}"`,
+    Limit: 1,
+  }))
+  const user = result.Users?.[0]
+  return user?.Username ?? null
+}
 
-  if (!username || !profileId) {
-    return NextResponse.json({ error: 'Missing username or profileId' }, { status: 400 })
+export async function POST(request: NextRequest) {
+  const { username: userId, profileId } = await request.json()
+
+  if (!userId || !profileId) {
+    return NextResponse.json({ error: 'Missing userId or profileId' }, { status: 400 })
   }
 
   let cognitoDeleted = false
   let cognitoError = ''
 
-  // Attempt Cognito deletion — non-fatal if it fails
+  // Delete from Cognito — look up actual Username by sub first
   try {
     const cognito = makeCognitoClient()
-    await cognito.send(new AdminDeleteUserCommand({ UserPoolId: USER_POOL_ID, Username: username }))
-    cognitoDeleted = true
+
+    // Find the real Cognito Username via ListUsers (sub filter)
+    const cognitoUsername = await findCognitoUsername(cognito, userId)
+
+    if (!cognitoUsername) {
+      // User not found in Cognito — already deleted or never existed
+      cognitoDeleted = true
+      console.log('Cognito user not found by sub — may already be deleted:', userId)
+    } else {
+      await cognito.send(new AdminDeleteUserCommand({ UserPoolId: USER_POOL_ID, Username: cognitoUsername }))
+      cognitoDeleted = true
+      console.log('Cognito user deleted:', cognitoUsername)
+    }
   } catch (err: any) {
     cognitoError = err?.message || 'Cognito deletion failed'
-    console.warn('Cognito deletion failed (continuing):', cognitoError)
+    console.error('Cognito deletion failed:', cognitoError)
   }
 
-  // Always delete the DynamoDB record — this removes them from all UI views
+  // Always delete the DynamoDB record
   try {
     await deleteStudentProfile(profileId)
   } catch (err: any) {
@@ -66,6 +95,6 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({
     success: true,
     cognitoDeleted,
-    ...(cognitoError ? { cognitoNote: 'Account removed from app. Cognito account may need manual cleanup.' } : {}),
+    cognitoError: cognitoError || null,
   })
 }
