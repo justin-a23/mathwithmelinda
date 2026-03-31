@@ -35,13 +35,25 @@ const createStudentProfile = /* GraphQL */`
   }
 `
 
+const listCourses = /* GraphQL */`
+  query ListCourses {
+    listCourses(limit: 100) {
+      items { id title gradeLevel isArchived }
+    }
+  }
+`
+
+type Course = { id: string; title: string; gradeLevel: string | null; isArchived: boolean | null }
+
 export default function ProfileSetupPage() {
   const { user } = useAuthenticator()
   const router = useRouter()
   const [checking, setChecking] = useState(true)
+  const [courses, setCourses] = useState<Course[]>([])
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [gradeLevel, setGradeLevel] = useState('')
+  const [selectedCourseId, setSelectedCourseId] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [submitted, setSubmitted] = useState(false)
@@ -55,7 +67,16 @@ export default function ProfileSetupPage() {
     }
     if (!user) return
     checkExistingProfile()
+    fetchCourses()
   }, [user, router])
+
+  async function fetchCourses() {
+    try {
+      const result = await client.graphql({ query: listCourses }) as any
+      const items = (result.data.listCourses.items as Course[]).filter(c => !c.isArchived)
+      setCourses(items.sort((a, b) => a.title.localeCompare(b.title)))
+    } catch { /* non-fatal */ }
+  }
 
   async function checkExistingProfile() {
     try {
@@ -102,6 +123,7 @@ export default function ProfileSetupPage() {
             firstName: firstName.trim(),
             lastName: lastName.trim(),
             gradeLevel: gradeLevel || null,
+            courseId: selectedCourseId || null,
             status: 'pending',
           }
         }
@@ -250,6 +272,24 @@ export default function ProfileSetupPage() {
               />
             </div>
           </div>
+
+          {courses.length > 0 && (
+            <div>
+              <label style={{ fontSize: '13px', fontWeight: 500, color: 'var(--foreground)', display: 'block', marginBottom: '6px' }}>
+                Course I want to take <span style={{ color: 'var(--gray-mid)', fontWeight: 400 }}>(optional — teacher can adjust)</span>
+              </label>
+              <select
+                value={selectedCourseId}
+                onChange={e => setSelectedCourseId(e.target.value)}
+                style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: selectedCourseId ? 'var(--foreground)' : 'var(--gray-mid)', boxSizing: 'border-box' }}
+              >
+                <option value="">Not sure yet...</option>
+                {courses.map(c => (
+                  <option key={c.id} value={c.id}>{c.title}{c.gradeLevel ? ` (${c.gradeLevel})` : ''}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div>
             <label style={{ fontSize: '13px', fontWeight: 500, color: 'var(--foreground)', display: 'block', marginBottom: '6px' }}>

@@ -199,6 +199,7 @@ export default function StudentsPage() {
   const [approveCourseId, setApproveCourseId] = useState('')
   const [approvePlanType, setApprovePlanType] = useState('')
   const [approveGradeLevel, setApproveGradeLevel] = useState('')
+  const [approveSemesterId, setApproveSemesterId] = useState('')
   const [approving, setApproving] = useState(false)
 
   // Parent invite form
@@ -365,7 +366,7 @@ export default function StudentsPage() {
           }
         }
       })
-      // Create enrollment
+      // Create enrollment (with optional semester)
       await client.graphql({
         query: createEnrollmentMutation,
         variables: {
@@ -373,6 +374,7 @@ export default function StudentsPage() {
             studentId: approveStudent.userId,
             planType: approvePlanType,
             courseEnrollmentsId: approveCourseId,
+            ...(approveSemesterId ? { semesterEnrollmentsId: approveSemesterId } : {}),
           }
         }
       })
@@ -384,6 +386,7 @@ export default function StudentsPage() {
       setApproveCourseId('')
       setApprovePlanType('')
       setApproveGradeLevel('')
+      setApproveSemesterId('')
     } catch (err) {
       console.error('Error approving student:', err)
     } finally {
@@ -532,6 +535,9 @@ export default function StudentsPage() {
                       setApproveCourseId(s.courseId || '')
                       setApprovePlanType(s.planType || '')
                       setApproveGradeLevel(s.gradeLevel || '')
+                      // Pre-select the active semester for the student's requested course
+                      const activeSem = semesters.find(sem => sem.isActive && sem.courseId === s.courseId)
+                      setApproveSemesterId(activeSem?.id || '')
                     }}
                     style={{ background: '#D97706', color: 'white', border: 'none', borderRadius: '6px', padding: '7px 16px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font-body)', flexShrink: 0 }}
                   >
@@ -546,7 +552,7 @@ export default function StudentsPage() {
         {/* ── APPROVAL MODAL ── */}
         {approveStudent && (
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}
-            onClick={e => { if (e.target === e.currentTarget) setApproveStudent(null) }}>
+            onClick={e => { if (e.target === e.currentTarget) { setApproveStudent(null); setApproveSemesterId('') } }}>
             <div style={{ background: 'var(--background)', borderRadius: '16px', padding: '32px', maxWidth: '460px', width: '100%', boxShadow: '0 24px 64px rgba(0,0,0,0.2)' }}>
               <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', color: 'var(--foreground)', marginBottom: '6px' }}>Approve Student</h2>
               <p style={{ fontSize: '14px', color: 'var(--gray-mid)', marginBottom: '24px' }}>
@@ -581,9 +587,29 @@ export default function StudentsPage() {
                     {['5th','6th','7th','8th','9th','10th','11th','12th'].map(g => <option key={g} value={g}>{g} Grade</option>)}
                   </select>
                 </div>
+                {(() => {
+                  const courseSems = semesters.filter(sem => sem.courseId === approveCourseId)
+                  if (courseSems.length === 0) return null
+                  return (
+                    <div>
+                      <label style={{ fontSize: '13px', fontWeight: 500, color: 'var(--foreground)', display: 'block', marginBottom: '6px' }}>
+                        Academic Year <span style={{ color: 'var(--gray-mid)', fontWeight: 400 }}>(optional)</span>
+                      </label>
+                      <select value={approveSemesterId} onChange={e => setApproveSemesterId(e.target.value)}
+                        style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--gray-light)', borderRadius: '8px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)', boxSizing: 'border-box' }}>
+                        <option value="">No academic year</option>
+                        {courseSems.map(sem => (
+                          <option key={sem.id} value={sem.id}>
+                            {sem.name}{sem.isActive ? ' (active)' : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )
+                })()}
               </div>
               <div style={{ display: 'flex', gap: '10px', marginTop: '28px' }}>
-                <button onClick={() => setApproveStudent(null)}
+                <button onClick={() => { setApproveStudent(null); setApproveSemesterId('') }}
                   style={{ flex: 1, padding: '11px', borderRadius: '8px', border: '1px solid var(--gray-light)', background: 'transparent', color: 'var(--gray-mid)', fontSize: '14px', cursor: 'pointer', fontFamily: 'var(--font-body)' }}>
                   Cancel
                 </button>
