@@ -486,6 +486,10 @@ export default function GradingPage() {
         variables: { input: { id: selectedSubmission.id, grade, teacherComment: comment } }
       })
       setSaved(true)
+      setTimeout(() => {
+        setSelectedSubmission(null)
+        setSaved(false)
+      }, 1500)
       setSubmissions(prev => prev.map(s => s.id === selectedSubmission.id ? { ...s, grade, teacherComment: comment } : s))
     } catch (err) {
       console.error(err)
@@ -1098,7 +1102,10 @@ export default function GradingPage() {
                         setSubmissions(prev => prev.map(s => s.id === selectedSubmission.id ? { ...s, grade: '100', teacherComment: comment } : s))
                         setSelectedSubmission(prev => prev ? { ...prev, grade: '100' } : prev)
                         setSaved(true)
-                        setTimeout(() => setSaved(false), 3000)
+                        setTimeout(() => {
+                          setSelectedSubmission(null)
+                          setSaved(false)
+                        }, 1500)
                       } catch (err) { console.error(err) }
                       finally { setSaving(false) }
                     }}

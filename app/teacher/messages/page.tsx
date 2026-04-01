@@ -23,6 +23,12 @@ const UPDATE_MESSAGE = /* GraphQL */ `
   }
 `
 
+const DELETE_MESSAGE = /* GraphQL */ `
+  mutation DeleteMessage($input: DeleteMessageInput!) {
+    deleteMessage(input: $input) { id }
+  }
+`
+
 type Message = {
   id: string
   studentId: string
@@ -144,6 +150,19 @@ export default function TeacherMessagesPage() {
       console.error('Error archiving conversation:', err)
     } finally {
       setArchiving(prev => ({ ...prev, [studentId]: false }))
+    }
+  }
+
+  async function deleteConversation(studentId: string) {
+    if (!window.confirm('Permanently delete all messages from this student? This cannot be undone.')) return
+    const toDelete = messages.filter(m => m.studentId === studentId)
+    try {
+      await Promise.all(toDelete.map(m =>
+        client.graphql({ query: DELETE_MESSAGE, variables: { input: { id: m.id } } })
+      ))
+      setMessages(prev => prev.filter(m => m.studentId !== studentId))
+    } catch (err) {
+      console.error('Error deleting conversation:', err)
     }
   }
 
@@ -295,6 +314,14 @@ export default function TeacherMessagesPage() {
                         </>
                       )}
                     </button>
+                    {tab === 'archived' && (
+                      <button
+                        onClick={() => deleteConversation(group.studentId)}
+                        style={{ background: 'transparent', border: '1px solid #fca5a5', color: '#dc2626', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 500 }}
+                      >
+                        Delete
+                      </button>
+                    )}
                   </div>
 
                   {/* Messages */}

@@ -266,12 +266,18 @@ export default function Dashboard() {
         // Filter plans: must match enrolled course AND be within date window
         const allPlans = plansResult.data.listWeeklyPlans.items as WeeklyPlan[]
         const now = new Date()
-        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-        const fourWeeksAhead = new Date(now.getTime() + 28 * 24 * 60 * 60 * 1000)
+        // Future cutoff: after Friday 8am CDT (= Friday 13:00 UTC), show next 14 days (current + next week)
+        // Before that: show up to 7 days ahead (current week only)
+        const dayOfWeek = now.getDay() // 0=Sun, 1=Mon, ..., 5=Fri, 6=Sat
+        const hourUTC = now.getUTCHours()
+        const showNextWeek = (dayOfWeek === 5 && hourUTC >= 13) || dayOfWeek === 0 || dayOfWeek === 6
+        const futureLimit = new Date(now.getTime() + (showNextWeek ? 14 : 7) * 24 * 60 * 60 * 1000)
+        // No past cutoff: show all past unsubmitted assignments for the entire academic year
+        // Past weeks where all items are submitted will render empty and be hidden naturally
         const relevant = allPlans
           .filter(p => {
             const d = new Date(p.weekStartDate + 'T00:00:00')
-            if (d < weekAgo || d > fourWeeksAhead) return false
+            if (d > futureLimit) return false
             // Only show plans for the student's enrolled course
             if (studentCourseId && p.course?.id !== studentCourseId) return false
             // Within their course: null/empty assignedStudentIds = all enrolled students

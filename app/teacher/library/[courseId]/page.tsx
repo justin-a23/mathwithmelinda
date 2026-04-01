@@ -106,6 +106,8 @@ export default function LessonLibraryPage() {
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null)
   const [editingQuestionForm, setEditingQuestionForm] = useState({ questionText: '', questionType: 'number', choices: '', correctAnswer: '' })
   const [savingQuestion, setSavingQuestion] = useState(false)
+  const [dragIndex, setDragIndex] = useState<number | null>(null)
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
   const editQuestionTextareaRef = useRef<HTMLTextAreaElement>(null)
   const correctAnswerInputRef = useRef<HTMLTextAreaElement>(null)
   const editCorrectAnswerInputRef = useRef<HTMLTextAreaElement>(null)
@@ -402,7 +404,7 @@ export default function LessonLibraryPage() {
       setIsDirty(true)
       // Auto-open edit so teacher can type the header text
       setEditingQuestionId(created.id)
-      setEditingQuestionForm({ questionText: 'Section Header', questionType: 'section_header', choices: '', correctAnswer: '' })
+      setEditingQuestionForm({ questionText: '', questionType: 'section_header', choices: '', correctAnswer: '' })
     } catch (err) {
       console.error('Error adding section header:', err)
     } finally {
@@ -434,6 +436,24 @@ export default function LessonLibraryPage() {
     })
   }
 
+  async function reorderQuestions(fromIndex: number, toIndex: number) {
+    const newQuestions = [...questions]
+    const [moved] = newQuestions.splice(fromIndex, 1)
+    newQuestions.splice(toIndex, 0, moved)
+    const updated = newQuestions.map((q, idx) => ({ ...q, order: idx + 1 }))
+    setQuestions(updated)
+    setIsDirty(true)
+    const minIdx = Math.min(fromIndex, toIndex)
+    const maxIdx = Math.max(fromIndex, toIndex)
+    const toUpdate = updated.slice(minIdx, maxIdx + 1)
+    await Promise.all(toUpdate.map(q =>
+      client.graphql({
+        query: updateAssignmentQuestion,
+        variables: { input: { id: q.id, order: q.order } }
+      })
+    ))
+  }
+
 
   async function handleUpdateQuestion(questionId: string) {
     if (!editingQuestionForm.questionText.trim()) return
@@ -460,6 +480,61 @@ export default function LessonLibraryPage() {
     } finally {
       setSavingQuestion(false)
     }
+  }
+
+  async function previewWorksheet(lesson: LessonTemplate) {
+    const qs = questions.filter(q => q.lessonTemplateAssignmentQuestionsId === lesson.id || questions.length > 0)
+    if (qs.length === 0) { alert('No questions to preview.'); return }
+    const { default: katex } = await import('katex')
+
+    function renderMath(text: string): string {
+      return text
+        .replace(/\$\$([\s\S]+?)\$\$/g, (_, m) => { try { return katex.renderToString(m, { displayMode: true, throwOnError: false }) } catch { return m } })
+        .replace(/\$(.+?)\$/g, (_, m) => { try { return katex.renderToString(m, { throwOnError: false }) } catch { return m } })
+    }
+
+    const sorted = [...qs].sort((a, b) => a.order - b.order)
+    let printQNum = 0
+    const questionsHTML = sorted.map(q => {
+      if (q.questionType === 'section_header') {
+        return `<div class="section-header">${q.questionText || 'Section Header'}</div>`
+      }
+      printQNum++
+      const qHtml = renderMath(q.questionText)
+      const answerBox = q.questionType === 'show_work'
+        ? `<div class="work-box">Show your work here</div>`
+        : `<div style="margin-left:22px;margin-top:8px;display:flex;align-items:center;gap:8px"><span style="font-size:12px;color:#666">Answer:</span><div style="border-bottom:1px solid #999;width:120px;height:20px"></div></div>`
+      if (q.questionType === 'multiple_choice' && q.choices) {
+        const choices = q.choices.split('\n').filter(Boolean)
+        const choiceLetters = ['A', 'B', 'C', 'D', 'E']
+        const choicesHtml = choices.map((c, ci) => `<div style="margin:4px 0 4px 22px"><span class="bubble">${choiceLetters[ci] || ci + 1}.</span> ${renderMath(c)}</div>`).join('')
+        return `<div class="question"><span class="qnum">${printQNum}.</span><span class="qtext">${qHtml}</span>${choicesHtml}</div>`
+      }
+      return `<div class="question"><span class="qnum">${printQNum}.</span><span class="qtext">${qHtml}</span>${answerBox}</div>`
+    }).join('')
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <title>${lesson.title} — Preview</title>
+    <style>
+      body{font-family:'Times New Roman',serif;font-size:14px;padding:40px;max-width:720px;margin:0 auto;color:#111}
+      h1{font-size:20px;margin-bottom:4px}.header{border-bottom:2px solid #333;padding-bottom:10px;margin-bottom:24px}
+      .question{display:flex;align-items:flex-start;gap:8px;margin-bottom:20px;page-break-inside:avoid}
+      .qnum{font-weight:700;min-width:22px;flex-shrink:0}.qtext{flex:1}
+      .bubble{font-size:17px;line-height:1;flex-shrink:0}
+      .work-box{border:1px solid #bbb;border-radius:4px;height:130px;margin-left:22px;padding:8px 12px;color:#bbb;font-size:12px;font-style:italic}
+      .section-header{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#5b2d8e;border-bottom:2px solid #d8b4fe;padding-bottom:5px;margin:28px 0 16px;page-break-after:avoid}
+      @media print{body{padding:20px}@page{margin:.75in}}
+    </style>
+  </head><body onload="setTimeout(function(){window.print()},1200)">
+    <div class="header"><h1>${lesson.title}</h1><div style="font-size:12px;color:#666">Lesson ${lesson.lessonNumber} · Preview</div></div>
+    ${questionsHTML}
+  </body></html>`
+
+    const pw = window.open('', '_blank')
+    if (!pw) return
+    pw.document.write(html)
+    pw.document.close()
   }
 
   const filtered = lessons.filter(l => {
@@ -728,6 +803,13 @@ export default function LessonLibraryPage() {
                           >
                             § Add Section Header
                           </button>
+                          <button
+                            onClick={() => previewWorksheet(lesson)}
+                            disabled={questions.length === 0}
+                            style={{ background: 'transparent', border: '1px solid var(--gray-light)', color: 'var(--gray-mid)', padding: '6px 12px', borderRadius: '6px', cursor: questions.length === 0 ? 'not-allowed' : 'pointer', fontSize: '13px', fontFamily: 'var(--font-body)' }}
+                          >
+                            🖨 Preview
+                          </button>
                         </div>
                       </div>
 
@@ -831,12 +913,27 @@ export default function LessonLibraryPage() {
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
                               {(() => {
                                 let qNum = 0
-                                return questions.map((q) => {
+                                return questions.map((q, i) => {
                                   const isHeader = q.questionType === 'section_header'
                                   if (!isHeader) qNum++
                                   const displayNum = qNum
                                   return (
-                                    <div key={q.id} style={{ background: isHeader ? 'var(--background)' : 'var(--white)', border: `1px solid ${editingQuestionId === q.id ? 'var(--plum)' : isHeader ? 'var(--plum-mid)' : 'var(--gray-light)'}`, borderRadius: '8px', padding: '14px 16px' }}>
+                                    <div
+                                      key={q.id}
+                                      draggable={true}
+                                      onDragStart={() => setDragIndex(i)}
+                                      onDragOver={e => { e.preventDefault(); setDragOverIndex(i) }}
+                                      onDrop={() => { if (dragIndex !== null && dragIndex !== i) reorderQuestions(dragIndex, i); setDragIndex(null); setDragOverIndex(null) }}
+                                      onDragEnd={() => { setDragIndex(null); setDragOverIndex(null) }}
+                                      style={{
+                                        background: isHeader ? 'var(--background)' : 'var(--white)',
+                                        border: `1px solid ${editingQuestionId === q.id ? 'var(--plum)' : isHeader ? 'var(--plum-mid)' : 'var(--gray-light)'}`,
+                                        borderTop: dragOverIndex === i ? '3px solid var(--plum)' : undefined,
+                                        borderRadius: '8px',
+                                        padding: '14px 16px',
+                                        cursor: editingQuestionId === q.id ? 'default' : 'grab',
+                                      }}
+                                    >
                                       {editingQuestionId === q.id ? (
                                         isHeader ? (
                                           /* Section header edit */
@@ -848,7 +945,7 @@ export default function LessonLibraryPage() {
                                               value={editingQuestionForm.questionText}
                                               onChange={e => setEditingQuestionForm(f => ({ ...f, questionText: e.target.value }))}
                                               rows={2}
-                                              placeholder="Section header text (e.g. Part A, Word Problems, etc.)"
+                                              placeholder="Enter header text..."
                                               style={{ ...inputStyle, resize: 'vertical', marginBottom: '10px' }}
                                             />
                                             <div style={{ display: 'flex', gap: '8px' }}>
