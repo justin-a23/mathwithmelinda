@@ -54,7 +54,7 @@ function fmtDate(s: string): string {
 }
 
 export default function StudentMessagesPage() {
-  const { user, signOut } = useAuthenticator()
+  const { user, signOut, authStatus } = useAuthenticator()
   const router = useRouter()
   useTheme()
 
@@ -69,8 +69,8 @@ export default function StudentMessagesPage() {
   const studentId = user?.signInDetails?.loginId || user?.userId || ''
 
   useEffect(() => {
-    if (user === null) router.replace('/login')
-  }, [user, router])
+    if (authStatus === 'unauthenticated') router.replace('/login')
+  }, [authStatus, router])
 
   useEffect(() => {
     if (!studentId) return

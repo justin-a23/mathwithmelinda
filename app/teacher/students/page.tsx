@@ -367,7 +367,7 @@ export default function StudentsPage() {
         }
       })
       // Create enrollment (with optional semester)
-      await client.graphql({
+      const enrollResult = await (client.graphql({
         query: createEnrollmentMutation,
         variables: {
           input: {
@@ -377,7 +377,11 @@ export default function StudentsPage() {
             ...(approveSemesterId ? { semesterEnrollmentsId: approveSemesterId } : {}),
           }
         }
-      })
+      }) as any)
+      // Update local enrollment state so the semester badge appears immediately
+      if (enrollResult.data?.createEnrollment) {
+        setEnrollments(prev => [...prev, enrollResult.data.createEnrollment])
+      }
       setStudents(prev => prev.map(s => s.id === approveStudent.id
         ? { ...s, status: 'active', courseId: approveCourseId, planType: approvePlanType, gradeLevel: approveGradeLevel || s.gradeLevel }
         : s

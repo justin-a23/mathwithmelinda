@@ -16,9 +16,9 @@ const GET_STUDENT_PROFILE = /* GraphQL */ `
   }
 `
 
-const LIST_SEMESTERS_FOR_COURSE = /* GraphQL */ `
-  query ListSemestersForCourse($courseId: String!) {
-    listSemesters(filter: { courseId: { eq: $courseId } }, limit: 50) {
+const LIST_SEMESTERS = /* GraphQL */ `
+  query ListSemesters {
+    listSemesters(limit: 200) {
       items {
         id name startDate endDate isActive courseId
         lessonWeightPercent quizWeightPercent testWeightPercent
@@ -131,7 +131,7 @@ function scoreColor(n: number, gradeA: number, gradeB: number, gradeC: number, g
 }
 
 export default function StudentGradesPage() {
-  const { user } = useAuthenticator()
+  const { user, authStatus } = useAuthenticator()
   const router = useRouter()
 
   const [profile, setProfile] = useState<StudentProfile | null>(null)
@@ -143,8 +143,8 @@ export default function StudentGradesPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
   useEffect(() => {
-    if (user === null) router.replace('/login')
-  }, [user, router])
+    if (authStatus === 'unauthenticated') router.replace('/login')
+  }, [authStatus, router])
 
   useEffect(() => {
     const userId = user?.userId || user?.username || ''
@@ -172,12 +172,12 @@ export default function StudentGradesPage() {
 
       if (!p.courseId) { setLoading(false); return }
 
-      // Load semesters for their course
+      // Load all semesters and filter client-side (server-side DynamoDB filter is unreliable)
       const semRes = await (client.graphql({
-        query: LIST_SEMESTERS_FOR_COURSE,
-        variables: { courseId: p.courseId },
+        query: LIST_SEMESTERS,
       }) as any)
-      const sems: Semester[] = semRes.data.listSemesters.items
+      const allSemesters: Semester[] = semRes.data.listSemesters.items
+      const sems: Semester[] = allSemesters.filter(s => s.courseId === p.courseId)
       const sorted = [...sems].sort((a, b) => b.startDate.localeCompare(a.startDate))
       setSemesters(sorted)
 
@@ -354,6 +354,10 @@ export default function StudentGradesPage() {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <ThemeToggle />
+          <button onClick={() => router.push('/student/syllabus')}
+            style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.8)', padding: '8px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px' }}>
+            Syllabus
+          </button>
           <button onClick={() => router.push('/dashboard')}
             style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'white', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>

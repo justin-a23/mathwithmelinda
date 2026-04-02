@@ -99,6 +99,7 @@ export default function TeacherNav({ ungradedCount: propUngraded, unreadCount: p
   const isStudents = pathname === '/teacher/students'
   const isTerms = pathname === '/teacher/semesters'
   const isPlans = pathname === '/teacher/plans'
+  const isSyllabi = pathname === '/teacher/syllabus'
 
   function primaryBtn(label: string, path: string, active: boolean, badge?: number) {
     return (
@@ -233,6 +234,7 @@ export default function TeacherNav({ ungradedCount: propUngraded, unreadCount: p
         {secondaryLink('Gradebook', '/teacher/gradebook', isGradebook)}
         {secondaryLink('Students', '/teacher/students', isStudents, pendingStudents)}
         {secondaryLink('Academic Year', '/teacher/semesters', isTerms)}
+        {secondaryLink('Syllabi', '/teacher/syllabus', isSyllabi)}
       </div>
 
       {/* Spacer */}

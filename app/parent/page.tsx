@@ -183,6 +183,9 @@ export default function ParentDashboard() {
           <button onClick={toggleTheme} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'white', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '14px' }}>
             {theme === 'light' ? '🌙 Dark' : '☀️ Light'}
           </button>
+          <button onClick={() => router.push('/parent/syllabus')} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.8)', padding: '8px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px' }}>
+            Syllabus
+          </button>
           <button onClick={async () => { await signOut(); router.replace('/login') }} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'white', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '14px' }}>
             Sign out
           </button>

@@ -75,7 +75,7 @@ function SubmissionImage({ url, alt, style }: { url: string; alt: string; style?
 const client = generateClient()
 
 export default function StudentSubmissions() {
-  const { user, signOut } = useAuthenticator()
+  const { user, signOut, authStatus } = useAuthenticator()
   const router = useRouter()
   const { theme } = useTheme()
 
@@ -87,8 +87,8 @@ export default function StudentSubmissions() {
   const [fetchedIds, setFetchedIds] = useState<Set<string>>(new Set())
 
   useEffect(() => {
-    if (user === null) router.replace('/login')
-  }, [user, router])
+    if (authStatus === 'unauthenticated') router.replace('/login')
+  }, [authStatus, router])
 
   useEffect(() => {
     const studentId = user?.signInDetails?.loginId || user?.userId

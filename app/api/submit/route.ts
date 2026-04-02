@@ -53,8 +53,14 @@ export async function POST(request: NextRequest) {
     }))
 
     return NextResponse.json({ key, url: `https://mathwithmelinda-submissions.s3.us-east-1.amazonaws.com/${key}` })
-  } catch (err) {
+  } catch (err: any) {
     console.error('Error processing submission:', err)
-    return NextResponse.json({ error: 'Failed to process upload' }, { status: 500 })
+    // Surface actionable error details — S3 credential issues show up here in production
+    const message = err?.message || err?.name || 'Failed to process upload'
+    const code = err?.name || err?.Code || ''
+    if (code === 'CredentialsProviderError' || message.includes('credentials') || message.includes('Could not load')) {
+      return NextResponse.json({ error: 'Server configuration error: AWS credentials not set. Contact your administrator.' }, { status: 500 })
+    }
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

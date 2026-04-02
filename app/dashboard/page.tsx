@@ -193,10 +193,11 @@ type WeeklyPlan = {
 }
 
 export default function Dashboard() {
-  const { user, signOut } = useAuthenticator()
+  const { user, signOut, authStatus } = useAuthenticator()
   const router = useRouter()
   const [weeklyPlans, setWeeklyPlans] = useState<WeeklyPlan[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   useTheme() // keeps dark mode active via ThemeProvider context
 
   const [pendingApproval, setPendingApproval] = useState(false)
@@ -216,9 +217,12 @@ export default function Dashboard() {
   const [myMessages, setMyMessages] = useState<StudentMessage[]>([])
   const [messagesLoaded, setMessagesLoaded] = useState(false)
 
+  // authStatus is the reliable way to detect sign-out in Amplify UI React v6.
+  // After signOut(), user becomes undefined (not null), so === null check never fires.
+  // authStatus transitions to 'unauthenticated' which reliably triggers the redirect.
   useEffect(() => {
-    if (user === null) router.replace('/login')
-  }, [user, router])
+    if (authStatus === 'unauthenticated') router.replace('/login')
+  }, [authStatus, router])
 
   useEffect(() => {
     const userId = user?.userId || user?.username || ''
@@ -363,6 +367,7 @@ export default function Dashboard() {
         } catch { /* localStorage unavailable */ }
       } catch (err) {
         console.error('Error loading dashboard:', err)
+        setLoadError(true)
       } finally {
         setLoading(false)
       }
@@ -493,6 +498,7 @@ export default function Dashboard() {
 
   return (
     <div style={{ fontFamily: 'var(--font-body)', background: 'var(--page-bg)', minHeight: '100vh' }}>
+      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
 
       {/* Ask a Question Modal */}
       {showAskModal && (
@@ -563,6 +569,9 @@ export default function Dashboard() {
               </button>
               <button onClick={() => router.push('/student/grades')} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'white', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '14px' }}>
                 My Grades
+              </button>
+              <button onClick={() => router.push('/student/syllabus')} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'white', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '14px' }}>
+                Syllabus
               </button>
               {(() => {
                 const lastVisited = typeof window !== 'undefined'
@@ -715,7 +724,23 @@ export default function Dashboard() {
         )}
 
         {loading ? (
-          <p style={{ color: 'var(--gray-mid)' }}>Loading your lessons...</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--gray-mid)', padding: '24px 0' }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: 'spin 0.8s linear infinite', flexShrink: 0 }}>
+              <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+            </svg>
+            Loading your lessons…
+          </div>
+        ) : loadError ? (
+          <div style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', padding: '32px', textAlign: 'center', maxWidth: '480px' }}>
+            <p style={{ color: 'var(--gray-mid)', fontSize: '14px', marginBottom: '16px' }}>
+              There was a problem loading your dashboard. Check your connection and try again.
+            </p>
+            <button
+              onClick={() => { setLoadError(false); setLoading(true); window.location.reload() }}
+              style={{ background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '8px', padding: '10px 24px', cursor: 'pointer', fontSize: '14px', fontFamily: 'var(--font-body)' }}>
+              Retry
+            </button>
+          </div>
         ) : hasProfile === false ? (
           <div style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', padding: '48px 32px', textAlign: 'center', maxWidth: '480px', margin: '0 auto' }}>
             <div style={{ width: '56px', height: '56px', background: 'var(--plum-light)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>

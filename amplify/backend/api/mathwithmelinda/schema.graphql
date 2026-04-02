@@ -222,3 +222,12 @@ type Message @model {
   repliedAt: String
   isArchivedByTeacher: Boolean
 }
+
+type Syllabus @model {
+  id: ID!
+  semesterId: ID!
+  courseId: ID!
+  sections: String
+  publishedSections: String
+  publishedAt: String
+}
