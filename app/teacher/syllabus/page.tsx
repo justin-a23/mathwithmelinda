@@ -189,8 +189,9 @@ export default function TeacherSyllabusPage() {
     try {
       // 1. Get presigned upload URL
       const res = await fetch(`/api/syllabus-pdf?action=upload&semesterId=${encodeURIComponent(selectedSemesterId)}`)
-      if (!res.ok) throw new Error('Failed to get upload URL')
-      const { uploadUrl, key } = await res.json()
+      const resData = await res.json()
+      if (!res.ok) throw new Error(resData.error || 'Failed to get upload URL')
+      const { uploadUrl, key } = resData
 
       // 2. PUT the file directly to S3
       const putRes = await fetch(uploadUrl, {
@@ -198,7 +199,7 @@ export default function TeacherSyllabusPage() {
         body: file,
         headers: { 'Content-Type': 'application/pdf' },
       })
-      if (!putRes.ok) throw new Error('Upload to S3 failed')
+      if (!putRes.ok) throw new Error(`S3 upload failed (${putRes.status})`)
 
       // 3. Save key to GraphQL
       const sem = semesters.find(s => s.id === selectedSemesterId)
