@@ -301,6 +301,28 @@ export default function TeacherSyllabusPage() {
     }
   }
 
+  async function handleUnpublish() {
+    if (!currentSyllabus) return
+    if (!window.confirm('Unpublish this syllabus? Students will no longer be able to view it.')) return
+    setPublishing(true)
+    try {
+      const updateRes = await (client.graphql({
+        query: UPDATE_SYLLABUS,
+        variables: { input: { id: currentSyllabus.id, publishedPdfKey: null, publishedAt: null } },
+      }) as any)
+      const updatedSyl = { ...currentSyllabus, ...updateRes.data.updateSyllabus }
+      setPublishedPdfKey(null)
+      setPublishedAt(null)
+      setCurrentSyllabus(updatedSyl)
+      setSyllabiMap(prev => ({ ...prev, [currentSyllabus.semesterId]: updatedSyl }))
+    } catch (err) {
+      console.error('Unpublish error:', err)
+      alert('Error unpublishing. Please try again.')
+    } finally {
+      setPublishing(false)
+    }
+  }
+
   const editingSemester = semesters.find(s => s.id === selectedSemesterId)
   const hasPendingUpdate = !!(pdfKey && publishedPdfKey && pdfKey !== publishedPdfKey)
 
@@ -676,6 +698,22 @@ export default function TeacherSyllabusPage() {
                           {publishing ? 'Publishing…' : 'Republish with Current PDF'}
                         </button>
                       )}
+                      <button
+                        onClick={handleUnpublish}
+                        disabled={publishing}
+                        style={{
+                          background: 'transparent',
+                          color: '#dc2626',
+                          padding: '10px 18px',
+                          borderRadius: '8px',
+                          border: '1px solid #dc2626',
+                          cursor: publishing ? 'not-allowed' : 'pointer',
+                          fontSize: '13px',
+                          fontWeight: 500,
+                          opacity: publishing ? 0.5 : 1,
+                        }}>
+                        Unpublish
+                      </button>
                     </>
                   ) : (
                     <button
