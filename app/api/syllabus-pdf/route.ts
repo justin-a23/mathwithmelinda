@@ -20,6 +20,9 @@ export async function GET(request: NextRequest) {
   const action = searchParams.get('action')
 
   try {
+    const hasKey = !!(process.env.MWM_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID)
+    const hasSecret = !!(process.env.MWM_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY)
+    console.log('[syllabus-pdf] credentials present:', { hasKey, hasSecret, action })
     const s3 = makeS3()
 
     if (action === 'upload') {
