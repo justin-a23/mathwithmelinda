@@ -27,10 +27,10 @@ const LIST_SEMESTERS = /* GraphQL */ `
   }
 `
 
-const LIST_SYLLABUS_FOR_SEMESTER = /* GraphQL */ `
-  query ListSyllabusForSemester($semesterId: String!) {
-    listSyllabi(filter: { semesterId: { eq: $semesterId } }, limit: 1) {
-      items { pdfKey publishedPdfKey publishedAt }
+const LIST_ALL_SYLLABI = /* GraphQL */ `
+  query ListAllSyllabi {
+    listSyllabi(limit: 200) {
+      items { semesterId pdfKey publishedPdfKey publishedAt }
     }
   }
 `
@@ -104,12 +104,12 @@ export default function StudentSyllabusPage() {
       const dateRange = (active.startDate && active.endDate) ? formatDateRange(active.startDate, active.endDate) : ''
       setSemesterInfo([courseTitle, active.name, dateRange].filter(Boolean).join(' · '))
 
-      // 3. Get published syllabus for this semester
+      // 3. Get published syllabus for this semester (fetch all, filter client-side)
       const sylRes = await (client.graphql({
-        query: LIST_SYLLABUS_FOR_SEMESTER,
-        variables: { semesterId: active.id },
+        query: LIST_ALL_SYLLABI,
       }) as any)
-      const syllabi = sylRes.data.listSyllabi.items
+      const allSyllabi = sylRes.data.listSyllabi.items
+      const syllabi = allSyllabi.filter((s: any) => s.semesterId === active.id)
       if (!syllabi.length || !syllabi[0].publishedPdfKey) {
         setNoSyllabus(true)
         setLoading(false)
