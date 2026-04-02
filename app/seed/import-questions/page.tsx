@@ -12,40 +12,54 @@ type Lesson = { id: string; lessonNumber: number; title: string }
 type QuestionRow = { type: string; text: string; choices: string; answer: string }
 
 function parseCSV(text: string): QuestionRow[] {
-  const lines = text.trim().split('\n')
-  if (lines.length < 2) return []
+  // Full RFC-4180 parser: handles quoted fields that span multiple lines
+  // and quoted fields containing commas.
+  const n = text.length
+  let i = 0
+  let firstRow = true
+  const rows: QuestionRow[] = []
 
-  function parseLine(line: string): string[] {
-    const cols: string[] = []
-    let current = ''
-    let inQuotes = false
-    for (let i = 0; i < line.length; i++) {
-      const char = line[i]
-      if (char === '"') {
-        if (inQuotes && line[i + 1] === '"') { current += '"'; i++ }
-        else inQuotes = !inQuotes
-      } else if (char === ',' && !inQuotes) {
-        cols.push(current.trim())
-        current = ''
-      } else {
-        current += char
+  function parseField(): string {
+    if (i >= n) return ''
+    if (text[i] === '"') {
+      i++ // skip opening quote
+      let val = ''
+      while (i < n) {
+        if (text[i] === '"') {
+          if (i + 1 < n && text[i + 1] === '"') { val += '"'; i += 2 } // escaped quote
+          else { i++; break } // closing quote
+        } else {
+          val += text[i++]
+        }
       }
+      return val
+    } else {
+      let val = ''
+      while (i < n && text[i] !== ',' && text[i] !== '\n' && text[i] !== '\r') val += text[i++]
+      return val.trim()
     }
-    cols.push(current.trim())
-    return cols
   }
 
-  const rows: QuestionRow[] = []
-  for (let i = 1; i < lines.length; i++) {
-    if (!lines[i].trim()) continue
-    const cols = parseLine(lines[i])
-    const type = (cols[0] || '').trim().toLowerCase()
+  while (i < n) {
+    const cols: string[] = []
+    while (true) {
+      cols.push(parseField())
+      if (i < n && text[i] === ',') { i++; continue } // next field
+      if (i < n && text[i] === '\r') i++ // CRLF
+      if (i < n && text[i] === '\n') i++
+      break
+    }
+
+    if (firstRow) { firstRow = false; continue } // skip header
+
+    const type = (cols[0] ?? '').trim().toLowerCase()
     if (!type) continue
     rows.push({
       type,
-      text: (cols[1] || '').trim(),
-      choices: (cols[2] || '').trim().replace(/\\n/g, '\n'),
-      answer: (cols[3] || '').trim(),
+      text: (cols[1] ?? '').trim(),
+      // Support both literal \n and real newlines as choice separators
+      choices: (cols[2] ?? '').replace(/\\n/g, '\n').trim(),
+      answer: (cols[3] ?? '').trim(),
     })
   }
   return rows
