@@ -489,8 +489,8 @@ export default function LessonLibraryPage() {
 
     function renderMath(text: string): string {
       return text
-        .replace(/\$\$([\s\S]+?)\$\$/g, (_, m) => { try { return katex.renderToString(m, { displayMode: true, throwOnError: false }) } catch { return m } })
-        .replace(/\$(.+?)\$/g, (_, m) => { try { return katex.renderToString(m, { throwOnError: false }) } catch { return m } })
+        .replace(/\\\[([\s\S]+?)\\\]/g, (_, m) => { try { return katex.renderToString(m, { displayMode: true, throwOnError: false }) } catch { return m } })
+        .replace(/\\\((.+?)\\\)/g, (_, m) => { try { return katex.renderToString(m, { throwOnError: false }) } catch { return m } })
     }
 
     const sorted = [...qs].sort((a, b) => a.order - b.order)
@@ -501,9 +501,7 @@ export default function LessonLibraryPage() {
       }
       printQNum++
       const qHtml = renderMath(q.questionText)
-      const answerBox = q.questionType === 'show_work'
-        ? `<div class="work-box">Show your work here</div>`
-        : `<div style="margin-left:22px;margin-top:8px;display:flex;align-items:center;gap:8px"><span style="font-size:12px;color:#666">Answer:</span><div style="border-bottom:1px solid #999;width:120px;height:20px"></div></div>`
+      const answerBox = `<div class="work-divider"></div>`
       if (q.questionType === 'multiple_choice' && q.choices) {
         const choices = q.choices.split('\n').filter(Boolean)
         const choiceLetters = ['A', 'B', 'C', 'D', 'E']
@@ -519,10 +517,10 @@ export default function LessonLibraryPage() {
     <style>
       body{font-family:'Times New Roman',serif;font-size:14px;padding:40px;max-width:720px;margin:0 auto;color:#111}
       h1{font-size:20px;margin-bottom:4px}.header{border-bottom:2px solid #333;padding-bottom:10px;margin-bottom:24px}
-      .question{display:flex;align-items:flex-start;gap:8px;margin-bottom:20px;page-break-inside:avoid}
+      .question{display:flex;align-items:flex-start;gap:8px;margin-bottom:0;page-break-inside:avoid}
       .qnum{font-weight:700;min-width:22px;flex-shrink:0}.qtext{flex:1}
       .bubble{font-size:17px;line-height:1;flex-shrink:0}
-      .work-box{border:1px solid #bbb;border-radius:4px;height:130px;margin-left:22px;padding:8px 12px;color:#bbb;font-size:12px;font-style:italic}
+      .work-divider{border-bottom:1px solid #ccc;margin:18px 0 24px;}
       .section-header{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#5b2d8e;border-bottom:2px solid #d8b4fe;padding-bottom:5px;margin:28px 0 16px;page-break-after:avoid}
       @media print{body{padding:20px}@page{margin:.75in}}
     </style>
