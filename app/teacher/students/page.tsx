@@ -405,13 +405,18 @@ export default function StudentsPage() {
     }
   }
 
+  const updateProfileWithReasonMutation = /* GraphQL */`
+    mutation UpdateStudentProfileStatus($input: UpdateStudentProfileInput!) {
+      updateStudentProfile(input: $input) { id status statusReason }
+    }
+  `
+
   async function declineStudentFn() {
     if (!declineStudent) return
     setDeclining(true)
     try {
-      const { updateStudentProfile } = await import('../../../src/graphql/mutations')
-      await client.graphql({
-        query: updateStudentProfile,
+      await (client.graphql({
+        query: updateProfileWithReasonMutation,
         variables: {
           input: {
             id: declineStudent.id,
@@ -419,7 +424,7 @@ export default function StudentsPage() {
             statusReason: declineReason.trim() || null,
           }
         }
-      })
+      }) as any)
       setStudents(prev => prev.map(s => s.id === declineStudent.id
         ? { ...s, status: 'declined' }
         : s
