@@ -146,7 +146,7 @@ export default function ImportQuestionsPage() {
               choices: questionType === 'multiple_choice' && row.choices ? row.choices : null,
               correctAnswer: row.answer || null,
               order: i + 1,
-              lessonTemplateAssignmentQuestionsId: selectedLesson,
+              lessonTemplateQuestionsId: selectedLesson,
             },
           },
         })

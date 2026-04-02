@@ -115,6 +115,7 @@ export default function LessonLibraryPage() {
   // Dirty-state tracking for unsaved changes warning
   const [isDirty, setIsDirty] = useState(false)
   const editFormLoadedRef = useRef(false)
+  const [activeTab, setActiveTab] = useState<'details' | 'questions'>('details')
 
   useEffect(() => {
     if (user === null) router.replace('/login')
@@ -211,6 +212,7 @@ export default function LessonLibraryPage() {
   function startEdit(lesson: LessonTemplate) {
     editFormLoadedRef.current = false
     setIsDirty(false)
+    setActiveTab('details')
     setEditingId(lesson.id)
     setEditForm({
       title: lesson.title,
@@ -676,500 +678,512 @@ export default function LessonLibraryPage() {
 
                   {/* Edit Panel */}
                   {editingId === lesson.id && (
-                    <div style={{ padding: '24px', background: 'var(--background)', borderTop: '1px solid var(--gray-light)' }}>
+                    <div style={{ background: 'var(--background)', borderTop: '1px solid var(--gray-light)' }}>
 
-                      {/* Basic Info */}
-                      <div style={sectionHeadStyle}>Basic Info</div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr', gap: '16px', marginBottom: '16px' }}>
-                        <div>
-                          <label style={labelStyle}>Lesson #</label>
-                          <input type="text" value={editForm.lessonNumber} onChange={e => setEditForm(f => ({ ...f, lessonNumber: e.target.value }))} style={inputStyle} />
-                        </div>
-                        <div>
-                          <label style={labelStyle}>Title</label>
-                          <input type="text" value={editForm.title} onChange={e => setEditForm(f => ({ ...f, title: e.target.value }))} style={inputStyle} />
-                        </div>
-                      </div>
-                      <div style={{ marginBottom: '16px' }}>
-                        <label style={labelStyle}>Instructions</label>
-                        <textarea
-                          value={editForm.instructions}
-                          onChange={e => setEditForm(f => ({ ...f, instructions: e.target.value }))}
-                          placeholder="Student-facing instructions for this lesson"
-                          rows={5}
-                          style={{ ...inputStyle, resize: 'vertical' }}
-                        />
-                      </div>
-
-                      {/* Lesson Category Picker */}
-                      <div style={{ marginBottom: '16px' }}>
-                        <label style={labelStyle}>Grade Category</label>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          {([
-                            { value: 'lesson', label: '📖 Lesson' },
-                            { value: 'quiz', label: '✏️ Participation' },
-                            { value: 'test', label: '📝 Test' },
-                          ] as { value: string; label: string }[]).map(cat => (
-                            <button
-                              key={cat.value}
-                              onClick={() => setEditForm(f => ({ ...f, lessonCategory: cat.value }))}
-                              style={{
-                                padding: '8px 20px',
-                                borderRadius: '8px',
-                                border: '1px solid',
-                                cursor: 'pointer',
-                                fontSize: '13px',
-                                fontWeight: 500,
-                                fontFamily: 'var(--font-body)',
-                                borderColor: editForm.lessonCategory === cat.value ? 'var(--plum)' : 'var(--gray-light)',
-                                background: editForm.lessonCategory === cat.value ? 'var(--plum)' : 'var(--white)',
-                                color: editForm.lessonCategory === cat.value ? 'white' : 'var(--gray-dark)'
-                              }}
-                            >
-                              {cat.label}
-                            </button>
-                          ))}
-                        </div>
-                        <p style={{ margin: '6px 0 0', fontSize: '11px', color: 'var(--gray-mid)' }}>
-                          Used for weighted grade calculations. Tests and quizzes can carry more weight than regular lessons.
-                        </p>
-                      </div>
-
-                      {/* Assignment Type Picker */}
-                      <div style={{ marginBottom: '16px' }}>
-                        <label style={labelStyle}>Assignment Type</label>
-                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '10px' }}>
-                          {assignmentTypes.map(at => (
-                            <button
-                              key={at.value}
-                              onClick={() => setEditForm(f => ({ ...f, assignmentType: at.value }))}
-                              style={{
-                                padding: '8px 16px',
-                                borderRadius: '8px',
-                                border: '1px solid',
-                                cursor: 'pointer',
-                                fontSize: '13px',
-                                fontWeight: 500,
-                                fontFamily: 'var(--font-body)',
-                                borderColor: editForm.assignmentType === at.value ? 'var(--plum)' : 'var(--gray-light)',
-                                background: editForm.assignmentType === at.value ? 'var(--plum)' : 'var(--white)',
-                                color: editForm.assignmentType === at.value ? 'white' : 'var(--gray-dark)'
-                              }}
-                            >
-                              {at.label}
-                            </button>
-                          ))}
-                        </div>
-
-                        {/* Add Question / Add Section Header — always visible so teacher can jump straight in */}
-                        <div style={{ display: 'flex', gap: '8px' }}>
+                      {/* Tab bar */}
+                      <div style={{ display: 'flex', borderBottom: '1px solid var(--gray-light)', background: 'var(--white)', paddingLeft: '20px' }}>
+                        {(['details', 'questions'] as const).map(tab => (
                           <button
-                            onClick={() => {
-                              // Auto-enable digital questions if not already
-                              if (editForm.assignmentType !== 'questions' && editForm.assignmentType !== 'both') {
-                                setEditForm(f => ({ ...f, assignmentType: 'questions' }))
-                              }
-                              // Scroll the question builder into view after state update
-                              setTimeout(() => {
-                                document.getElementById(`question-builder-${lesson.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-                              }, 100)
-                            }}
+                            key={tab}
+                            onClick={() => setActiveTab(tab)}
                             style={{
-                              background: 'var(--white)', border: '1px solid var(--plum)', color: 'var(--plum)',
-                              borderRadius: '6px', padding: '6px 14px', cursor: 'pointer',
-                              fontSize: '12px', fontWeight: 600, fontFamily: 'var(--font-body)',
-                              display: 'flex', alignItems: 'center', gap: '5px'
+                              padding: '14px 20px',
+                              fontSize: '14px',
+                              fontWeight: activeTab === tab ? 600 : 400,
+                              color: activeTab === tab ? 'var(--plum)' : 'var(--gray-mid)',
+                              background: 'transparent',
+                              border: 'none',
+                              borderBottom: activeTab === tab ? '2px solid var(--plum)' : '2px solid transparent',
+                              marginBottom: '-1px',
+                              cursor: 'pointer',
+                              fontFamily: 'var(--font-body)',
                             }}
                           >
-                            + Add Question
+                            {tab === 'details' ? 'Details' : `Questions${questions.length > 0 ? ` (${questions.length})` : ''}`}
                           </button>
-                          <button
-                            onClick={() => {
-                              // Auto-enable digital questions if not already
-                              if (editForm.assignmentType !== 'questions' && editForm.assignmentType !== 'both') {
-                                setEditForm(f => ({ ...f, assignmentType: 'questions' }))
-                              }
-                              handleAddSectionHeader(lesson.id)
-                            }}
-                            disabled={addingQuestion}
-                            style={{
-                              background: 'var(--white)', border: '1px dashed var(--plum)', color: 'var(--plum)',
-                              borderRadius: '6px', padding: '6px 14px', cursor: 'pointer',
-                              fontSize: '12px', fontWeight: 600, fontFamily: 'var(--font-body)',
-                              display: 'flex', alignItems: 'center', gap: '5px'
-                            }}
-                          >
-                            § Add Section Header
-                          </button>
-                          <button
-                            onClick={() => previewWorksheet(lesson)}
-                            disabled={questions.length === 0}
-                            style={{ background: 'transparent', border: '1px solid var(--gray-light)', color: 'var(--gray-mid)', padding: '6px 12px', borderRadius: '6px', cursor: questions.length === 0 ? 'not-allowed' : 'pointer', fontSize: '13px', fontFamily: 'var(--font-body)' }}
-                          >
-                            🖨 Preview
-                          </button>
-                        </div>
+                        ))}
                       </div>
 
-                      {/* Video */}
-                      <div style={sectionHeadStyle}>Video</div>
-                      {editForm.videoUrl ? (
-                        <div style={{ marginBottom: '12px', padding: '12px 16px', background: 'var(--white)', border: '1px solid var(--gray-light)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <div>
-                            <div style={{ fontSize: '12px', fontWeight: 600, color: '#2e7d32', marginBottom: '2px' }}>✓ Video attached</div>
-                            <div style={{ fontSize: '11px', color: 'var(--gray-mid)', fontFamily: 'monospace' }}>{editForm.videoUrl}</div>
-                          </div>
-                          <button onClick={() => { if (window.confirm('Are you sure you want to remove this video? This cannot be undone.')) setEditForm(f => ({ ...f, videoUrl: '' })) }} style={{ background: 'none', border: '1px solid #e05252', color: '#e05252', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', padding: '4px 10px', whiteSpace: 'nowrap', marginLeft: '16px' }}>
-                            Remove
-                          </button>
-                        </div>
-                      ) : (
-                        <div style={{ marginBottom: '12px', padding: '10px 16px', background: '#fdecea', border: '1px solid #f5c6c6', borderRadius: '8px', fontSize: '13px', color: '#c62828' }}>
-                          ✗ No video attached
-                        </div>
-                      )}
-                      <div
-                        onClick={() => videoInputRef.current?.click()}
-                        onDragOver={e => e.preventDefault()}
-                        onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) setVideoFile(f) }}
-                        style={{ border: `2px dashed ${videoFile ? 'var(--plum)' : 'var(--gray-light)'}`, borderRadius: '8px', padding: '20px', textAlign: 'center', cursor: 'pointer', background: videoFile ? 'var(--background)' : 'var(--white)', marginBottom: '8px' }}>
-                        <input ref={videoInputRef} type="file" accept="video/mp4" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) setVideoFile(f) }} />
-                        {videoFile
-                          ? <div><div style={{ fontWeight: 500, color: 'var(--plum)', marginBottom: '2px' }}>{videoFile.name}</div><div style={{ fontSize: '12px', color: 'var(--gray-mid)' }}>{(videoFile.size / 1024 / 1024).toFixed(1)} MB</div></div>
-                          : <div style={{ color: 'var(--gray-mid)', fontSize: '13px' }}>Click or drag & drop an MP4 to {editForm.videoUrl ? 'replace' : 'add'} video</div>}
-                      </div>
-                      {videoFile && !videoUpload.uploading && (
-                        <button onClick={() => handleVideoUpload(lesson)} style={{ background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '6px', padding: '8px 20px', cursor: 'pointer', fontSize: '13px', fontWeight: 500, marginBottom: '8px' }}>
-                          Upload Video
-                        </button>
-                      )}
-                      {videoUpload.uploading && (
-                        <div style={{ marginBottom: '8px' }}>
-                          <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginBottom: '4px' }}>Uploading... {videoUpload.progress}%</div>
-                          <div style={{ background: 'var(--gray-light)', borderRadius: '4px', height: '6px' }}>
-                            <div style={{ background: 'var(--plum)', height: '6px', borderRadius: '4px', width: `${videoUpload.progress}%`, transition: 'width 0.3s' }} />
-                          </div>
-                        </div>
-                      )}
-                      {videoUpload.error && <p style={{ color: '#e05252', fontSize: '13px', marginBottom: '8px' }}>{videoUpload.error}</p>}
+                      <div style={{ padding: '24px' }}>
 
-                      {/* Worksheet */}
-                      <div style={sectionHeadStyle}>Worksheet</div>
-                      {editForm.worksheetUrl ? (
-                        <div style={{ marginBottom: '12px', padding: '12px 16px', background: 'var(--white)', border: '1px solid var(--gray-light)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <div>
-                            <div style={{ fontSize: '12px', fontWeight: 600, color: '#2e7d32', marginBottom: '2px' }}>✓ Worksheet attached</div>
-                            <a href={editForm.worksheetUrl} target="_blank" rel="noreferrer" style={{ fontSize: '11px', color: 'var(--plum)', fontFamily: 'monospace' }}>View PDF ↗</a>
-                          </div>
-                          <button onClick={() => { if (window.confirm('Are you sure you want to remove this worksheet?')) setEditForm(f => ({ ...f, worksheetUrl: '' })) }} style={{ background: 'none', border: '1px solid #e05252', color: '#e05252', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', padding: '4px 10px', whiteSpace: 'nowrap', marginLeft: '16px' }}>
-                            Remove
-                          </button>
-                        </div>
-                      ) : (
-                        <div style={{ marginBottom: '12px', padding: '10px 16px', background: 'var(--white)', border: '1px solid var(--gray-light)', borderRadius: '8px', fontSize: '13px', color: 'var(--gray-mid)' }}>
-                          No worksheet attached
-                        </div>
-                      )}
-                      <div
-                        onClick={() => worksheetInputRef.current?.click()}
-                        onDragOver={e => e.preventDefault()}
-                        onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) setWorksheetFile(f) }}
-                        style={{ border: `2px dashed ${worksheetFile ? 'var(--plum)' : 'var(--gray-light)'}`, borderRadius: '8px', padding: '20px', textAlign: 'center', cursor: 'pointer', background: worksheetFile ? 'var(--background)' : 'var(--white)', marginBottom: '8px' }}>
-                        <input ref={worksheetInputRef} type="file" accept="application/pdf" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) setWorksheetFile(f) }} />
-                        {worksheetFile
-                          ? <div><div style={{ fontWeight: 500, color: 'var(--plum)', marginBottom: '2px' }}>{worksheetFile.name}</div><div style={{ fontSize: '12px', color: 'var(--gray-mid)' }}>{(worksheetFile.size / 1024).toFixed(0)} KB</div></div>
-                          : <div style={{ color: 'var(--gray-mid)', fontSize: '13px' }}>Click or drag & drop a PDF to {editForm.worksheetUrl ? 'replace' : 'add'} worksheet</div>}
-                      </div>
-                      {worksheetFile && !worksheetUpload.uploading && (
-                        <button onClick={() => handleWorksheetUpload(lesson)} style={{ background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '6px', padding: '8px 20px', cursor: 'pointer', fontSize: '13px', fontWeight: 500, marginBottom: '8px' }}>
-                          Upload Worksheet
-                        </button>
-                      )}
-                      {worksheetUpload.uploading && (
-                        <div style={{ marginBottom: '8px' }}>
-                          <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginBottom: '4px' }}>Uploading... {worksheetUpload.progress}%</div>
-                          <div style={{ background: 'var(--gray-light)', borderRadius: '4px', height: '6px' }}>
-                            <div style={{ background: 'var(--plum)', height: '6px', borderRadius: '4px', width: `${worksheetUpload.progress}%`, transition: 'width 0.3s' }} />
-                          </div>
-                        </div>
-                      )}
-                      {worksheetUpload.error && <p style={{ color: '#e05252', fontSize: '13px', marginBottom: '8px' }}>{worksheetUpload.error}</p>}
-
-                      {/* Assignment Questions */}
-                      {showQuestionBuilder && (
-                        <>
-                          <div id={`question-builder-${lesson.id}`} style={sectionHeadStyle}>Assignment Questions</div>
-
-                          {/* Existing questions list */}
-                          {loadingQuestions ? (
-                            <p style={{ fontSize: '13px', color: 'var(--gray-mid)', marginBottom: '12px' }}>Loading questions...</p>
-                          ) : questions.length === 0 ? (
-                            <div style={{ padding: '14px 16px', background: 'var(--white)', border: '1px solid var(--gray-light)', borderRadius: '8px', fontSize: '13px', color: 'var(--gray-mid)', marginBottom: '16px' }}>
-                              No questions yet. Add your first question below.
+                        {/* DETAILS TAB */}
+                        {activeTab === 'details' && (
+                          <>
+                            {/* Basic Info */}
+                            <div style={sectionHeadStyle}>Basic Info</div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr', gap: '16px', marginBottom: '16px' }}>
+                              <div>
+                                <label style={labelStyle}>Lesson #</label>
+                                <input type="text" value={editForm.lessonNumber} onChange={e => setEditForm(f => ({ ...f, lessonNumber: e.target.value }))} style={inputStyle} />
+                              </div>
+                              <div>
+                                <label style={labelStyle}>Title</label>
+                                <input type="text" value={editForm.title} onChange={e => setEditForm(f => ({ ...f, title: e.target.value }))} style={inputStyle} />
+                              </div>
                             </div>
-                          ) : (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
-                              {(() => {
-                                let qNum = 0
-                                return questions.map((q, i) => {
-                                  const isHeader = q.questionType === 'section_header'
-                                  if (!isHeader) qNum++
-                                  const displayNum = qNum
-                                  return (
-                                    <div
-                                      key={q.id}
-                                      draggable={true}
-                                      onDragStart={() => setDragIndex(i)}
-                                      onDragOver={e => { e.preventDefault(); setDragOverIndex(i) }}
-                                      onDrop={() => { if (dragIndex !== null && dragIndex !== i) reorderQuestions(dragIndex, i); setDragIndex(null); setDragOverIndex(null) }}
-                                      onDragEnd={() => { setDragIndex(null); setDragOverIndex(null) }}
-                                      style={{
-                                        background: isHeader ? 'var(--background)' : 'var(--white)',
-                                        border: `1px solid ${editingQuestionId === q.id ? 'var(--plum)' : isHeader ? 'var(--plum-mid)' : 'var(--gray-light)'}`,
-                                        borderTop: dragOverIndex === i ? '3px solid var(--plum)' : undefined,
-                                        borderRadius: '8px',
-                                        padding: '14px 16px',
-                                        cursor: editingQuestionId === q.id ? 'default' : 'grab',
-                                      }}
-                                    >
-                                      {editingQuestionId === q.id ? (
-                                        isHeader ? (
-                                          /* Section header edit */
-                                          <div>
-                                            <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--plum)', marginBottom: '10px' }}>Editing Section Header</div>
-                                            <textarea
-                                              ref={editQuestionTextareaRef}
-                                              autoFocus
-                                              value={editingQuestionForm.questionText}
-                                              onChange={e => setEditingQuestionForm(f => ({ ...f, questionText: e.target.value }))}
-                                              rows={2}
-                                              placeholder="Enter header text..."
-                                              style={{ ...inputStyle, resize: 'vertical', marginBottom: '10px' }}
-                                            />
-                                            <div style={{ display: 'flex', gap: '8px' }}>
-                                              <button onClick={() => handleUpdateQuestion(q.id)} disabled={savingQuestion || !editingQuestionForm.questionText.trim()}
-                                                style={{ background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '6px', padding: '7px 18px', cursor: 'pointer', fontSize: '13px', fontWeight: 500, fontFamily: 'var(--font-body)' }}>
-                                                {savingQuestion ? 'Saving...' : 'Save'}
-                                              </button>
-                                              <button onClick={() => setEditingQuestionId(null)}
-                                                style={{ background: 'none', border: '1px solid var(--gray-light)', color: 'var(--gray-dark)', borderRadius: '6px', padding: '7px 18px', cursor: 'pointer', fontSize: '13px', fontFamily: 'var(--font-body)' }}>
-                                                Cancel
-                                              </button>
-                                            </div>
-                                          </div>
-                                        ) : (
-                                        /* Inline edit form */
-                                        <div>
-                                          <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--plum)', marginBottom: '10px' }}>Editing Question {displayNum}</div>
-                                      <MathToolbar
-                                        textareaRef={editQuestionTextareaRef}
-                                        value={editingQuestionForm.questionText}
-                                        onChange={val => setEditingQuestionForm(f => ({ ...f, questionText: val }))}
-                                      />
-                                      <textarea
-                                        ref={editQuestionTextareaRef}
-                                        value={editingQuestionForm.questionText}
-                                        onChange={e => setEditingQuestionForm(f => ({ ...f, questionText: e.target.value }))}
-                                        rows={3}
-                                        style={{ ...inputStyle, resize: 'vertical', marginBottom: '10px' }}
-                                      />
-                                      <select value={editingQuestionForm.questionType} onChange={e => setEditingQuestionForm(f => ({ ...f, questionType: e.target.value, correctAnswer: '' }))}
-                                        style={{ ...inputStyle, marginBottom: '10px' }}>
-                                        <option value="number">Number</option>
-                                        <option value="short_text">Short Text</option>
-                                        <option value="multiple_choice">Multiple Choice</option>
-                                        <option value="show_work">Show Work (photo upload)</option>
-                                      </select>
-                                      {(editingQuestionForm.questionType === 'number' || editingQuestionForm.questionType === 'short_text' || editingQuestionForm.questionType === 'multiple_choice') && (
-                                        <div style={{ marginBottom: '10px' }}>
-                                          <label style={labelStyle}>Correct answer (optional — for auto-grading)</label>
-                                          <MathToolbar
-                                            textareaRef={editCorrectAnswerInputRef}
-                                            value={editingQuestionForm.correctAnswer}
-                                            onChange={val => setEditingQuestionForm(f => ({ ...f, correctAnswer: val }))}
-                                          />
-                                          <textarea
-                                            ref={editCorrectAnswerInputRef}
-                                            value={editingQuestionForm.correctAnswer}
-                                            onChange={e => setEditingQuestionForm(f => ({ ...f, correctAnswer: e.target.value }))}
-                                            rows={2}
-                                            placeholder="e.g. \(\frac{7}{8}\) or just 42"
-                                            style={{ ...inputStyle, resize: 'vertical' }}
-                                          />
-                                          {editingQuestionForm.correctAnswer && (
-                                            <div style={{ marginTop: '6px', fontSize: '12px', color: 'var(--gray-dark)' }}>
-                                              Preview: <MathRenderer text={editingQuestionForm.correctAnswer} />
-                                            </div>
-                                          )}
-                                        </div>
-                                      )}
-                                          <div style={{ display: 'flex', gap: '8px' }}>
-                                            <button onClick={() => handleUpdateQuestion(q.id)} disabled={savingQuestion || !editingQuestionForm.questionText.trim()}
-                                              style={{ background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '6px', padding: '7px 18px', cursor: 'pointer', fontSize: '13px', fontWeight: 500, fontFamily: 'var(--font-body)' }}>
-                                              {savingQuestion ? 'Saving...' : 'Save'}
-                                            </button>
-                                            <button onClick={() => setEditingQuestionId(null)}
-                                              style={{ background: 'none', border: '1px solid var(--gray-light)', color: 'var(--gray-dark)', borderRadius: '6px', padding: '7px 18px', cursor: 'pointer', fontSize: '13px', fontFamily: 'var(--font-body)' }}>
-                                              Cancel
-                                            </button>
-                                          </div>
-                                        </div>
-                                        )
-                                      ) : isHeader ? (
-                                        /* Section header read-only view */
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                          <div style={{ color: 'var(--gray-mid)', fontSize: '16px', cursor: 'grab', userSelect: 'none' }}>⠿</div>
-                                          <div style={{ flex: 1, minWidth: 0 }}>
-                                            <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--plum)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                              <span style={{ fontSize: '10px', background: 'var(--plum)', color: 'white', padding: '1px 6px', borderRadius: '4px', letterSpacing: '0.5px', flexShrink: 0 }}>HEADER</span>
-                                              <span style={{ textTransform: 'uppercase', letterSpacing: '0.6px' }}>{q.questionText}</span>
-                                            </div>
-                                          </div>
-                                          <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
-                                            <button onClick={() => startEditQuestion(q)}
-                                              style={{ background: 'none', border: '1px solid var(--plum)', color: 'var(--plum)', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', padding: '4px 10px' }}>
-                                              Edit
-                                            </button>
-                                            <button onClick={() => handleDeleteQuestion(q.id)}
-                                              style={{ background: 'none', border: '1px solid #e05252', color: '#e05252', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', padding: '4px 10px' }}>
-                                              Delete
-                                            </button>
-                                          </div>
-                                        </div>
-                                      ) : (
-                                        /* Regular question read-only view */
-                                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-                                          <div style={{ color: 'var(--gray-mid)', fontSize: '16px', cursor: 'grab', paddingTop: '2px', userSelect: 'none' }}>⠿</div>
-                                          <div style={{ fontWeight: 700, color: 'var(--plum)', fontSize: '14px', minWidth: '24px', paddingTop: '1px' }}>{displayNum}.</div>
-                                          <div style={{ flex: 1, minWidth: 0 }}>
-                                            <div style={{ fontSize: '14px', color: 'var(--foreground)', marginBottom: '6px', lineHeight: '1.6' }}><MathRenderer text={q.questionText} /></div>
-                                            <span style={{ fontSize: '11px', fontWeight: 600, padding: '2px 8px', borderRadius: '12px', background: 'var(--background)', color: 'var(--gray-dark)', border: '1px solid var(--gray-light)' }}>
-                                              {QUESTION_TYPE_LABELS[q.questionType] || q.questionType}
-                                            </span>
-                                          </div>
-                                          <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
-                                            <button onClick={() => startEditQuestion(q)}
-                                              style={{ background: 'none', border: '1px solid var(--plum)', color: 'var(--plum)', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', padding: '4px 10px' }}>
-                                              Edit
-                                            </button>
-                                            <button onClick={() => handleDeleteQuestion(q.id)}
-                                              style={{ background: 'none', border: '1px solid #e05252', color: '#e05252', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', padding: '4px 10px' }}>
-                                              Delete
-                                            </button>
-                                          </div>
-                                        </div>
-                                      )}
-                                    </div>
-                                  )
-                                })
-                              })()}
-                            </div>
-                          )}
-
-                          {/* Add Question form */}
-                          <div style={{ background: 'var(--white)', border: '1px solid var(--gray-light)', borderRadius: '8px', padding: '16px', marginBottom: '8px' }}>
-                            <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--gray-dark)', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Add Question</div>
-
-                            {/* Question text */}
-                            <div style={{ marginBottom: '12px' }}>
-                              <label style={labelStyle}>Question</label>
-                              <MathToolbar
-                                textareaRef={questionTextareaRef}
-                                value={newQuestion.questionText}
-                                onChange={val => setNewQuestion(q => ({ ...q, questionText: val }))}
-                              />
+                            <div style={{ marginBottom: '16px' }}>
+                              <label style={labelStyle}>Instructions</label>
                               <textarea
-                                ref={questionTextareaRef}
-                                value={newQuestion.questionText}
-                                onChange={e => setNewQuestion(q => ({ ...q, questionText: e.target.value }))}
-                                placeholder="Type your question here..."
-                                rows={3}
+                                value={editForm.instructions}
+                                onChange={e => setEditForm(f => ({ ...f, instructions: e.target.value }))}
+                                placeholder="Student-facing instructions for this lesson"
+                                rows={5}
                                 style={{ ...inputStyle, resize: 'vertical' }}
                               />
                             </div>
 
-                            {/* Question type */}
-                            <div style={{ marginBottom: '12px' }}>
-                              <label style={labelStyle}>Answer Type</label>
-                              <select
-                                value={newQuestion.questionType}
-                                onChange={e => setNewQuestion(q => ({ ...q, questionType: e.target.value, choices: '', correctAnswer: '' }))}
-                                style={{ ...inputStyle }}
-                              >
-                                <option value="number">Number answer</option>
-                                <option value="short_text">Short text answer</option>
-                                <option value="multiple_choice">Multiple choice</option>
-                                <option value="show_work">Show work (photo)</option>
-                              </select>
+                            {/* Grade Category */}
+                            <div style={{ marginBottom: '16px' }}>
+                              <label style={labelStyle}>Grade Category</label>
+                              <div style={{ display: 'flex', gap: '8px' }}>
+                                {([
+                                  { value: 'lesson', label: '📖 Lesson' },
+                                  { value: 'quiz', label: '✏️ Participation' },
+                                  { value: 'test', label: '📝 Test' },
+                                ] as { value: string; label: string }[]).map(cat => (
+                                  <button
+                                    key={cat.value}
+                                    onClick={() => setEditForm(f => ({ ...f, lessonCategory: cat.value }))}
+                                    style={{
+                                      padding: '8px 20px', borderRadius: '8px', border: '1px solid', cursor: 'pointer',
+                                      fontSize: '13px', fontWeight: 500, fontFamily: 'var(--font-body)',
+                                      borderColor: editForm.lessonCategory === cat.value ? 'var(--plum)' : 'var(--gray-light)',
+                                      background: editForm.lessonCategory === cat.value ? 'var(--plum)' : 'var(--white)',
+                                      color: editForm.lessonCategory === cat.value ? 'white' : 'var(--gray-dark)'
+                                    }}
+                                  >
+                                    {cat.label}
+                                  </button>
+                                ))}
+                              </div>
+                              <p style={{ margin: '6px 0 0', fontSize: '11px', color: 'var(--gray-mid)' }}>
+                                Used for weighted grade calculations. Tests and quizzes can carry more weight than regular lessons.
+                              </p>
                             </div>
 
-                            {/* Choices (multiple choice only) */}
-                            {newQuestion.questionType === 'multiple_choice' && (
-                              <div style={{ marginBottom: '12px' }}>
-                                <label style={labelStyle}>Choices</label>
-                                <textarea
-                                  value={newQuestion.choices}
-                                  onChange={e => setNewQuestion(q => ({ ...q, choices: e.target.value }))}
-                                  placeholder={'One choice per line\nA) ...\nB) ...'}
-                                  rows={4}
-                                  style={{ ...inputStyle, resize: 'vertical' }}
-                                />
+                            {/* Assignment Type */}
+                            <div style={{ marginBottom: '16px' }}>
+                              <label style={labelStyle}>Assignment Type</label>
+                              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                {assignmentTypes.map(at => (
+                                  <button
+                                    key={at.value}
+                                    onClick={() => setEditForm(f => ({ ...f, assignmentType: at.value }))}
+                                    style={{
+                                      padding: '8px 16px', borderRadius: '8px', border: '1px solid', cursor: 'pointer',
+                                      fontSize: '13px', fontWeight: 500, fontFamily: 'var(--font-body)',
+                                      borderColor: editForm.assignmentType === at.value ? 'var(--plum)' : 'var(--gray-light)',
+                                      background: editForm.assignmentType === at.value ? 'var(--plum)' : 'var(--white)',
+                                      color: editForm.assignmentType === at.value ? 'white' : 'var(--gray-dark)'
+                                    }}
+                                  >
+                                    {at.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Video */}
+                            <div style={sectionHeadStyle}>Video</div>
+                            {editForm.videoUrl ? (
+                              <div style={{ marginBottom: '12px', padding: '12px 16px', background: 'var(--white)', border: '1px solid var(--gray-light)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <div>
+                                  <div style={{ fontSize: '12px', fontWeight: 600, color: '#2e7d32', marginBottom: '2px' }}>✓ Video attached</div>
+                                  <div style={{ fontSize: '11px', color: 'var(--gray-mid)', fontFamily: 'monospace' }}>{editForm.videoUrl}</div>
+                                </div>
+                                <button onClick={() => { if (window.confirm('Are you sure you want to remove this video? This cannot be undone.')) setEditForm(f => ({ ...f, videoUrl: '' })) }} style={{ background: 'none', border: '1px solid #e05252', color: '#e05252', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', padding: '4px 10px', whiteSpace: 'nowrap', marginLeft: '16px' }}>
+                                  Remove
+                                </button>
+                              </div>
+                            ) : (
+                              <div style={{ marginBottom: '12px', padding: '10px 16px', background: '#fdecea', border: '1px solid #f5c6c6', borderRadius: '8px', fontSize: '13px', color: '#c62828' }}>
+                                ✗ No video attached
                               </div>
                             )}
+                            <div
+                              onClick={() => videoInputRef.current?.click()}
+                              onDragOver={e => e.preventDefault()}
+                              onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) setVideoFile(f) }}
+                              style={{ border: `2px dashed ${videoFile ? 'var(--plum)' : 'var(--gray-light)'}`, borderRadius: '8px', padding: '20px', textAlign: 'center', cursor: 'pointer', background: videoFile ? 'var(--background)' : 'var(--white)', marginBottom: '8px' }}>
+                              <input ref={videoInputRef} type="file" accept="video/mp4" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) setVideoFile(f) }} />
+                              {videoFile
+                                ? <div><div style={{ fontWeight: 500, color: 'var(--plum)', marginBottom: '2px' }}>{videoFile.name}</div><div style={{ fontSize: '12px', color: 'var(--gray-mid)' }}>{(videoFile.size / 1024 / 1024).toFixed(1)} MB</div></div>
+                                : <div style={{ color: 'var(--gray-mid)', fontSize: '13px' }}>Click or drag & drop an MP4 to {editForm.videoUrl ? 'replace' : 'add'} video</div>}
+                            </div>
+                            {videoFile && !videoUpload.uploading && (
+                              <button onClick={() => handleVideoUpload(lesson)} style={{ background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '6px', padding: '8px 20px', cursor: 'pointer', fontSize: '13px', fontWeight: 500, marginBottom: '8px' }}>
+                                Upload Video
+                              </button>
+                            )}
+                            {videoUpload.uploading && (
+                              <div style={{ marginBottom: '8px' }}>
+                                <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginBottom: '4px' }}>Uploading... {videoUpload.progress}%</div>
+                                <div style={{ background: 'var(--gray-light)', borderRadius: '4px', height: '6px' }}>
+                                  <div style={{ background: 'var(--plum)', height: '6px', borderRadius: '4px', width: `${videoUpload.progress}%`, transition: 'width 0.3s' }} />
+                                </div>
+                              </div>
+                            )}
+                            {videoUpload.error && <p style={{ color: '#e05252', fontSize: '13px', marginBottom: '8px' }}>{videoUpload.error}</p>}
 
-                            {/* Correct answer */}
-                            {(newQuestion.questionType === 'number' || newQuestion.questionType === 'short_text' || newQuestion.questionType === 'multiple_choice') && (
-                              <div style={{ marginBottom: '12px' }}>
-                                <label style={labelStyle}>Correct answer (optional — for auto-grading)</label>
-                                <MathToolbar
-                                  textareaRef={correctAnswerInputRef}
-                                  value={newQuestion.correctAnswer}
-                                  onChange={val => setNewQuestion(q => ({ ...q, correctAnswer: val }))}
-                                />
-                                <textarea
-                                  ref={correctAnswerInputRef}
-                                  value={newQuestion.correctAnswer}
-                                  onChange={e => setNewQuestion(q => ({ ...q, correctAnswer: e.target.value }))}
-                                  rows={2}
-                                  placeholder="e.g. \(\frac{7}{8}\) or just 42"
-                                  style={{ ...inputStyle, resize: 'vertical' }}
-                                />
-                                {newQuestion.correctAnswer && (
-                                  <div style={{ marginTop: '6px', fontSize: '12px', color: 'var(--gray-dark)' }}>
-                                    Preview: <MathRenderer text={newQuestion.correctAnswer} />
+                            {/* Worksheet */}
+                            <div style={sectionHeadStyle}>Worksheet</div>
+                            {editForm.worksheetUrl ? (
+                              <div style={{ marginBottom: '12px', padding: '12px 16px', background: 'var(--white)', border: '1px solid var(--gray-light)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <div>
+                                  <div style={{ fontSize: '12px', fontWeight: 600, color: '#2e7d32', marginBottom: '2px' }}>✓ Worksheet attached</div>
+                                  <a href={editForm.worksheetUrl} target="_blank" rel="noreferrer" style={{ fontSize: '11px', color: 'var(--plum)', fontFamily: 'monospace' }}>View PDF ↗</a>
+                                </div>
+                                <button onClick={() => { if (window.confirm('Are you sure you want to remove this worksheet?')) setEditForm(f => ({ ...f, worksheetUrl: '' })) }} style={{ background: 'none', border: '1px solid #e05252', color: '#e05252', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', padding: '4px 10px', whiteSpace: 'nowrap', marginLeft: '16px' }}>
+                                  Remove
+                                </button>
+                              </div>
+                            ) : (
+                              <div style={{ marginBottom: '12px', padding: '10px 16px', background: 'var(--white)', border: '1px solid var(--gray-light)', borderRadius: '8px', fontSize: '13px', color: 'var(--gray-mid)' }}>
+                                No worksheet attached
+                              </div>
+                            )}
+                            <div
+                              onClick={() => worksheetInputRef.current?.click()}
+                              onDragOver={e => e.preventDefault()}
+                              onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) setWorksheetFile(f) }}
+                              style={{ border: `2px dashed ${worksheetFile ? 'var(--plum)' : 'var(--gray-light)'}`, borderRadius: '8px', padding: '20px', textAlign: 'center', cursor: 'pointer', background: worksheetFile ? 'var(--background)' : 'var(--white)', marginBottom: '8px' }}>
+                              <input ref={worksheetInputRef} type="file" accept="application/pdf" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) setWorksheetFile(f) }} />
+                              {worksheetFile
+                                ? <div><div style={{ fontWeight: 500, color: 'var(--plum)', marginBottom: '2px' }}>{worksheetFile.name}</div><div style={{ fontSize: '12px', color: 'var(--gray-mid)' }}>{(worksheetFile.size / 1024).toFixed(0)} KB</div></div>
+                                : <div style={{ color: 'var(--gray-mid)', fontSize: '13px' }}>Click or drag & drop a PDF to {editForm.worksheetUrl ? 'replace' : 'add'} worksheet</div>}
+                            </div>
+                            {worksheetFile && !worksheetUpload.uploading && (
+                              <button onClick={() => handleWorksheetUpload(lesson)} style={{ background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '6px', padding: '8px 20px', cursor: 'pointer', fontSize: '13px', fontWeight: 500, marginBottom: '8px' }}>
+                                Upload Worksheet
+                              </button>
+                            )}
+                            {worksheetUpload.uploading && (
+                              <div style={{ marginBottom: '8px' }}>
+                                <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginBottom: '4px' }}>Uploading... {worksheetUpload.progress}%</div>
+                                <div style={{ background: 'var(--gray-light)', borderRadius: '4px', height: '6px' }}>
+                                  <div style={{ background: 'var(--plum)', height: '6px', borderRadius: '4px', width: `${worksheetUpload.progress}%`, transition: 'width 0.3s' }} />
+                                </div>
+                              </div>
+                            )}
+                            {worksheetUpload.error && <p style={{ color: '#e05252', fontSize: '13px', marginBottom: '8px' }}>{worksheetUpload.error}</p>}
+
+                            {/* Save */}
+                            <div style={{ marginTop: '24px', paddingTop: '20px', borderTop: '1px solid var(--gray-light)', display: 'flex', gap: '12px', alignItems: 'center' }}>
+                              <button onClick={() => saveEdit(lesson.id)} disabled={saving} style={{ background: 'var(--plum)', color: 'white', padding: '10px 28px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '14px', fontWeight: 500 }}>
+                                {saving ? 'Saving...' : 'Save Changes'}
+                              </button>
+                              <button onClick={cancelEdit} style={{ background: 'none', border: '1px solid var(--gray-light)', color: 'var(--gray-mid)', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>
+                                Cancel
+                              </button>
+                              {isDirty && (
+                                <span style={{ fontSize: '12px', color: '#e07b00', fontWeight: 500 }}>● Unsaved changes</span>
+                              )}
+                            </div>
+                          </>
+                        )}
+
+                        {/* QUESTIONS TAB */}
+                        {activeTab === 'questions' && (
+                          <>
+                            {!showQuestionBuilder ? (
+                              <div style={{ padding: '32px 0', textAlign: 'center' }}>
+                                <div style={{ fontSize: '14px', color: 'var(--gray-mid)', marginBottom: '16px', lineHeight: '1.7' }}>
+                                  Assignment type is set to <strong>{editForm.assignmentType === 'none' ? 'No Assignment' : 'Upload Only'}</strong>.<br />
+                                  Switch to "Digital Questions" or "Questions + Upload" on the Details tab to enable the question builder.
+                                </div>
+                                <button
+                                  onClick={() => setActiveTab('details')}
+                                  style={{ background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '8px', padding: '10px 24px', cursor: 'pointer', fontSize: '13px', fontWeight: 500, fontFamily: 'var(--font-body)' }}
+                                >
+                                  Go to Details tab
+                                </button>
+                              </div>
+                            ) : (
+                              <>
+                                {/* Toolbar */}
+                                <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', alignItems: 'center' }}>
+                                  <button
+                                    onClick={() => {
+                                      setTimeout(() => {
+                                        document.getElementById(`question-builder-${lesson.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+                                      }, 100)
+                                    }}
+                                    style={{
+                                      background: 'var(--white)', border: '1px solid var(--plum)', color: 'var(--plum)',
+                                      borderRadius: '6px', padding: '7px 16px', cursor: 'pointer',
+                                      fontSize: '13px', fontWeight: 600, fontFamily: 'var(--font-body)',
+                                    }}
+                                  >
+                                    + Add Question
+                                  </button>
+                                  <button
+                                    onClick={() => handleAddSectionHeader(lesson.id)}
+                                    disabled={addingQuestion}
+                                    style={{
+                                      background: 'var(--white)', border: '1px dashed var(--plum)', color: 'var(--plum)',
+                                      borderRadius: '6px', padding: '7px 16px', cursor: 'pointer',
+                                      fontSize: '13px', fontWeight: 600, fontFamily: 'var(--font-body)',
+                                    }}
+                                  >
+                                    § Section Header
+                                  </button>
+                                  <button
+                                    onClick={() => previewWorksheet(lesson)}
+                                    disabled={questions.length === 0}
+                                    style={{ background: 'transparent', border: '1px solid var(--gray-light)', color: 'var(--gray-mid)', padding: '7px 14px', borderRadius: '6px', cursor: questions.length === 0 ? 'not-allowed' : 'pointer', fontSize: '13px', fontFamily: 'var(--font-body)', marginLeft: 'auto' }}
+                                  >
+                                    🖨 Preview
+                                  </button>
+                                </div>
+
+                                {/* Existing questions list */}
+                                {loadingQuestions ? (
+                                  <p style={{ fontSize: '13px', color: 'var(--gray-mid)', marginBottom: '12px' }}>Loading questions...</p>
+                                ) : questions.length === 0 ? (
+                                  <div style={{ padding: '14px 16px', background: 'var(--white)', border: '1px solid var(--gray-light)', borderRadius: '8px', fontSize: '13px', color: 'var(--gray-mid)', marginBottom: '16px' }}>
+                                    No questions yet. Add your first question below.
+                                  </div>
+                                ) : (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
+                                    {(() => {
+                                      let qNum = 0
+                                      return questions.map((q, i) => {
+                                        const isHeader = q.questionType === 'section_header'
+                                        if (!isHeader) qNum++
+                                        const displayNum = qNum
+                                        return (
+                                          <div
+                                            key={q.id}
+                                            draggable={true}
+                                            onDragStart={() => setDragIndex(i)}
+                                            onDragOver={e => { e.preventDefault(); setDragOverIndex(i) }}
+                                            onDrop={() => { if (dragIndex !== null && dragIndex !== i) reorderQuestions(dragIndex, i); setDragIndex(null); setDragOverIndex(null) }}
+                                            onDragEnd={() => { setDragIndex(null); setDragOverIndex(null) }}
+                                            style={{
+                                              background: isHeader ? 'var(--background)' : 'var(--white)',
+                                              border: `1px solid ${editingQuestionId === q.id ? 'var(--plum)' : isHeader ? 'var(--plum-mid)' : 'var(--gray-light)'}`,
+                                              borderTop: dragOverIndex === i ? '3px solid var(--plum)' : undefined,
+                                              borderRadius: '8px',
+                                              padding: '14px 16px',
+                                              cursor: editingQuestionId === q.id ? 'default' : 'grab',
+                                            }}
+                                          >
+                                            {editingQuestionId === q.id ? (
+                                              isHeader ? (
+                                                <div>
+                                                  <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--plum)', marginBottom: '10px' }}>Editing Section Header</div>
+                                                  <textarea
+                                                    ref={editQuestionTextareaRef}
+                                                    autoFocus
+                                                    value={editingQuestionForm.questionText}
+                                                    onChange={e => setEditingQuestionForm(f => ({ ...f, questionText: e.target.value }))}
+                                                    rows={2}
+                                                    placeholder="Enter header text..."
+                                                    style={{ ...inputStyle, resize: 'vertical', marginBottom: '10px' }}
+                                                  />
+                                                  <div style={{ display: 'flex', gap: '8px' }}>
+                                                    <button onClick={() => handleUpdateQuestion(q.id)} disabled={savingQuestion || !editingQuestionForm.questionText.trim()}
+                                                      style={{ background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '6px', padding: '7px 18px', cursor: 'pointer', fontSize: '13px', fontWeight: 500, fontFamily: 'var(--font-body)' }}>
+                                                      {savingQuestion ? 'Saving...' : 'Save'}
+                                                    </button>
+                                                    <button onClick={() => setEditingQuestionId(null)}
+                                                      style={{ background: 'none', border: '1px solid var(--gray-light)', color: 'var(--gray-dark)', borderRadius: '6px', padding: '7px 18px', cursor: 'pointer', fontSize: '13px', fontFamily: 'var(--font-body)' }}>
+                                                      Cancel
+                                                    </button>
+                                                  </div>
+                                                </div>
+                                              ) : (
+                                                <div>
+                                                  <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--plum)', marginBottom: '10px' }}>Editing Question {displayNum}</div>
+                                                  <MathToolbar
+                                                    textareaRef={editQuestionTextareaRef}
+                                                    value={editingQuestionForm.questionText}
+                                                    onChange={val => setEditingQuestionForm(f => ({ ...f, questionText: val }))}
+                                                  />
+                                                  <textarea
+                                                    ref={editQuestionTextareaRef}
+                                                    value={editingQuestionForm.questionText}
+                                                    onChange={e => setEditingQuestionForm(f => ({ ...f, questionText: e.target.value }))}
+                                                    rows={3}
+                                                    style={{ ...inputStyle, resize: 'vertical', marginBottom: '10px' }}
+                                                  />
+                                                  <select value={editingQuestionForm.questionType} onChange={e => setEditingQuestionForm(f => ({ ...f, questionType: e.target.value, correctAnswer: '' }))}
+                                                    style={{ ...inputStyle, marginBottom: '10px' }}>
+                                                    <option value="number">Number</option>
+                                                    <option value="short_text">Short Text</option>
+                                                    <option value="multiple_choice">Multiple Choice</option>
+                                                    <option value="show_work">Show Work (photo upload)</option>
+                                                  </select>
+                                                  {(editingQuestionForm.questionType === 'number' || editingQuestionForm.questionType === 'short_text' || editingQuestionForm.questionType === 'multiple_choice') && (
+                                                    <div style={{ marginBottom: '10px' }}>
+                                                      <label style={labelStyle}>Correct answer (optional — for auto-grading)</label>
+                                                      <MathToolbar
+                                                        textareaRef={editCorrectAnswerInputRef}
+                                                        value={editingQuestionForm.correctAnswer}
+                                                        onChange={val => setEditingQuestionForm(f => ({ ...f, correctAnswer: val }))}
+                                                      />
+                                                      <textarea
+                                                        ref={editCorrectAnswerInputRef}
+                                                        value={editingQuestionForm.correctAnswer}
+                                                        onChange={e => setEditingQuestionForm(f => ({ ...f, correctAnswer: e.target.value }))}
+                                                        rows={2}
+                                                        placeholder="e.g. \(\frac{7}{8}\) or just 42"
+                                                        style={{ ...inputStyle, resize: 'vertical' }}
+                                                      />
+                                                      {editingQuestionForm.correctAnswer && (
+                                                        <div style={{ marginTop: '6px', fontSize: '12px', color: 'var(--gray-dark)' }}>
+                                                          Preview: <MathRenderer text={editingQuestionForm.correctAnswer} />
+                                                        </div>
+                                                      )}
+                                                    </div>
+                                                  )}
+                                                  <div style={{ display: 'flex', gap: '8px' }}>
+                                                    <button onClick={() => handleUpdateQuestion(q.id)} disabled={savingQuestion || !editingQuestionForm.questionText.trim()}
+                                                      style={{ background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '6px', padding: '7px 18px', cursor: 'pointer', fontSize: '13px', fontWeight: 500, fontFamily: 'var(--font-body)' }}>
+                                                      {savingQuestion ? 'Saving...' : 'Save'}
+                                                    </button>
+                                                    <button onClick={() => setEditingQuestionId(null)}
+                                                      style={{ background: 'none', border: '1px solid var(--gray-light)', color: 'var(--gray-dark)', borderRadius: '6px', padding: '7px 18px', cursor: 'pointer', fontSize: '13px', fontFamily: 'var(--font-body)' }}>
+                                                      Cancel
+                                                    </button>
+                                                  </div>
+                                                </div>
+                                              )
+                                            ) : isHeader ? (
+                                              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                                <div style={{ color: 'var(--gray-mid)', fontSize: '16px', cursor: 'grab', userSelect: 'none' }}>⠿</div>
+                                                <div style={{ flex: 1, minWidth: 0 }}>
+                                                  <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--plum)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                    <span style={{ fontSize: '10px', background: 'var(--plum)', color: 'white', padding: '1px 6px', borderRadius: '4px', letterSpacing: '0.5px', flexShrink: 0 }}>HEADER</span>
+                                                    <span style={{ textTransform: 'uppercase', letterSpacing: '0.6px' }}>{q.questionText}</span>
+                                                  </div>
+                                                </div>
+                                                <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                                                  <button onClick={() => startEditQuestion(q)}
+                                                    style={{ background: 'none', border: '1px solid var(--plum)', color: 'var(--plum)', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', padding: '4px 10px' }}>
+                                                    Edit
+                                                  </button>
+                                                  <button onClick={() => handleDeleteQuestion(q.id)}
+                                                    style={{ background: 'none', border: '1px solid #e05252', color: '#e05252', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', padding: '4px 10px' }}>
+                                                    Delete
+                                                  </button>
+                                                </div>
+                                              </div>
+                                            ) : (
+                                              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                                                <div style={{ color: 'var(--gray-mid)', fontSize: '16px', cursor: 'grab', paddingTop: '2px', userSelect: 'none' }}>⠿</div>
+                                                <div style={{ fontWeight: 700, color: 'var(--plum)', fontSize: '14px', minWidth: '24px', paddingTop: '1px' }}>{displayNum}.</div>
+                                                <div style={{ flex: 1, minWidth: 0 }}>
+                                                  <div style={{ fontSize: '14px', color: 'var(--foreground)', marginBottom: '6px', lineHeight: '1.6' }}><MathRenderer text={q.questionText} /></div>
+                                                  <span style={{ fontSize: '11px', fontWeight: 600, padding: '2px 8px', borderRadius: '12px', background: 'var(--background)', color: 'var(--gray-dark)', border: '1px solid var(--gray-light)' }}>
+                                                    {QUESTION_TYPE_LABELS[q.questionType] || q.questionType}
+                                                  </span>
+                                                </div>
+                                                <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                                                  <button onClick={() => startEditQuestion(q)}
+                                                    style={{ background: 'none', border: '1px solid var(--plum)', color: 'var(--plum)', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', padding: '4px 10px' }}>
+                                                    Edit
+                                                  </button>
+                                                  <button onClick={() => handleDeleteQuestion(q.id)}
+                                                    style={{ background: 'none', border: '1px solid #e05252', color: '#e05252', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', padding: '4px 10px' }}>
+                                                    Delete
+                                                  </button>
+                                                </div>
+                                              </div>
+                                            )}
+                                          </div>
+                                        )
+                                      })
+                                    })()}
                                   </div>
                                 )}
-                              </div>
+
+                                {/* Add Question form */}
+                                <div id={`question-builder-${lesson.id}`} style={{ background: 'var(--white)', border: '1px solid var(--gray-light)', borderRadius: '8px', padding: '16px' }}>
+                                  <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--gray-dark)', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Add Question</div>
+                                  <div style={{ marginBottom: '12px' }}>
+                                    <label style={labelStyle}>Question</label>
+                                    <MathToolbar
+                                      textareaRef={questionTextareaRef}
+                                      value={newQuestion.questionText}
+                                      onChange={val => setNewQuestion(q => ({ ...q, questionText: val }))}
+                                    />
+                                    <textarea
+                                      ref={questionTextareaRef}
+                                      value={newQuestion.questionText}
+                                      onChange={e => setNewQuestion(q => ({ ...q, questionText: e.target.value }))}
+                                      placeholder="Type your question here..."
+                                      rows={3}
+                                      style={{ ...inputStyle, resize: 'vertical' }}
+                                    />
+                                  </div>
+                                  <div style={{ marginBottom: '12px' }}>
+                                    <label style={labelStyle}>Answer Type</label>
+                                    <select
+                                      value={newQuestion.questionType}
+                                      onChange={e => setNewQuestion(q => ({ ...q, questionType: e.target.value, choices: '', correctAnswer: '' }))}
+                                      style={{ ...inputStyle }}
+                                    >
+                                      <option value="number">Number answer</option>
+                                      <option value="short_text">Short text answer</option>
+                                      <option value="multiple_choice">Multiple choice</option>
+                                      <option value="show_work">Show work (photo)</option>
+                                    </select>
+                                  </div>
+                                  {newQuestion.questionType === 'multiple_choice' && (
+                                    <div style={{ marginBottom: '12px' }}>
+                                      <label style={labelStyle}>Choices</label>
+                                      <textarea
+                                        value={newQuestion.choices}
+                                        onChange={e => setNewQuestion(q => ({ ...q, choices: e.target.value }))}
+                                        placeholder={'One choice per line\nA) ...\nB) ...'}
+                                        rows={4}
+                                        style={{ ...inputStyle, resize: 'vertical' }}
+                                      />
+                                    </div>
+                                  )}
+                                  {(newQuestion.questionType === 'number' || newQuestion.questionType === 'short_text' || newQuestion.questionType === 'multiple_choice') && (
+                                    <div style={{ marginBottom: '12px' }}>
+                                      <label style={labelStyle}>Correct answer (optional — for auto-grading)</label>
+                                      <MathToolbar
+                                        textareaRef={correctAnswerInputRef}
+                                        value={newQuestion.correctAnswer}
+                                        onChange={val => setNewQuestion(q => ({ ...q, correctAnswer: val }))}
+                                      />
+                                      <textarea
+                                        ref={correctAnswerInputRef}
+                                        value={newQuestion.correctAnswer}
+                                        onChange={e => setNewQuestion(q => ({ ...q, correctAnswer: e.target.value }))}
+                                        rows={2}
+                                        placeholder="e.g. \(\frac{7}{8}\) or just 42"
+                                        style={{ ...inputStyle, resize: 'vertical' }}
+                                      />
+                                      {newQuestion.correctAnswer && (
+                                        <div style={{ marginTop: '6px', fontSize: '12px', color: 'var(--gray-dark)' }}>
+                                          Preview: <MathRenderer text={newQuestion.correctAnswer} />
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                  <button
+                                    onClick={() => handleAddQuestion(lesson.id)}
+                                    disabled={addingQuestion || !newQuestion.questionText.trim()}
+                                    style={{
+                                      background: newQuestion.questionText.trim() ? 'var(--plum)' : 'var(--gray-light)',
+                                      color: newQuestion.questionText.trim() ? 'white' : 'var(--gray-mid)',
+                                      border: 'none', borderRadius: '6px', padding: '8px 20px',
+                                      cursor: newQuestion.questionText.trim() ? 'pointer' : 'not-allowed',
+                                      fontSize: '13px', fontWeight: 500, fontFamily: 'var(--font-body)'
+                                    }}
+                                  >
+                                    {addingQuestion ? 'Adding...' : 'Add Question'}
+                                  </button>
+                                </div>
+                              </>
                             )}
-
-                            <button
-                              onClick={() => handleAddQuestion(lesson.id)}
-                              disabled={addingQuestion || !newQuestion.questionText.trim()}
-                              style={{
-                                background: newQuestion.questionText.trim() ? 'var(--plum)' : 'var(--gray-light)',
-                                color: newQuestion.questionText.trim() ? 'white' : 'var(--gray-mid)',
-                                border: 'none', borderRadius: '6px', padding: '8px 20px',
-                                cursor: newQuestion.questionText.trim() ? 'pointer' : 'not-allowed',
-                                fontSize: '13px', fontWeight: 500, fontFamily: 'var(--font-body)'
-                              }}
-                            >
-                              {addingQuestion ? 'Adding...' : 'Add Question'}
-                            </button>
-                          </div>
-                        </>
-                      )}
-
-                      {/* Save */}
-                      <div style={{ marginTop: '24px', paddingTop: '20px', borderTop: '1px solid var(--gray-light)', display: 'flex', gap: '12px', alignItems: 'center' }}>
-                        <button onClick={() => saveEdit(lesson.id)} disabled={saving} style={{ background: 'var(--plum)', color: 'white', padding: '10px 28px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '14px', fontWeight: 500 }}>
-                          {saving ? 'Saving...' : 'Save Changes'}
-                        </button>
-                        <button onClick={cancelEdit} style={{ background: 'none', border: '1px solid var(--gray-light)', color: 'var(--gray-mid)', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>
-                          Cancel
-                        </button>
-                        {isDirty && (
-                          <span style={{ fontSize: '12px', color: '#e07b00', fontWeight: 500 }}>● Unsaved changes</span>
+                          </>
                         )}
+
                       </div>
                     </div>
                   )}
