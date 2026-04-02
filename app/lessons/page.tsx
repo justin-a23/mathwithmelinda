@@ -52,6 +52,7 @@ const getLessonTemplateQuery = /* GraphQL */`
       title
       assignmentType
       lessonNumber
+      instructions
       questions {
         items {
           id
@@ -127,6 +128,7 @@ type LessonTemplateData = {
   title: string
   assignmentType: string | null
   lessonNumber: number | null
+  instructions: string | null
   questions: { items: AssignmentQuestion[] }
 }
 
@@ -876,10 +878,10 @@ function LessonPageInner() {
               </div>
             )}
 
-            {lesson?.instructions && (
+            {(lessonTemplate?.instructions || lesson?.instructions) && (
               <div style={{ background: 'var(--plum-light)', border: '1px solid var(--plum-mid)', borderRadius: 'var(--radius)', padding: '20px 24px', marginBottom: '32px' }}>
                 <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '16px', color: 'var(--plum)', marginBottom: '8px' }}>Instructions</h2>
-                <p style={{ fontSize: '14px', color: 'var(--foreground)', lineHeight: '1.7' }}>{lesson.instructions}</p>
+                <p style={{ fontSize: '14px', color: 'var(--foreground)', lineHeight: '1.7' }}>{lessonTemplate?.instructions || lesson?.instructions}</p>
               </div>
             )}
 
