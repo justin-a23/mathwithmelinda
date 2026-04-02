@@ -189,8 +189,9 @@ export default function TeacherSyllabusPage() {
     try {
       // 1. Get presigned upload URL
       const res = await fetch(`/api/syllabus-pdf?action=upload&semesterId=${encodeURIComponent(selectedSemesterId)}`)
-      if (!res.ok) throw new Error('Failed to get upload URL')
-      const { uploadUrl, key } = await res.json()
+      const resData = await res.json()
+      if (!res.ok) throw new Error(resData.error || 'Failed to get upload URL')
+      const { uploadUrl, key } = resData
 
       // 2. PUT the file directly to S3
       const putRes = await fetch(uploadUrl, {
@@ -198,7 +199,7 @@ export default function TeacherSyllabusPage() {
         body: file,
         headers: { 'Content-Type': 'application/pdf' },
       })
-      if (!putRes.ok) throw new Error('Upload to S3 failed')
+      if (!putRes.ok) throw new Error(`S3 upload failed (${putRes.status})`)
 
       // 3. Save key to GraphQL
       const sem = semesters.find(s => s.id === selectedSemesterId)
@@ -295,6 +296,31 @@ export default function TeacherSyllabusPage() {
     } catch (err) {
       console.error('Publish error:', err)
       setPublishMsg('Error publishing. Please try again.')
+    } finally {
+      setPublishing(false)
+    }
+  }
+
+  async function handleUnpublish() {
+    if (!currentSyllabus) return
+    if (!window.confirm('Unpublish this syllabus? Students will no longer be able to view it.')) return
+    setPublishing(true)
+    try {
+      const updateRes = await (client.graphql({
+        query: UPDATE_SYLLABUS,
+        variables: { input: { id: currentSyllabus.id, pdfKey: null, publishedPdfKey: null, publishedAt: null } },
+      }) as any)
+      const updatedSyl = { ...currentSyllabus, ...updateRes.data.updateSyllabus }
+      setPdfKey(null)
+      setPublishedPdfKey(null)
+      setPublishedAt(null)
+      setViewerUrl(null)
+      setUploadStatus('idle')
+      setCurrentSyllabus(updatedSyl)
+      setSyllabiMap(prev => ({ ...prev, [currentSyllabus.semesterId]: updatedSyl }))
+    } catch (err) {
+      console.error('Unpublish error:', err)
+      alert('Error unpublishing. Please try again.')
     } finally {
       setPublishing(false)
     }
@@ -675,6 +701,22 @@ export default function TeacherSyllabusPage() {
                           {publishing ? 'Publishing…' : 'Republish with Current PDF'}
                         </button>
                       )}
+                      <button
+                        onClick={handleUnpublish}
+                        disabled={publishing}
+                        style={{
+                          background: 'transparent',
+                          color: '#dc2626',
+                          padding: '10px 18px',
+                          borderRadius: '8px',
+                          border: '1px solid #dc2626',
+                          cursor: publishing ? 'not-allowed' : 'pointer',
+                          fontSize: '13px',
+                          fontWeight: 500,
+                          opacity: publishing ? 0.5 : 1,
+                        }}>
+                        Unpublish
+                      </button>
                     </>
                   ) : (
                     <button
