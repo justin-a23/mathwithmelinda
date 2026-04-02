@@ -2,7 +2,7 @@
 
 import { useAuthenticator } from '@aws-amplify/ui-react'
 import { useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { generateClient } from 'aws-amplify/api'
 import TeacherNav from '../../components/TeacherNav'
 import { useRoleGuard } from '../../hooks/useRoleGuard'
@@ -14,8 +14,6 @@ const LIST_SEMESTERS = /* GraphQL */ `
     listSemesters(limit: 100) {
       items {
         id name startDate endDate isActive courseId
-        lessonWeightPercent quizWeightPercent testWeightPercent
-        gradeA gradeB gradeC gradeD
         course { id title }
       }
     }
@@ -25,31 +23,22 @@ const LIST_SEMESTERS = /* GraphQL */ `
 const LIST_ALL_SYLLABI = /* GraphQL */ `
   query ListAllSyllabi {
     listSyllabi(limit: 100) {
-      items {
-        id semesterId courseId
-        sections publishedSections publishedAt
-      }
+      items { id semesterId courseId pdfKey publishedPdfKey publishedAt }
     }
   }
 `
 
 const CREATE_SYLLABUS = /* GraphQL */ `
   mutation CreateSyllabus($input: CreateSyllabusInput!) {
-    createSyllabus(input: $input) {
-      id semesterId courseId sections publishedSections publishedAt
-    }
+    createSyllabus(input: $input) { id semesterId courseId pdfKey publishedPdfKey publishedAt }
   }
 `
 
 const UPDATE_SYLLABUS = /* GraphQL */ `
   mutation UpdateSyllabus($input: UpdateSyllabusInput!) {
-    updateSyllabus(input: $input) {
-      id sections publishedSections publishedAt
-    }
+    updateSyllabus(input: $input) { id pdfKey publishedPdfKey publishedAt }
   }
 `
-
-type Section = { id: string; heading: string; body: string }
 
 type Semester = {
   id: string
@@ -58,13 +47,6 @@ type Semester = {
   endDate: string
   isActive: boolean | null
   courseId: string | null
-  lessonWeightPercent: number | null
-  quizWeightPercent: number | null
-  testWeightPercent: number | null
-  gradeA: number | null
-  gradeB: number | null
-  gradeC: number | null
-  gradeD: number | null
   course: { id: string; title: string } | null
 }
 
@@ -72,18 +54,9 @@ type Syllabus = {
   id: string
   semesterId: string
   courseId: string
-  sections: string | null
-  publishedSections: string | null
+  pdfKey: string | null
+  publishedPdfKey: string | null
   publishedAt: string | null
-}
-
-function uid() {
-  return Math.random().toString(36).slice(2) + Date.now().toString(36)
-}
-
-function parseSections(json: string | null | undefined): Section[] {
-  if (!json) return []
-  try { return JSON.parse(json) } catch { return [] }
 }
 
 function formatDate(dateStr: string): string {
@@ -99,26 +72,6 @@ function formatPublished(dateStr: string): string {
   })
 }
 
-const inputStyle: React.CSSProperties = {
-  width: '100%',
-  padding: '10px 12px',
-  border: '1px solid var(--gray-light)',
-  borderRadius: '6px',
-  fontSize: '14px',
-  fontFamily: 'var(--font-body)',
-  background: 'var(--background)',
-  color: 'var(--foreground)',
-  boxSizing: 'border-box',
-}
-
-const labelStyle: React.CSSProperties = {
-  fontSize: '12px',
-  fontWeight: 500,
-  color: 'var(--gray-dark)',
-  display: 'block',
-  marginBottom: '6px',
-}
-
 export default function TeacherSyllabusPage() {
   const { user } = useAuthenticator()
   const router = useRouter()
@@ -130,13 +83,22 @@ export default function TeacherSyllabusPage() {
   const [loading, setLoading] = useState(true)
 
   // Edit state
-  const [editingSemId, setEditingSemId] = useState<string | null>(null)
-  const [currentSyllabusId, setCurrentSyllabusId] = useState<string | null>(null)
-  const [draftSections, setDraftSections] = useState<Section[]>([])
+  const [selectedSemesterId, setSelectedSemesterId] = useState<string | null>(null)
+  const [currentSyllabus, setCurrentSyllabus] = useState<Syllabus | null>(null)
+  const [pdfKey, setPdfKey] = useState<string | null>(null)
+  const [publishedPdfKey, setPublishedPdfKey] = useState<string | null>(null)
   const [publishedAt, setPublishedAt] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
+
+  // Upload state
+  const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'complete' | 'error'>('idle')
+  const [uploadError, setUploadError] = useState('')
+  const [dragOver, setDragOver] = useState(false)
+  const [viewerUrl, setViewerUrl] = useState<string | null>(null)
+  const [viewerLoading, setViewerLoading] = useState(false)
   const [publishing, setPublishing] = useState(false)
-  const [savedMsg, setSavedMsg] = useState('')
+  const [publishMsg, setPublishMsg] = useState('')
+
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (user === null) router.replace('/login')
@@ -169,168 +131,177 @@ export default function TeacherSyllabusPage() {
   }
 
   function openEdit(semId: string) {
-    const syl = syllabiMap[semId]
-    setEditingSemId(semId)
-    setCurrentSyllabusId(syl?.id ?? null)
-    setDraftSections(parseSections(syl?.sections))
+    const syl = syllabiMap[semId] ?? null
+    setSelectedSemesterId(semId)
+    setCurrentSyllabus(syl)
+    setPdfKey(syl?.pdfKey ?? null)
+    setPublishedPdfKey(syl?.publishedPdfKey ?? null)
     setPublishedAt(syl?.publishedAt ?? null)
-    setSavedMsg('')
+    setUploadStatus('idle')
+    setUploadError('')
+    setViewerUrl(null)
+    setPublishMsg('')
     setView('edit')
+
+    // Load viewer URL if PDF exists
+    if (syl?.pdfKey) {
+      loadViewerUrl(syl.pdfKey)
+    }
   }
 
   function backToList() {
     setView('list')
-    setEditingSemId(null)
-    setCurrentSyllabusId(null)
-    setDraftSections([])
+    setSelectedSemesterId(null)
+    setCurrentSyllabus(null)
+    setPdfKey(null)
+    setPublishedPdfKey(null)
     setPublishedAt(null)
+    setUploadStatus('idle')
+    setUploadError('')
+    setViewerUrl(null)
+    setPublishMsg('')
   }
 
-  function loadTemplate() {
-    const sem = semesters.find(s => s.id === editingSemId)
-    const gradingBody = sem
-      ? `Grades are calculated as follows:\n• Lessons: ${sem.lessonWeightPercent ?? 60}%\n• Participation: ${sem.quizWeightPercent ?? 20}%\n• Tests: ${sem.testWeightPercent ?? 20}%\n\nGrade cutoffs:\n• A: ${sem.gradeA ?? 90}% and above\n• B: ${sem.gradeB ?? 80}% and above\n• C: ${sem.gradeC ?? 70}% and above\n• D: ${sem.gradeD ?? 60}% and above\n• F: Below ${sem.gradeD ?? 60}%`
-      : ''
-    setDraftSections([
-      { id: uid(), heading: 'Course Overview', body: '' },
-      { id: uid(), heading: 'Learning Objectives', body: '' },
-      { id: uid(), heading: 'Required Materials', body: '' },
-      { id: uid(), heading: 'Grading Policy', body: gradingBody },
-      { id: uid(), heading: 'Class Policies', body: '' },
-    ])
-  }
-
-  function addSection() {
-    setDraftSections(prev => [...prev, { id: uid(), heading: '', body: '' }])
-  }
-
-  function updateSection(id: string, field: 'heading' | 'body', value: string) {
-    setDraftSections(prev => prev.map(s => s.id === id ? { ...s, [field]: value } : s))
-  }
-
-  function deleteSection(id: string) {
-    setDraftSections(prev => prev.filter(s => s.id !== id))
-  }
-
-  function moveSection(id: string, dir: 'up' | 'down') {
-    setDraftSections(prev => {
-      const idx = prev.findIndex(s => s.id === id)
-      if (dir === 'up' && idx === 0) return prev
-      if (dir === 'down' && idx === prev.length - 1) return prev
-      const arr = [...prev]
-      const swap = dir === 'up' ? idx - 1 : idx + 1
-      ;[arr[idx], arr[swap]] = [arr[swap], arr[idx]]
-      return arr
-    })
-  }
-
-  async function saveDraft() {
-    if (!editingSemId) return
-    setSaving(true)
-    setSavedMsg('')
+  async function loadViewerUrl(key: string) {
+    setViewerLoading(true)
     try {
-      const sectionsJson = JSON.stringify(draftSections)
-      const sem = semesters.find(s => s.id === editingSemId)
+      const res = await fetch(`/api/syllabus-pdf?action=view&key=${encodeURIComponent(key)}`)
+      const data = await res.json()
+      setViewerUrl(data.url ?? null)
+    } catch {
+      setViewerUrl(null)
+    } finally {
+      setViewerLoading(false)
+    }
+  }
 
-      if (currentSyllabusId) {
-        await (client.graphql({
+  async function handleFileSelect(file: File) {
+    if (!file || file.type !== 'application/pdf') {
+      setUploadError('Please select a PDF file.')
+      return
+    }
+    if (!selectedSemesterId) return
+
+    setUploadStatus('uploading')
+    setUploadError('')
+    setViewerUrl(null)
+
+    try {
+      // 1. Get presigned upload URL
+      const res = await fetch(`/api/syllabus-pdf?action=upload&semesterId=${encodeURIComponent(selectedSemesterId)}`)
+      if (!res.ok) throw new Error('Failed to get upload URL')
+      const { uploadUrl, key } = await res.json()
+
+      // 2. PUT the file directly to S3
+      const putRes = await fetch(uploadUrl, {
+        method: 'PUT',
+        body: file,
+        headers: { 'Content-Type': 'application/pdf' },
+      })
+      if (!putRes.ok) throw new Error('Upload to S3 failed')
+
+      // 3. Save key to GraphQL
+      const sem = semesters.find(s => s.id === selectedSemesterId)
+      let updatedSyl: Syllabus
+
+      if (currentSyllabus) {
+        const updateRes = await (client.graphql({
           query: UPDATE_SYLLABUS,
-          variables: { input: { id: currentSyllabusId, sections: sectionsJson } },
+          variables: { input: { id: currentSyllabus.id, pdfKey: key } },
         }) as any)
+        updatedSyl = { ...currentSyllabus, ...updateRes.data.updateSyllabus }
       } else {
-        const res = await (client.graphql({
+        const createRes = await (client.graphql({
           query: CREATE_SYLLABUS,
           variables: {
             input: {
-              semesterId: editingSemId,
+              semesterId: selectedSemesterId,
               courseId: sem?.courseId ?? '',
-              sections: sectionsJson,
-              publishedSections: null,
+              pdfKey: key,
+              publishedPdfKey: null,
               publishedAt: null,
             },
           },
         }) as any)
-        const created: Syllabus = res.data.createSyllabus
-        setCurrentSyllabusId(created.id)
-        setSyllabiMap(prev => ({ ...prev, [editingSemId]: created }))
+        updatedSyl = createRes.data.createSyllabus
+        setCurrentSyllabus(updatedSyl)
       }
 
-      setSyllabiMap(prev => ({
-        ...prev,
-        [editingSemId]: {
-          ...(prev[editingSemId] ?? { id: currentSyllabusId ?? '', semesterId: editingSemId, courseId: sem?.courseId ?? '', publishedSections: null, publishedAt: null }),
-          sections: sectionsJson,
-        },
-      }))
-      setSavedMsg('Draft saved')
-      setTimeout(() => setSavedMsg(''), 3000)
-    } catch (err) {
-      console.error('Error saving draft:', err)
-    } finally {
-      setSaving(false)
+      setPdfKey(key)
+      setSyllabiMap(prev => ({ ...prev, [selectedSemesterId]: updatedSyl }))
+      setUploadStatus('complete')
+
+      // Load the viewer
+      await loadViewerUrl(key)
+    } catch (err: any) {
+      console.error('Upload error:', err)
+      setUploadError(err?.message ?? 'Upload failed. Please try again.')
+      setUploadStatus('error')
     }
   }
 
-  async function publishSyllabus() {
-    if (!editingSemId) return
-    if (!window.confirm('Publish this syllabus? Students and parents will see this version immediately. You can keep editing and re-publish at any time.')) return
-    setPublishing(true)
-    setSavedMsg('')
-    try {
-      const sectionsJson = JSON.stringify(draftSections)
-      const now = new Date().toISOString()
-      const sem = semesters.find(s => s.id === editingSemId)
+  function onFileInputChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (file) handleFileSelect(file)
+    e.target.value = ''
+  }
 
-      if (currentSyllabusId) {
-        await (client.graphql({
+  function onDrop(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault()
+    setDragOver(false)
+    const file = e.dataTransfer.files?.[0]
+    if (file) handleFileSelect(file)
+  }
+
+  async function handlePublish() {
+    if (!selectedSemesterId || !pdfKey) return
+    if (!window.confirm('Publish this PDF? Students will be able to view it immediately. You can upload a new version and republish at any time.')) return
+
+    setPublishing(true)
+    setPublishMsg('')
+    try {
+      const now = new Date().toISOString()
+      const sem = semesters.find(s => s.id === selectedSemesterId)
+      let updatedSyl: Syllabus
+
+      if (currentSyllabus) {
+        const updateRes = await (client.graphql({
           query: UPDATE_SYLLABUS,
-          variables: {
-            input: {
-              id: currentSyllabusId,
-              sections: sectionsJson,
-              publishedSections: sectionsJson,
-              publishedAt: now,
-            },
-          },
+          variables: { input: { id: currentSyllabus.id, publishedPdfKey: pdfKey, publishedAt: now } },
         }) as any)
+        updatedSyl = { ...currentSyllabus, ...updateRes.data.updateSyllabus }
       } else {
-        const res = await (client.graphql({
+        const createRes = await (client.graphql({
           query: CREATE_SYLLABUS,
           variables: {
             input: {
-              semesterId: editingSemId,
+              semesterId: selectedSemesterId,
               courseId: sem?.courseId ?? '',
-              sections: sectionsJson,
-              publishedSections: sectionsJson,
+              pdfKey,
+              publishedPdfKey: pdfKey,
               publishedAt: now,
             },
           },
         }) as any)
-        const created: Syllabus = res.data.createSyllabus
-        setCurrentSyllabusId(created.id)
-        setSyllabiMap(prev => ({ ...prev, [editingSemId]: created }))
+        updatedSyl = createRes.data.createSyllabus
+        setCurrentSyllabus(updatedSyl)
       }
 
+      setPublishedPdfKey(pdfKey)
       setPublishedAt(now)
-      setSyllabiMap(prev => ({
-        ...prev,
-        [editingSemId]: {
-          ...(prev[editingSemId] ?? { id: currentSyllabusId ?? '', semesterId: editingSemId, courseId: sem?.courseId ?? '' }),
-          sections: sectionsJson,
-          publishedSections: sectionsJson,
-          publishedAt: now,
-        },
-      }))
-      setSavedMsg('Published!')
-      setTimeout(() => setSavedMsg(''), 4000)
+      setSyllabiMap(prev => ({ ...prev, [selectedSemesterId]: updatedSyl }))
+      setPublishMsg('Published!')
+      setTimeout(() => setPublishMsg(''), 4000)
     } catch (err) {
-      console.error('Error publishing syllabus:', err)
+      console.error('Publish error:', err)
+      setPublishMsg('Error publishing. Please try again.')
     } finally {
       setPublishing(false)
     }
   }
 
-  const editingSemester = semesters.find(s => s.id === editingSemId)
+  const editingSemester = semesters.find(s => s.id === selectedSemesterId)
+  const hasPendingUpdate = !!(pdfKey && publishedPdfKey && pdfKey !== publishedPdfKey)
 
   if (checking) return null
 
@@ -341,12 +312,14 @@ export default function TeacherSyllabusPage() {
       <main style={{ maxWidth: '900px', margin: '0 auto', padding: '48px 24px 80px' }}>
 
         {view === 'list' ? (
+          // ── LIST VIEW ──
           <>
-            {/* Page header */}
             <div style={{ marginBottom: '32px' }}>
-              <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '32px', color: 'var(--foreground)', marginBottom: '8px' }}>Syllabi</h1>
+              <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '32px', color: 'var(--foreground)', marginBottom: '8px' }}>
+                Syllabi
+              </h1>
               <p style={{ color: 'var(--gray-mid)', margin: 0 }}>
-                Create and manage a course syllabus for each academic term. Published syllabi are visible to students and parents.
+                Upload a PDF syllabus for each academic term. Published syllabi are visible to students and parents.
               </p>
             </div>
 
@@ -373,7 +346,31 @@ export default function TeacherSyllabusPage() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                 {semesters.map(sem => {
                   const syl = syllabiMap[sem.id]
-                  const status = syl?.publishedAt ? 'published' : syl?.sections ? 'draft' : 'none'
+                  let statusBadge: React.ReactNode
+
+                  if (syl?.publishedAt) {
+                    statusBadge = (
+                      <span style={{ background: '#dbeafe', color: '#1d4ed8', fontSize: '11px', fontWeight: 600, padding: '2px 10px', borderRadius: '20px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                        Published {formatPublished(syl.publishedAt)}
+                      </span>
+                    )
+                  } else if (syl?.pdfKey) {
+                    statusBadge = (
+                      <span style={{ background: '#fef9c3', color: '#854d0e', fontSize: '11px', fontWeight: 600, padding: '2px 10px', borderRadius: '20px' }}>
+                        PDF uploaded — not published
+                      </span>
+                    )
+                  } else {
+                    statusBadge = (
+                      <span style={{ background: 'var(--gray-light)', color: 'var(--gray-mid)', fontSize: '11px', fontWeight: 500, padding: '2px 10px', borderRadius: '20px' }}>
+                        No PDF uploaded
+                      </span>
+                    )
+                  }
+
                   return (
                     <div
                       key={sem.id}
@@ -388,53 +385,29 @@ export default function TeacherSyllabusPage() {
                         gap: '16px',
                       }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        {/* Name + status badges */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px', flexWrap: 'wrap' }}>
-                          <span style={{ fontFamily: 'var(--font-display)', fontSize: '18px', color: 'var(--foreground)' }}>
-                            {sem.name}
-                          </span>
+                          {sem.course && (
+                            <span style={{ fontFamily: 'var(--font-display)', fontSize: '17px', color: 'var(--foreground)' }}>
+                              {sem.course.title}
+                            </span>
+                          )}
                           {sem.isActive && (
                             <span style={{ background: '#dcfce7', color: '#16a34a', fontSize: '11px', fontWeight: 600, padding: '2px 10px', borderRadius: '20px' }}>
                               Active
                             </span>
                           )}
-                          {status === 'published' && (
-                            <span style={{ background: '#dbeafe', color: '#1d4ed8', fontSize: '11px', fontWeight: 600, padding: '2px 10px', borderRadius: '20px' }}>
-                              ✓ Published
-                            </span>
-                          )}
-                          {status === 'draft' && (
-                            <span style={{ background: '#fef9c3', color: '#a16207', fontSize: '11px', fontWeight: 600, padding: '2px 10px', borderRadius: '20px' }}>
-                              Draft
-                            </span>
-                          )}
-                          {status === 'none' && (
-                            <span style={{ background: 'var(--gray-light)', color: 'var(--gray-mid)', fontSize: '11px', fontWeight: 500, padding: '2px 10px', borderRadius: '20px' }}>
-                              No syllabus
+                        </div>
+
+                        <div style={{ fontSize: '14px', color: 'var(--plum)', fontWeight: 500, marginBottom: '6px' }}>
+                          {sem.name}
+                          {sem.startDate && sem.endDate && (
+                            <span style={{ color: 'var(--gray-mid)', fontWeight: 400 }}>
+                              {' '}· {formatDate(sem.startDate)} – {formatDate(sem.endDate)}
                             </span>
                           )}
                         </div>
 
-                        {/* Course */}
-                        {sem.course && (
-                          <div style={{ fontSize: '13px', color: 'var(--plum)', fontWeight: 500, marginBottom: '4px' }}>
-                            {sem.course.title}
-                          </div>
-                        )}
-
-                        {/* Dates */}
-                        {sem.startDate && sem.endDate && (
-                          <div style={{ fontSize: '13px', color: 'var(--gray-mid)' }}>
-                            {formatDate(sem.startDate)} – {formatDate(sem.endDate)}
-                          </div>
-                        )}
-
-                        {/* Published date */}
-                        {status === 'published' && syl?.publishedAt && (
-                          <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginTop: '4px' }}>
-                            Last published {formatPublished(syl.publishedAt)}
-                          </div>
-                        )}
+                        <div>{statusBadge}</div>
                       </div>
 
                       <button
@@ -450,7 +423,7 @@ export default function TeacherSyllabusPage() {
                           fontWeight: 500,
                           flexShrink: 0,
                         }}>
-                        {status === 'none' ? '+ Create Syllabus' : 'Edit Syllabus'}
+                        Manage
                       </button>
                     </div>
                   )
@@ -480,316 +453,265 @@ export default function TeacherSyllabusPage() {
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <polyline points="15 18 9 12 15 6" />
               </svg>
-              Back to Syllabi
+              All Semesters
             </button>
 
-            {/* Header row */}
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px', marginBottom: '32px', flexWrap: 'wrap' }}>
-              <div>
+            {/* Header */}
+            <div style={{ marginBottom: '36px' }}>
+              {editingSemester?.course && (
                 <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '28px', color: 'var(--foreground)', margin: '0 0 4px 0' }}>
-                  {editingSemester?.course?.title}
+                  {editingSemester.course.title}
                 </h1>
-                <div style={{ fontSize: '15px', color: 'var(--gray-mid)', marginBottom: '12px' }}>
-                  {editingSemester?.name}
-                  {editingSemester?.startDate && editingSemester?.endDate
-                    ? ` · ${formatDate(editingSemester.startDate)} – ${formatDate(editingSemester.endDate)}`
-                    : ''}
-                </div>
-
-                {/* Publish status */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                  {publishedAt ? (
-                    <span style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      background: '#dbeafe',
-                      color: '#1d4ed8',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      padding: '5px 12px',
-                      borderRadius: '20px',
-                    }}>
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                        <polyline points="20 6 9 17 4 12" />
-                      </svg>
-                      Published {formatPublished(publishedAt)}
-                    </span>
-                  ) : (
-                    <span style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      background: '#fef9c3',
-                      color: '#a16207',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      padding: '5px 12px',
-                      borderRadius: '20px',
-                    }}>
-                      Draft — not visible to students yet
-                    </span>
-                  )}
-                  {savedMsg && (
-                    <span style={{ fontSize: '13px', color: savedMsg === 'Published!' ? '#16a34a' : 'var(--gray-mid)', fontWeight: 500 }}>
-                      {savedMsg === 'Published!' ? '🎉 Published!' : `✓ ${savedMsg}`}
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* Top action buttons */}
-              <div style={{ display: 'flex', gap: '10px', flexShrink: 0, alignItems: 'flex-start' }}>
-                <button
-                  onClick={saveDraft}
-                  disabled={saving}
-                  style={{
-                    background: 'transparent',
-                    color: 'var(--plum)',
-                    padding: '10px 20px',
-                    borderRadius: '8px',
-                    border: '1px solid var(--plum)',
-                    cursor: saving ? 'not-allowed' : 'pointer',
-                    fontSize: '14px',
-                    fontWeight: 500,
-                    opacity: saving ? 0.6 : 1,
-                  }}>
-                  {saving ? 'Saving…' : 'Save Draft'}
-                </button>
-                <button
-                  onClick={publishSyllabus}
-                  disabled={publishing || draftSections.length === 0}
-                  style={{
-                    background: 'var(--plum)',
-                    color: 'white',
-                    padding: '10px 20px',
-                    borderRadius: '8px',
-                    border: 'none',
-                    cursor: (publishing || draftSections.length === 0) ? 'not-allowed' : 'pointer',
-                    fontSize: '14px',
-                    fontWeight: 600,
-                    opacity: (publishing || draftSections.length === 0) ? 0.6 : 1,
-                  }}>
-                  {publishing ? 'Publishing…' : publishedAt ? 'Re-publish' : 'Publish'}
-                </button>
+              )}
+              <div style={{ fontSize: '15px', color: 'var(--gray-mid)' }}>
+                {editingSemester?.name}
+                {editingSemester?.startDate && editingSemester?.endDate
+                  ? ` · ${formatDate(editingSemester.startDate)} – ${formatDate(editingSemester.endDate)}`
+                  : ''}
               </div>
             </div>
 
-            {/* ── SECTIONS ── */}
-            {draftSections.length === 0 ? (
-              <div style={{
-                textAlign: 'center',
-                padding: '56px 24px',
-                background: 'var(--background)',
-                border: '1px dashed var(--gray-light)',
-                borderRadius: 'var(--radius)',
-                marginBottom: '24px',
-              }}>
-                <div style={{ fontSize: '36px', marginBottom: '12px' }}>📋</div>
-                <p style={{ fontSize: '16px', color: 'var(--foreground)', fontWeight: 500, margin: '0 0 6px 0' }}>
-                  No sections yet
-                </p>
-                <p style={{ fontSize: '14px', color: 'var(--gray-mid)', margin: '0 0 28px 0' }}>
-                  Start from a ready-made template or add a blank section.
-                </p>
-                <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
-                  <button
-                    onClick={loadTemplate}
-                    style={{
-                      background: 'var(--plum)',
-                      color: 'white',
-                      padding: '11px 24px',
-                      borderRadius: '8px',
-                      border: 'none',
-                      cursor: 'pointer',
-                      fontSize: '14px',
-                      fontWeight: 600,
-                    }}>
-                    Use Template
-                  </button>
-                  <button
-                    onClick={addSection}
-                    style={{
-                      background: 'transparent',
-                      color: 'var(--plum)',
-                      padding: '11px 24px',
-                      borderRadius: '8px',
-                      border: '1px solid var(--plum)',
-                      cursor: 'pointer',
-                      fontSize: '14px',
-                      fontWeight: 500,
-                    }}>
-                    + Blank Section
-                  </button>
-                </div>
+            {/* ── UPLOAD SECTION ── */}
+            <section style={{
+              background: 'var(--background)',
+              border: '1px solid var(--gray-light)',
+              borderRadius: 'var(--radius)',
+              padding: '28px 28px 24px',
+              marginBottom: '24px',
+            }}>
+              <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '18px', color: 'var(--foreground)', margin: '0 0 20px 0' }}>
+                PDF Syllabus
+              </h2>
+
+              {/* Drop zone */}
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={onDrop}
+                style={{
+                  border: `2px dashed ${dragOver ? 'var(--plum)' : 'var(--gray-light)'}`,
+                  borderRadius: '10px',
+                  padding: '40px 24px',
+                  textAlign: 'center',
+                  cursor: uploadStatus === 'uploading' ? 'default' : 'pointer',
+                  background: dragOver ? 'rgba(123,79,166,0.04)' : 'transparent',
+                  transition: 'border-color 0.15s, background 0.15s',
+                  marginBottom: '16px',
+                }}>
+                {/* Cloud upload icon */}
+                <svg
+                  width="44" height="44"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke={dragOver ? 'var(--plum)' : 'var(--gray-mid)'}
+                  strokeWidth="1.5"
+                  style={{ display: 'block', margin: '0 auto 14px' }}>
+                  <polyline points="16 16 12 12 8 16" />
+                  <line x1="12" y1="12" x2="12" y2="21" />
+                  <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3" />
+                </svg>
+
+                {uploadStatus === 'uploading' ? (
+                  <>
+                    <p style={{ fontSize: '15px', fontWeight: 500, color: 'var(--foreground)', margin: '0 0 4px 0' }}>
+                      Uploading…
+                    </p>
+                    <p style={{ fontSize: '13px', color: 'var(--gray-mid)', margin: 0 }}>Please wait</p>
+                  </>
+                ) : uploadStatus === 'complete' ? (
+                  <>
+                    <p style={{ fontSize: '15px', fontWeight: 500, color: '#16a34a', margin: '0 0 4px 0' }}>
+                      Upload complete
+                    </p>
+                    <p style={{ fontSize: '13px', color: 'var(--gray-mid)', margin: 0 }}>
+                      Click or drag to replace the PDF
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p style={{ fontSize: '15px', fontWeight: 500, color: 'var(--foreground)', margin: '0 0 4px 0' }}>
+                      Click to select PDF or drag and drop
+                    </p>
+                    <p style={{ fontSize: '13px', color: 'var(--gray-mid)', margin: 0 }}>
+                      PDF files only · Max 10 MB recommended
+                    </p>
+                  </>
+                )}
               </div>
-            ) : (
-              <>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '20px' }}>
-                  {draftSections.map((sec, i) => (
-                    <div
-                      key={sec.id}
-                      style={{
-                        background: 'var(--background)',
-                        border: '1px solid var(--gray-light)',
-                        borderRadius: 'var(--radius)',
-                        padding: '20px 24px',
-                      }}>
-                      {/* Section toolbar */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
-                        {/* Up / Down arrows */}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', flexShrink: 0 }}>
-                          <button
-                            onClick={() => moveSection(sec.id, 'up')}
-                            disabled={i === 0}
-                            title="Move up"
-                            style={{
-                              background: 'none',
-                              border: '1px solid var(--gray-light)',
-                              borderRadius: '4px',
-                              width: '26px',
-                              height: '22px',
-                              cursor: i === 0 ? 'default' : 'pointer',
-                              opacity: i === 0 ? 0.25 : 1,
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              padding: 0,
-                            }}>
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                              <polyline points="18 15 12 9 6 15" />
-                            </svg>
-                          </button>
-                          <button
-                            onClick={() => moveSection(sec.id, 'down')}
-                            disabled={i === draftSections.length - 1}
-                            title="Move down"
-                            style={{
-                              background: 'none',
-                              border: '1px solid var(--gray-light)',
-                              borderRadius: '4px',
-                              width: '26px',
-                              height: '22px',
-                              cursor: i === draftSections.length - 1 ? 'default' : 'pointer',
-                              opacity: i === draftSections.length - 1 ? 0.25 : 1,
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              padding: 0,
-                            }}>
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                              <polyline points="6 9 12 15 18 9" />
-                            </svg>
-                          </button>
-                        </div>
 
-                        <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--gray-mid)', textTransform: 'uppercase', letterSpacing: '1px' }}>
-                          Section {i + 1}
-                        </span>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="application/pdf"
+                onChange={onFileInputChange}
+                style={{ display: 'none' }}
+              />
 
-                        <div style={{ flex: 1 }} />
+              {uploadError && (
+                <p style={{ color: '#dc2626', fontSize: '13px', margin: '0 0 12px 0' }}>{uploadError}</p>
+              )}
 
-                        <button
-                          onClick={() => deleteSection(sec.id)}
-                          style={{
-                            background: 'transparent',
-                            border: '1px solid #fca5a5',
-                            color: '#dc2626',
-                            padding: '4px 12px',
-                            borderRadius: '6px',
-                            cursor: 'pointer',
-                            fontSize: '12px',
-                            fontWeight: 500,
-                          }}>
-                          Remove
-                        </button>
-                      </div>
-
-                      <div style={{ marginBottom: '12px' }}>
-                        <label style={labelStyle}>Heading</label>
-                        <input
-                          type="text"
-                          value={sec.heading}
-                          onChange={e => updateSection(sec.id, 'heading', e.target.value)}
-                          placeholder="e.g. Course Overview"
-                          style={inputStyle}
-                        />
-                      </div>
-
-                      <div>
-                        <label style={labelStyle}>Content</label>
-                        <textarea
-                          value={sec.body}
-                          onChange={e => updateSection(sec.id, 'body', e.target.value)}
-                          placeholder="Write the content for this section…"
-                          rows={6}
-                          style={{ ...inputStyle, resize: 'vertical', lineHeight: '1.7' }}
-                        />
-                      </div>
+              {/* Current PDF preview */}
+              {pdfKey && (
+                <div style={{ marginTop: '20px' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--gray-mid)', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Current PDF
+                  </div>
+                  {viewerLoading ? (
+                    <div style={{
+                      height: '100px',
+                      borderRadius: '8px',
+                      background: 'var(--gray-light)',
+                      opacity: 0.5,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '13px',
+                      color: 'var(--gray-mid)',
+                    }}>
+                      Loading preview…
                     </div>
-                  ))}
+                  ) : viewerUrl ? (
+                    <iframe
+                      src={viewerUrl}
+                      title="Syllabus PDF"
+                      style={{
+                        width: '100%',
+                        height: '600px',
+                        border: '1px solid var(--gray-light)',
+                        borderRadius: '8px',
+                        display: 'block',
+                      }}
+                    />
+                  ) : (
+                    <div style={{
+                      height: '80px',
+                      borderRadius: '8px',
+                      border: '1px solid var(--gray-light)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '13px',
+                      color: 'var(--gray-mid)',
+                    }}>
+                      Preview unavailable
+                    </div>
+                  )}
                 </div>
+              )}
+            </section>
 
-                {/* Add section */}
-                <div style={{ marginBottom: '40px' }}>
-                  <button
-                    onClick={addSection}
-                    style={{
-                      background: 'transparent',
-                      color: 'var(--plum)',
-                      padding: '8px 18px',
-                      borderRadius: '8px',
-                      border: '1px dashed var(--plum)',
-                      cursor: 'pointer',
-                      fontSize: '14px',
-                      fontWeight: 500,
-                      opacity: 0.75,
-                    }}>
-                    + Add Section
-                  </button>
-                </div>
+            {/* ── PUBLISH SECTION ── */}
+            {pdfKey && (
+              <section style={{
+                background: 'var(--background)',
+                border: '1px solid var(--gray-light)',
+                borderRadius: 'var(--radius)',
+                padding: '28px',
+              }}>
+                <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '18px', color: 'var(--foreground)', margin: '0 0 16px 0' }}>
+                  Visibility
+                </h2>
 
-                {/* Bottom action bar */}
-                <div style={{ borderTop: '1px solid var(--gray-light)', paddingTop: '24px', display: 'flex', gap: '12px', alignItems: 'center' }}>
-                  <button
-                    onClick={saveDraft}
-                    disabled={saving}
-                    style={{
-                      background: 'transparent',
-                      color: 'var(--plum)',
-                      padding: '10px 20px',
-                      borderRadius: '8px',
-                      border: '1px solid var(--plum)',
-                      cursor: saving ? 'not-allowed' : 'pointer',
-                      fontSize: '14px',
+                {hasPendingUpdate && (
+                  <div style={{
+                    background: '#fef9c3',
+                    border: '1px solid #fde68a',
+                    borderRadius: '8px',
+                    padding: '12px 16px',
+                    fontSize: '13px',
+                    color: '#854d0e',
+                    fontWeight: 500,
+                    marginBottom: '16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                  }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                      <line x1="12" y1="9" x2="12" y2="13" />
+                      <line x1="12" y1="17" x2="12.01" y2="17" />
+                    </svg>
+                    You've uploaded a new PDF — click Republish to make it visible to students.
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+                  {publishedAt ? (
+                    <>
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        background: '#dbeafe',
+                        color: '#1d4ed8',
+                        fontSize: '13px',
+                        fontWeight: 600,
+                        padding: '6px 14px',
+                        borderRadius: '20px',
+                      }}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                        Published {formatPublished(publishedAt)}
+                      </span>
+
+                      {hasPendingUpdate && (
+                        <button
+                          onClick={handlePublish}
+                          disabled={publishing}
+                          style={{
+                            background: 'var(--plum)',
+                            color: 'white',
+                            padding: '10px 22px',
+                            borderRadius: '8px',
+                            border: 'none',
+                            cursor: publishing ? 'not-allowed' : 'pointer',
+                            fontSize: '14px',
+                            fontWeight: 600,
+                            opacity: publishing ? 0.6 : 1,
+                          }}>
+                          {publishing ? 'Publishing…' : 'Republish with Current PDF'}
+                        </button>
+                      )}
+                    </>
+                  ) : (
+                    <button
+                      onClick={handlePublish}
+                      disabled={publishing}
+                      style={{
+                        background: 'var(--plum)',
+                        color: 'white',
+                        padding: '10px 22px',
+                        borderRadius: '8px',
+                        border: 'none',
+                        cursor: publishing ? 'not-allowed' : 'pointer',
+                        fontSize: '14px',
+                        fontWeight: 600,
+                        opacity: publishing ? 0.6 : 1,
+                      }}>
+                      {publishing ? 'Publishing…' : 'Publish to Students'}
+                    </button>
+                  )}
+
+                  {publishMsg && (
+                    <span style={{
+                      fontSize: '13px',
                       fontWeight: 500,
-                      opacity: saving ? 0.6 : 1,
+                      color: publishMsg.startsWith('Error') ? '#dc2626' : '#16a34a',
                     }}>
-                    {saving ? 'Saving…' : 'Save Draft'}
-                  </button>
-                  <button
-                    onClick={publishSyllabus}
-                    disabled={publishing}
-                    style={{
-                      background: 'var(--plum)',
-                      color: 'white',
-                      padding: '10px 28px',
-                      borderRadius: '8px',
-                      border: 'none',
-                      cursor: publishing ? 'not-allowed' : 'pointer',
-                      fontSize: '14px',
-                      fontWeight: 600,
-                      opacity: publishing ? 0.6 : 1,
-                    }}>
-                    {publishing ? 'Publishing…' : publishedAt ? 'Re-publish to Students' : 'Publish to Students'}
-                  </button>
-                  {savedMsg && (
-                    <span style={{ fontSize: '13px', color: savedMsg === 'Published!' ? '#16a34a' : 'var(--gray-mid)', fontWeight: 500 }}>
-                      {savedMsg === 'Published!' ? '🎉 Published!' : `✓ ${savedMsg}`}
+                      {publishMsg === 'Published!' ? 'Published!' : publishMsg}
                     </span>
                   )}
                 </div>
-              </>
+
+                {!publishedAt && (
+                  <p style={{ fontSize: '13px', color: 'var(--gray-mid)', margin: '14px 0 0 0' }}>
+                    The PDF is uploaded but not yet visible to students. Publish when you're ready.
+                  </p>
+                )}
+              </section>
             )}
           </>
         )}

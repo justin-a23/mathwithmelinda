@@ -105,6 +105,7 @@ const getStudentProfileQuery = /* GraphQL */`
         preferredName
         profilePictureKey
         status
+        statusReason
         courseId
       }
     }
@@ -201,6 +202,8 @@ export default function Dashboard() {
   useTheme() // keeps dark mode active via ThemeProvider context
 
   const [pendingApproval, setPendingApproval] = useState(false)
+  const [isDeclined, setIsDeclined] = useState(false)
+  const [declinedReason, setDeclinedReason] = useState<string | null>(null)
   const [hasProfile, setHasProfile] = useState<boolean | null>(null)
   const [profileId, setProfileId] = useState<string | null>(null)
   const [profileName, setProfileName] = useState('')
@@ -240,6 +243,7 @@ export default function Dashboard() {
           const p = profileItems[0]
           if (p.status === 'removed') { signOut(); return }
           if (p.status === 'pending') { setPendingApproval(true); setLoading(false); return }
+          if (p.status === 'declined') { setIsDeclined(true); setDeclinedReason(p.statusReason || null); setLoading(false); return }
           setHasProfile(true)
           setProfileId(p.id)
           setProfileName((p.preferredName || p.firstName) + ' ' + p.lastName)
@@ -491,6 +495,53 @@ export default function Dashboard() {
           >
             Check for approval
           </button>
+        </main>
+      </div>
+    )
+  }
+
+  // Declined request screen
+  if (isDeclined) {
+    return (
+      <div style={{ fontFamily: 'var(--font-body)', background: 'var(--page-bg)', minHeight: '100vh' }}>
+        <nav style={{ background: 'var(--nav-bg)', padding: '0 48px', height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ width: '36px', height: '36px', background: 'var(--plum)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <svg width="20" height="20" viewBox="0 0 40 40" fill="none">
+                <rect x="17" y="6" width="6" height="28" rx="3" fill="white"/>
+                <rect x="6" y="17" width="28" height="6" rx="3" fill="white"/>
+              </svg>
+            </div>
+            <span style={{ fontFamily: 'var(--font-display)', color: 'white', fontSize: '20px' }}>Math with Melinda</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <ThemeToggle />
+            <button onClick={() => signOut()} style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.4)', padding: '8px 4px', cursor: 'pointer', fontSize: '13px' }}>
+              Sign out
+            </button>
+          </div>
+        </nav>
+        <main style={{ maxWidth: '520px', margin: '0 auto', padding: '80px 24px', textAlign: 'center' }}>
+          <div style={{ width: '72px', height: '72px', background: '#FEE2E2', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 28px' }}>
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#b91c1c" strokeWidth="2">
+              <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+            </svg>
+          </div>
+          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '28px', color: 'var(--foreground)', marginBottom: '12px' }}>
+            Request not approved
+          </h1>
+          <p style={{ color: 'var(--gray-mid)', fontSize: '15px', lineHeight: '1.6', marginBottom: declinedReason ? '16px' : '32px' }}>
+            Your request to join Math with Melinda was not approved at this time.
+          </p>
+          {declinedReason && (
+            <div style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: '10px', padding: '16px 20px', marginBottom: '32px', textAlign: 'left' }}>
+              <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--gray-mid)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>Message from Melinda</div>
+              <p style={{ fontSize: '14px', color: 'var(--foreground)', margin: 0, lineHeight: '1.6' }}>{declinedReason}</p>
+            </div>
+          )}
+          <p style={{ color: 'var(--gray-mid)', fontSize: '13px' }}>
+            Please reach out to your teacher directly if you have questions.
+          </p>
         </main>
       </div>
     )

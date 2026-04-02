@@ -30,12 +30,10 @@ const LIST_SEMESTERS = /* GraphQL */ `
 const LIST_SYLLABUS_FOR_SEMESTER = /* GraphQL */ `
   query ListSyllabusForSemester($semesterId: String!) {
     listSyllabi(filter: { semesterId: { eq: $semesterId } }, limit: 1) {
-      items { id publishedSections publishedAt }
+      items { pdfKey publishedPdfKey publishedAt }
     }
   }
 `
-
-type Section = { id: string; heading: string; body: string }
 
 type Semester = {
   id: string
@@ -64,11 +62,9 @@ export default function StudentSyllabusPage() {
   const router = useRouter()
 
   const [loading, setLoading] = useState(true)
-  const [courseTitle, setCourseTitle] = useState('')
-  const [semesterName, setSemesterName] = useState('')
-  const [semesterDates, setSemesterDates] = useState('')
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null)
   const [publishedAt, setPublishedAt] = useState<string | null>(null)
-  const [sections, setSections] = useState<Section[]>([])
+  const [semesterInfo, setSemesterInfo] = useState('')
   const [noSyllabus, setNoSyllabus] = useState(false)
 
   useEffect(() => {
@@ -104,11 +100,9 @@ export default function StudentSyllabusPage() {
       const active = sorted.find(s => s.isActive) || sorted[0]
       if (!active) { setNoSyllabus(true); setLoading(false); return }
 
-      setCourseTitle(active.course?.title ?? '')
-      setSemesterName(active.name)
-      if (active.startDate && active.endDate) {
-        setSemesterDates(formatDateRange(active.startDate, active.endDate))
-      }
+      const courseTitle = active.course?.title ?? ''
+      const dateRange = (active.startDate && active.endDate) ? formatDateRange(active.startDate, active.endDate) : ''
+      setSemesterInfo([courseTitle, active.name, dateRange].filter(Boolean).join(' · '))
 
       // 3. Get published syllabus for this semester
       const sylRes = await (client.graphql({
@@ -116,14 +110,17 @@ export default function StudentSyllabusPage() {
         variables: { semesterId: active.id },
       }) as any)
       const syllabi = sylRes.data.listSyllabi.items
-      if (!syllabi.length || !syllabi[0].publishedSections) {
+      if (!syllabi.length || !syllabi[0].publishedPdfKey) {
         setNoSyllabus(true)
         setLoading(false)
         return
       }
       const syl = syllabi[0]
       setPublishedAt(syl.publishedAt)
-      try { setSections(JSON.parse(syl.publishedSections)) } catch { setSections([]) }
+
+      const res = await fetch('/api/syllabus-pdf?action=view&key=' + encodeURIComponent(syl.publishedPdfKey))
+      const { url } = await res.json()
+      setPdfUrl(url)
     } catch (err) {
       console.error('Error loading syllabus:', err)
       setNoSyllabus(true)
@@ -172,7 +169,7 @@ export default function StudentSyllabusPage() {
         </div>
       </nav>
 
-      <main style={{ maxWidth: '720px', margin: '0 auto', padding: '48px 24px 80px' }}>
+      <main style={{ maxWidth: '900px', margin: '0 auto', padding: '48px 24px 80px' }}>
         {loading ? (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', color: 'var(--gray-mid)', padding: '80px 0' }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: 'spin 0.8s linear infinite' }}>
@@ -191,24 +188,17 @@ export default function StudentSyllabusPage() {
             </p>
           </div>
         ) : (
-          /* ── Document view ── */
-          <div style={{
-            background: 'var(--background)',
-            border: '1px solid var(--gray-light)',
-            borderRadius: '16px',
-            padding: '48px 56px',
-            boxShadow: '0 4px 24px rgba(0,0,0,0.06)',
-          }}>
-            {/* Document header */}
-            <div style={{ marginBottom: '40px', paddingBottom: '28px', borderBottom: '2px solid var(--plum)' }}>
-              <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--plum)', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '10px' }}>
-                Course Syllabus
-              </div>
-              <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '34px', color: 'var(--foreground)', margin: '0 0 8px 0', lineHeight: 1.2 }}>
-                {courseTitle}
-              </h1>
-              <div style={{ fontSize: '15px', color: 'var(--gray-mid)', marginBottom: '18px' }}>
-                {semesterName}{semesterDates ? ` · ${semesterDates}` : ''}
+          /* ── PDF view ── */
+          <div>
+            {/* Header */}
+            <div style={{ marginBottom: '24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+              <div>
+                <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--plum)', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '6px' }}>
+                  Course Syllabus
+                </div>
+                <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '24px', color: 'var(--foreground)', margin: 0, lineHeight: 1.3 }}>
+                  {semesterInfo}
+                </h1>
               </div>
               {publishedAt && (
                 <div style={{
@@ -221,6 +211,7 @@ export default function StudentSyllabusPage() {
                   fontWeight: 600,
                   padding: '5px 14px',
                   borderRadius: '20px',
+                  whiteSpace: 'nowrap',
                 }}>
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                     <polyline points="20 6 9 17 4 12" />
@@ -230,54 +221,27 @@ export default function StudentSyllabusPage() {
               )}
             </div>
 
-            {/* Sections */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '36px' }}>
-              {sections.map((sec, i) => (
-                <div key={sec.id || i}>
-                  {sec.heading && (
-                    <h2 style={{
-                      fontFamily: 'var(--font-display)',
-                      fontSize: '22px',
-                      color: 'var(--foreground)',
-                      margin: '0 0 12px 0',
-                      paddingBottom: '8px',
-                      borderBottom: '1px solid var(--gray-light)',
-                    }}>
-                      {sec.heading}
-                    </h2>
-                  )}
-                  {sec.body && (
-                    <p style={{
-                      fontSize: '15px',
-                      color: 'var(--foreground)',
-                      lineHeight: '1.8',
-                      margin: 0,
-                      whiteSpace: 'pre-wrap',
-                    }}>
-                      {sec.body}
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
+            {/* PDF iframe */}
+            {pdfUrl && (
+              <iframe
+                src={pdfUrl}
+                style={{ width: '100%', height: '80vh', border: 'none', borderRadius: '8px' }}
+              />
+            )}
 
-            {/* Footer */}
-            <div style={{
-              marginTop: '48px',
-              paddingTop: '24px',
-              borderTop: '1px solid var(--gray-light)',
-              fontSize: '12px',
-              color: 'var(--gray-mid)',
-              textAlign: 'center',
-              lineHeight: '1.6',
-            }}>
-              Questions about this syllabus? Send Melinda a message from your{' '}
-              <button
-                onClick={() => router.push('/dashboard')}
-                style={{ background: 'none', border: 'none', color: 'var(--plum)', cursor: 'pointer', fontSize: '12px', padding: 0, textDecoration: 'underline' }}>
-                dashboard
-              </button>.
-            </div>
+            {/* Download link */}
+            {pdfUrl && (
+              <div style={{ marginTop: '16px', textAlign: 'right' }}>
+                <a
+                  href={pdfUrl}
+                  download
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ color: 'var(--plum)', fontSize: '14px', textDecoration: 'underline' }}>
+                  Download PDF
+                </a>
+              </div>
+            )}
           </div>
         )}
       </main>

@@ -23,6 +23,7 @@ const listStudentProfilesQuery = /* GraphQL */`
         planType
         profilePictureKey
         status
+        statusReason
       }
     }
   }
@@ -132,6 +133,7 @@ type Student = {
   planType?: string | null
   profilePictureKey?: string | null
   status?: string | null
+  statusReason?: string | null
 }
 
 type Course = { id: string; title: string; isArchived: boolean | null }
@@ -196,6 +198,10 @@ export default function StudentsPage() {
 
   // Pending approval modal
   const [approveStudent, setApproveStudent] = useState<Student | null>(null)
+  // Decline modal
+  const [declineStudent, setDeclineStudent] = useState<Student | null>(null)
+  const [declineReason, setDeclineReason] = useState('')
+  const [declining, setDeclining] = useState(false)
   const [approveCourseId, setApproveCourseId] = useState('')
   const [approvePlanType, setApprovePlanType] = useState('')
   const [approveGradeLevel, setApproveGradeLevel] = useState('')
@@ -391,10 +397,40 @@ export default function StudentsPage() {
       setApprovePlanType('')
       setApproveGradeLevel('')
       setApproveSemesterId('')
+      window.location.reload()
     } catch (err) {
       console.error('Error approving student:', err)
     } finally {
       setApproving(false)
+    }
+  }
+
+  async function declineStudentFn() {
+    if (!declineStudent) return
+    setDeclining(true)
+    try {
+      const { updateStudentProfile } = await import('../../../src/graphql/mutations')
+      await client.graphql({
+        query: updateStudentProfile,
+        variables: {
+          input: {
+            id: declineStudent.id,
+            status: 'declined',
+            statusReason: declineReason.trim() || null,
+          }
+        }
+      })
+      setStudents(prev => prev.map(s => s.id === declineStudent.id
+        ? { ...s, status: 'declined' }
+        : s
+      ))
+      setDeclineStudent(null)
+      setDeclineReason('')
+      window.location.reload()
+    } catch (err) {
+      console.error('Error declining student:', err)
+    } finally {
+      setDeclining(false)
     }
   }
 
@@ -461,8 +497,9 @@ export default function StudentsPage() {
   for (const inv of invites) inviteMap[inv.studentEmail.toLowerCase()] = inv
 
   const pendingStudents = students.filter(s => s.status === 'pending')
-  const activeStudents = students.filter(s => s.status !== 'removed' && s.status !== 'pending')
+  const activeStudents = students.filter(s => s.status !== 'removed' && s.status !== 'pending' && s.status !== 'declined')
   const removedStudents = students.filter(s => s.status === 'removed')
+  const declinedStudents = students.filter(s => s.status === 'declined')
 
   const filteredStudents = activeStudents
     .filter(s => {
@@ -547,6 +584,12 @@ export default function StudentsPage() {
                   >
                     Approve
                   </button>
+                  <button
+                    onClick={() => { setDeclineStudent(s); setDeclineReason('') }}
+                    style={{ background: 'transparent', color: '#b91c1c', border: '1px solid #fca5a5', borderRadius: '6px', padding: '7px 16px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font-body)', flexShrink: 0 }}
+                  >
+                    Decline
+                  </button>
                 </div>
               ))}
             </div>
@@ -622,6 +665,43 @@ export default function StudentsPage() {
                   disabled={approving || !approveCourseId || !approvePlanType}
                   style={{ flex: 2, padding: '11px', borderRadius: '8px', border: 'none', background: approveCourseId && approvePlanType ? 'var(--plum)' : 'var(--gray-light)', color: approveCourseId && approvePlanType ? 'white' : 'var(--gray-mid)', fontSize: '14px', fontWeight: 600, cursor: approveCourseId && approvePlanType ? 'pointer' : 'not-allowed', fontFamily: 'var(--font-body)' }}>
                   {approving ? 'Approving…' : 'Approve & Grant Access'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── DECLINE MODAL ── */}
+        {declineStudent && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}
+            onClick={e => { if (e.target === e.currentTarget) { setDeclineStudent(null); setDeclineReason('') } }}>
+            <div style={{ background: 'var(--background)', borderRadius: '16px', padding: '32px', maxWidth: '440px', width: '100%', boxShadow: '0 24px 64px rgba(0,0,0,0.2)' }}>
+              <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', color: 'var(--foreground)', marginBottom: '6px' }}>Decline Request</h2>
+              <p style={{ fontSize: '14px', color: 'var(--gray-mid)', marginBottom: '20px' }}>
+                Decline <strong>{declineStudent.firstName} {declineStudent.lastName}</strong>&apos;s request to join. You can optionally provide a reason they&apos;ll see when they check for approval.
+              </p>
+              <div>
+                <label style={{ fontSize: '13px', fontWeight: 500, color: 'var(--foreground)', display: 'block', marginBottom: '6px' }}>
+                  Reason <span style={{ color: 'var(--gray-mid)', fontWeight: 400 }}>(optional)</span>
+                </label>
+                <textarea
+                  value={declineReason}
+                  onChange={e => setDeclineReason(e.target.value)}
+                  placeholder="e.g. We're full for this semester, please try again next term…"
+                  rows={3}
+                  style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--gray-light)', borderRadius: '8px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)', resize: 'vertical', boxSizing: 'border-box' }}
+                />
+              </div>
+              <div style={{ display: 'flex', gap: '10px', marginTop: '24px' }}>
+                <button onClick={() => { setDeclineStudent(null); setDeclineReason('') }}
+                  style={{ flex: 1, padding: '11px', borderRadius: '8px', border: '1px solid var(--gray-light)', background: 'transparent', color: 'var(--gray-mid)', fontSize: '14px', cursor: 'pointer', fontFamily: 'var(--font-body)' }}>
+                  Cancel
+                </button>
+                <button
+                  onClick={declineStudentFn}
+                  disabled={declining}
+                  style={{ flex: 2, padding: '11px', borderRadius: '8px', border: 'none', background: '#ef4444', color: 'white', fontSize: '14px', fontWeight: 600, cursor: declining ? 'not-allowed' : 'pointer', fontFamily: 'var(--font-body)', opacity: declining ? 0.7 : 1 }}>
+                  {declining ? 'Declining…' : 'Decline Request'}
                 </button>
               </div>
             </div>
@@ -901,6 +981,55 @@ export default function StudentsPage() {
                   </div>
                 )
               })}
+            </div>
+          </div>
+        )}
+
+        {/* ── DECLINED REQUESTS ── */}
+        {declinedStudents.length > 0 && (
+          <div style={{ marginBottom: '56px' }}>
+            <div style={{ fontSize: '11px', fontWeight: 500, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--gray-mid)', marginBottom: '12px' }}>
+              Declined Requests ({declinedStudents.length})
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {declinedStudents.map(s => (
+                <div key={s.id} style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', padding: '12px 20px', display: 'flex', alignItems: 'center', gap: '16px', opacity: 0.8 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--foreground)' }}>{s.firstName} {s.lastName}</div>
+                    <div style={{ fontSize: '12px', color: 'var(--gray-mid)' }}>{s.email}</div>
+                    {s.statusReason && (
+                      <div style={{ fontSize: '12px', color: 'var(--gray-mid)', fontStyle: 'italic', marginTop: '2px' }}>
+                        Reason: {s.statusReason}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => { setDeleteConfirmId(s.id) }}
+                    style={{ background: 'transparent', color: '#b91c1c', border: '1px solid #fca5a5', padding: '6px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 500, flexShrink: 0 }}>
+                    Delete
+                  </button>
+                  {deleteConfirmId === s.id && (
+                    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+                      <div style={{ background: 'var(--background)', borderRadius: '12px', padding: '28px', maxWidth: '380px', width: '100%' }}>
+                        <p style={{ fontSize: '14px', color: 'var(--foreground)', marginBottom: '20px' }}>
+                          Permanently delete <strong>{s.firstName} {s.lastName}</strong> and remove their Cognito account?
+                        </p>
+                        {deleteError && <p style={{ fontSize: '12px', color: '#b91c1c', marginBottom: '12px' }}>{deleteError}</p>}
+                        <div style={{ display: 'flex', gap: '10px' }}>
+                          <button onClick={() => { setDeleteConfirmId(null); setDeleteError(null) }}
+                            style={{ flex: 1, padding: '9px', borderRadius: '8px', border: '1px solid var(--gray-light)', background: 'transparent', color: 'var(--gray-mid)', fontSize: '13px', cursor: 'pointer' }}>
+                            Cancel
+                          </button>
+                          <button onClick={() => deleteStudentCompletely(s)} disabled={deleting}
+                            style={{ flex: 2, padding: '9px', borderRadius: '8px', border: 'none', background: '#ef4444', color: 'white', fontSize: '13px', fontWeight: 600, cursor: deleting ? 'not-allowed' : 'pointer' }}>
+                            {deleting ? 'Deleting…' : 'Yes, Delete'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
         )}

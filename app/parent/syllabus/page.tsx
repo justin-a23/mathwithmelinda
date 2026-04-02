@@ -38,20 +38,19 @@ const LIST_SEMESTERS = /* GraphQL */ `
 const LIST_SYLLABUS_FOR_SEMESTER = /* GraphQL */ `
   query ListSyllabusForSemester($semesterId: String!) {
     listSyllabi(filter: { semesterId: { eq: $semesterId } }, limit: 1) {
-      items { id publishedSections publishedAt }
+      items { pdfKey publishedPdfKey publishedAt }
     }
   }
 `
 
 type Child = { id: string; parentId: string; studentEmail: string; studentName: string }
-type Section = { id: string; heading: string; body: string }
 
 type SyllabusData = {
-  courseTitle: string
   semesterName: string
   semesterDates: string
+  courseTitle: string
   publishedAt: string | null
-  sections: Section[]
+  pdfUrl: string | null
 }
 
 function formatPublished(dateStr: string): string {
@@ -138,18 +137,18 @@ export default function ParentSyllabusPage() {
         variables: { semesterId: active.id },
       }) as any)
       const syllabi = sylRes.data.listSyllabi.items
-      if (!syllabi.length || !syllabi[0].publishedSections) { setNoSyllabus(true); return }
+      if (!syllabi.length || !syllabi[0].publishedPdfKey) { setNoSyllabus(true); return }
 
       const syl = syllabi[0]
-      let parsedSections: Section[] = []
-      try { parsedSections = JSON.parse(syl.publishedSections) } catch {}
+      const res = await fetch('/api/syllabus-pdf?action=view&key=' + encodeURIComponent(syl.publishedPdfKey))
+      const { url } = await res.json()
 
       setSyllabusData({
         courseTitle: active.course?.title ?? '',
         semesterName: active.name,
         semesterDates: (active.startDate && active.endDate) ? formatDateRange(active.startDate, active.endDate) : '',
         publishedAt: syl.publishedAt,
-        sections: parsedSections,
+        pdfUrl: url,
       })
     } catch (err) {
       console.error('Error loading syllabus for child:', err)
@@ -209,7 +208,7 @@ export default function ParentSyllabusPage() {
         </div>
       </nav>
 
-      <main style={{ maxWidth: '760px', margin: '0 auto', padding: '48px 24px 80px' }}>
+      <main style={{ maxWidth: '900px', margin: '0 auto', padding: '48px 24px 80px' }}>
 
         {/* Child selector */}
         {children.length === 0 ? (
@@ -275,30 +274,26 @@ export default function ParentSyllabusPage() {
                 </p>
               </div>
             ) : syllabusData ? (
-              /* ── Document view ── */
-              <div style={{
-                background: 'var(--background)',
-                border: '1px solid var(--gray-light)',
-                borderRadius: '16px',
-                padding: '48px 56px',
-                boxShadow: '0 4px 24px rgba(0,0,0,0.06)',
-              }}>
-                {/* Document header */}
-                <div style={{ marginBottom: '40px', paddingBottom: '28px', borderBottom: '2px solid var(--plum)' }}>
-                  <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--plum)', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '10px' }}>
-                    Course Syllabus
-                  </div>
-                  <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '34px', color: 'var(--foreground)', margin: '0 0 6px 0', lineHeight: 1.2 }}>
-                    {syllabusData.courseTitle}
-                  </h1>
-                  {selectedChild && (
-                    <div style={{ fontSize: '13px', color: 'var(--plum)', fontWeight: 500, marginBottom: '6px' }}>
-                      {selectedChild.studentName}
+              /* ── PDF view ── */
+              <div>
+                {/* Header */}
+                <div style={{ marginBottom: '24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+                  <div>
+                    <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--plum)', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '6px' }}>
+                      Course Syllabus
                     </div>
-                  )}
-                  <div style={{ fontSize: '15px', color: 'var(--gray-mid)', marginBottom: '18px' }}>
-                    {syllabusData.semesterName}
-                    {syllabusData.semesterDates ? ` · ${syllabusData.semesterDates}` : ''}
+                    <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '24px', color: 'var(--foreground)', margin: '0 0 4px 0', lineHeight: 1.3 }}>
+                      {syllabusData.courseTitle}
+                    </h1>
+                    {selectedChild && (
+                      <div style={{ fontSize: '13px', color: 'var(--plum)', fontWeight: 500, marginBottom: '4px' }}>
+                        {selectedChild.studentName}
+                      </div>
+                    )}
+                    <div style={{ fontSize: '14px', color: 'var(--gray-mid)' }}>
+                      {syllabusData.semesterName}
+                      {syllabusData.semesterDates ? ` · ${syllabusData.semesterDates}` : ''}
+                    </div>
                   </div>
                   {syllabusData.publishedAt && (
                     <div style={{
@@ -311,6 +306,7 @@ export default function ParentSyllabusPage() {
                       fontWeight: 600,
                       padding: '5px 14px',
                       borderRadius: '20px',
+                      whiteSpace: 'nowrap',
                     }}>
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                         <polyline points="20 6 9 17 4 12" />
@@ -320,49 +316,27 @@ export default function ParentSyllabusPage() {
                   )}
                 </div>
 
-                {/* Sections */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '36px' }}>
-                  {syllabusData.sections.map((sec, i) => (
-                    <div key={sec.id || i}>
-                      {sec.heading && (
-                        <h2 style={{
-                          fontFamily: 'var(--font-display)',
-                          fontSize: '22px',
-                          color: 'var(--foreground)',
-                          margin: '0 0 12px 0',
-                          paddingBottom: '8px',
-                          borderBottom: '1px solid var(--gray-light)',
-                        }}>
-                          {sec.heading}
-                        </h2>
-                      )}
-                      {sec.body && (
-                        <p style={{
-                          fontSize: '15px',
-                          color: 'var(--foreground)',
-                          lineHeight: '1.8',
-                          margin: 0,
-                          whiteSpace: 'pre-wrap',
-                        }}>
-                          {sec.body}
-                        </p>
-                      )}
-                    </div>
-                  ))}
-                </div>
+                {/* PDF iframe */}
+                {syllabusData.pdfUrl && (
+                  <iframe
+                    src={syllabusData.pdfUrl}
+                    style={{ width: '100%', height: '80vh', border: 'none', borderRadius: '8px' }}
+                  />
+                )}
 
-                {/* Footer */}
-                <div style={{
-                  marginTop: '48px',
-                  paddingTop: '24px',
-                  borderTop: '1px solid var(--gray-light)',
-                  fontSize: '12px',
-                  color: 'var(--gray-mid)',
-                  textAlign: 'center',
-                  lineHeight: '1.6',
-                }}>
-                  Questions about this syllabus? Contact Melinda directly.
-                </div>
+                {/* Download link */}
+                {syllabusData.pdfUrl && (
+                  <div style={{ marginTop: '16px', textAlign: 'right' }}>
+                    <a
+                      href={syllabusData.pdfUrl}
+                      download
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ color: 'var(--plum)', fontSize: '14px', textDecoration: 'underline' }}>
+                      Download PDF
+                    </a>
+                  </div>
+                )}
               </div>
             ) : null}
           </>
