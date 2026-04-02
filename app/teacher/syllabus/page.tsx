@@ -308,11 +308,14 @@ export default function TeacherSyllabusPage() {
     try {
       const updateRes = await (client.graphql({
         query: UPDATE_SYLLABUS,
-        variables: { input: { id: currentSyllabus.id, publishedPdfKey: null, publishedAt: null } },
+        variables: { input: { id: currentSyllabus.id, pdfKey: null, publishedPdfKey: null, publishedAt: null } },
       }) as any)
       const updatedSyl = { ...currentSyllabus, ...updateRes.data.updateSyllabus }
+      setPdfKey(null)
       setPublishedPdfKey(null)
       setPublishedAt(null)
+      setViewerUrl(null)
+      setUploadStatus('idle')
       setCurrentSyllabus(updatedSyl)
       setSyllabiMap(prev => ({ ...prev, [currentSyllabus.semesterId]: updatedSyl }))
     } catch (err) {
