@@ -123,7 +123,7 @@ export default function ImportQuestionsPage() {
         do {
           const res: any = await client.graphql({
             query: listAssignmentQuestions,
-            variables: { filter: { lessonTemplateAssignmentQuestionsId: { eq: selectedLesson } }, limit: 200, nextToken: tok },
+            variables: { filter: { lessonTemplateQuestionsId: { eq: selectedLesson } }, limit: 200, nextToken: tok },
           })
           existing = [...existing, ...res.data.listAssignmentQuestions.items]
           tok = res.data.listAssignmentQuestions.nextToken
