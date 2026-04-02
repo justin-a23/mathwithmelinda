@@ -2,15 +2,19 @@ import { S3Client } from '@aws-sdk/client-s3'
 
 // Uses explicit credentials when env vars are set (Amplify hosting),
 // otherwise falls back to Lambda IAM role / instance metadata.
+// Amplify Console blocks "AWS_" prefix env vars, so we use MWM_ prefix in production.
+// Local dev still works with AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY from .env.local.
 function makeS3Client() {
-  const { AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN } = process.env
-  if (AWS_ACCESS_KEY_ID && AWS_SECRET_ACCESS_KEY) {
+  const accessKeyId = process.env.MWM_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID
+  const secretAccessKey = process.env.MWM_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY
+  const sessionToken = process.env.AWS_SESSION_TOKEN
+  if (accessKeyId && secretAccessKey) {
     return new S3Client({
       region: 'us-east-1',
       credentials: {
-        accessKeyId: AWS_ACCESS_KEY_ID,
-        secretAccessKey: AWS_SECRET_ACCESS_KEY,
-        ...(AWS_SESSION_TOKEN ? { sessionToken: AWS_SESSION_TOKEN } : {}),
+        accessKeyId,
+        secretAccessKey,
+        ...(sessionToken ? { sessionToken } : {}),
       },
     })
   }

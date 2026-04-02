@@ -6,11 +6,14 @@ import {
 import { NextRequest, NextResponse } from 'next/server'
 
 function makeCognitoClient() {
-  const { AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY } = process.env
-  if (AWS_ACCESS_KEY_ID && AWS_SECRET_ACCESS_KEY) {
+  // Amplify Console blocks "AWS_" prefix env vars, so we use MWM_ prefix in production.
+  // Local dev still works with AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY from .env.local.
+  const accessKeyId = process.env.MWM_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID
+  const secretAccessKey = process.env.MWM_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY
+  if (accessKeyId && secretAccessKey) {
     return new CognitoIdentityProviderClient({
       region: 'us-east-1',
-      credentials: { accessKeyId: AWS_ACCESS_KEY_ID, secretAccessKey: AWS_SECRET_ACCESS_KEY },
+      credentials: { accessKeyId, secretAccessKey },
     })
   }
   return new CognitoIdentityProviderClient({ region: 'us-east-1' })
