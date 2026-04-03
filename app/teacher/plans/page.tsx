@@ -76,6 +76,39 @@ const DELETE_PLAN = /* GraphQL */ `
   }
 `
 
+const LIST_SUBMISSIONS_CONTAINING = /* GraphQL */ `
+  query ListSubmissionsContaining($filter: ModelSubmissionFilterInput) {
+    listSubmissions(filter: $filter, limit: 500) {
+      items { id }
+    }
+  }
+`
+
+const DELETE_SUBMISSION = /* GraphQL */ `
+  mutation DeleteSubmission($input: DeleteSubmissionInput!) {
+    deleteSubmission(input: $input) { id }
+  }
+`
+
+/** Delete all submissions whose content JSON references a given weeklyPlanItemId */
+async function deleteSubmissionsForPlanItem(itemId: string) {
+  try {
+    const result = await (client.graphql({
+      query: LIST_SUBMISSIONS_CONTAINING,
+      variables: { filter: { content: { contains: itemId } } },
+    }) as any)
+    const submissions: { id: string }[] = result.data?.listSubmissions?.items ?? []
+    await Promise.all(
+      submissions.map(sub =>
+        (client.graphql({ query: DELETE_SUBMISSION, variables: { input: { id: sub.id } } }) as any)
+          .catch((e: unknown) => console.error('Error deleting submission', sub.id, e))
+      )
+    )
+  } catch (err) {
+    console.error('Error fetching submissions for plan item', itemId, err)
+  }
+}
+
 const DAY_ORDER: Record<string, number> = {
   Monday: 0,
   Tuesday: 1,
@@ -225,6 +258,8 @@ export default function ManagePlansPage() {
   async function removeItem(planId: string, itemId: string) {
     setConfirmRemoveItemId(null)
     try {
+      // Cascade: delete any submissions referencing this plan item first
+      await deleteSubmissionsForPlanItem(itemId)
       await (client.graphql({
         query: DELETE_PLAN_ITEM,
         variables: { input: { id: itemId } }
@@ -245,7 +280,17 @@ export default function ManagePlansPage() {
 
   async function deletePlan(planId: string) {
     setConfirmDeletePlanId(null)
+    const plan = plans.find(p => p.id === planId)
+    const planItems = plan?.items?.items ?? []
     try {
+      // Cascade: delete submissions and plan items before deleting the plan
+      await Promise.all(planItems.map(item => deleteSubmissionsForPlanItem(item.id)))
+      await Promise.all(
+        planItems.map(item =>
+          (client.graphql({ query: DELETE_PLAN_ITEM, variables: { input: { id: item.id } } }) as any)
+            .catch((e: unknown) => console.error('Error deleting plan item', item.id, e))
+        )
+      )
       await (client.graphql({
         query: DELETE_PLAN,
         variables: { input: { id: planId } }
@@ -437,7 +482,7 @@ export default function ManagePlansPage() {
                               {/* Remove button / confirm */}
                               {isConfirmingRemove ? (
                                 <span style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
-                                  <span style={{ fontSize: '12px', color: 'var(--gray-dark)' }}>Remove?</span>
+                                  <span style={{ fontSize: '12px', color: 'var(--gray-dark)' }}>Remove + delete submissions?</span>
                                   <button
                                     onClick={() => removeItem(plan.id, item.id)}
                                     style={{ background: 'transparent', border: 'none', color: '#dc2626', fontSize: '12px', cursor: 'pointer', fontWeight: 600, padding: '0 4px' }}
@@ -469,7 +514,7 @@ export default function ManagePlansPage() {
                         {confirmDeletePlanId === plan.id ? (
                           <span style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                             <span style={{ fontSize: '13px', color: 'var(--gray-dark)' }}>
-                              Delete entire week plan? This cannot be undone.
+                              Delete entire week plan and all student submissions? This cannot be undone.
                             </span>
                             <button
                               onClick={() => deletePlan(plan.id)}
