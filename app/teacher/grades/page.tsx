@@ -261,21 +261,21 @@ function AnswersSection({ questions, content, showWorkImageUrls }: {
         if (isHeader) {
           return (
             <div key={q.id} style={{ marginTop: idx === 0 ? 0 : '20px', marginBottom: '10px', fontSize: '11px', fontWeight: 700, color: 'var(--plum)', textTransform: 'uppercase', letterSpacing: '0.8px', borderBottom: '1px solid var(--plum-mid)', paddingBottom: '4px' }}>
-              {q.questionText}
+              <MathRenderer text={q.questionText} />
             </div>
           )
         }
         const answer = answers[q.id]
-        const swUrls = showWorkImageUrls[q.id] || []
+        const bookNumMatch = q.questionText.match(/^(\d+\.)\s([\s\S]*)$/)
+        const qLabel = bookNumMatch ? bookNumMatch[1] : `${displayNum}.`
+        const qBody = bookNumMatch ? bookNumMatch[2] : q.questionText
         return (
           <div key={q.id} style={{ marginBottom: '16px', paddingBottom: '16px', borderBottom: idx < questions.length - 1 ? '1px solid var(--gray-light)' : 'none' }}>
             <div style={{ display: 'flex', gap: '10px', marginBottom: '8px' }}>
-              <span style={{ fontWeight: 700, color: 'var(--plum)', fontSize: '14px', minWidth: '24px' }}>{displayNum}.</span>
-              <span style={{ fontSize: '14px', color: 'var(--gray-dark)' }}><MathRenderer text={q.questionText} /></span>
+              <span style={{ fontWeight: 700, color: 'var(--plum)', fontSize: '14px', minWidth: '24px', flexShrink: 0 }}>{qLabel}</span>
+              <span style={{ fontSize: '14px', color: 'var(--gray-dark)' }}><MathRenderer text={qBody} /></span>
             </div>
-            {q.questionType === 'show_work' ? (
-              <p style={{ paddingLeft: '34px', fontSize: '13px', color: 'var(--gray-mid)', fontStyle: 'italic', margin: 0 }}>Show work — see submitted photo above</p>
-            ) : (
+            {q.questionType !== 'show_work' && (
               <div style={{ paddingLeft: '34px', background: answer ? 'var(--plum-light)' : 'var(--gray-light)', borderRadius: '6px', padding: '8px 12px', fontSize: '14px', color: answer ? 'var(--foreground)' : 'var(--gray-mid)', fontStyle: answer ? 'normal' : 'italic' }}>
                 {answer ? <MathRenderer text={answer} /> : 'No answer provided'}
               </div>
@@ -1183,8 +1183,8 @@ export default function GradingPage() {
                 </div>
                 <div>
                   <label style={{ fontSize: '12px', fontWeight: 500, color: 'var(--gray-dark)', display: 'block', marginBottom: '6px' }}>Comments for student</label>
-                  <textarea value={comment} onChange={e => setComment(e.target.value)} placeholder="Great work! On problem 3, remember to..." rows={3}
-                    style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--gray-light)', borderRadius: '6px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)', resize: 'vertical' }} />
+                  <textarea value={comment} onChange={e => setComment(e.target.value)} placeholder="Great work! On problem 3, remember to..." rows={7}
+                    style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--gray-light)', borderRadius: '6px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)', resize: 'vertical', lineHeight: '1.5' }} />
                 </div>
               </div>
 
