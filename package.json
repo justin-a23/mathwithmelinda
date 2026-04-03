@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.82.0",
     "@aws-amplify/ui-react": "^6.15.2",
     "@aws-sdk/client-cognito-identity-provider": "^3.1019.0",
     "@aws-sdk/client-s3": "^3.1017.0",
