@@ -388,15 +388,18 @@ export default function TeacherProfilePage() {
 
             {/* Teaching Voice for AI */}
             <div style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', padding: '28px' }}>
-              <div style={{ fontSize: '12px', fontWeight: 500, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--gray-mid)', marginBottom: '6px' }}>AI Teaching Voice</div>
-              <p style={{ fontSize: '13px', color: 'var(--gray-mid)', marginBottom: '16px', lineHeight: 1.5 }}>
-                Describe how you like to communicate with students. The AI will use this when writing grade comments in your voice.
+              <div style={{ fontSize: '12px', fontWeight: 500, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--gray-mid)', marginBottom: '6px' }}>AI Grading Voice</div>
+              <p style={{ fontSize: '13px', color: 'var(--gray-mid)', marginBottom: '8px', lineHeight: 1.5 }}>
+                Tell the AI exactly how to write grade comments — tone, length, what to focus on. The more specific you are, the better it will match your style. You can update this anytime as you see what's working.
               </p>
+              <div style={{ background: 'var(--page-bg)', border: '1px solid var(--gray-light)', borderRadius: '6px', padding: '12px 14px', marginBottom: '14px', fontSize: '12px', color: 'var(--gray-mid)', lineHeight: 1.6 }}>
+                <strong style={{ color: 'var(--gray-dark)' }}>Tips:</strong> Be specific about length ("1 sentence max"), tone ("encouraging but direct"), what to name ("always mention the specific problem number"), and what to avoid ("never say great job without a reason"). You can also paste in a good example comment to show the style you want.
+              </div>
               <textarea
                 value={teachingVoice}
                 onChange={e => setTeachingVoice(e.target.value)}
-                placeholder={`e.g. I'm warm and encouraging but direct. I like to point out exactly where a student went wrong, then walk through the correct steps. I use phrases like "Great effort!" and "Here's the key thing to remember:". I keep comments to 2–3 sentences.`}
-                rows={5}
+                placeholder={`Examples of what works well here:\n\n"Keep comments to 1–2 sentences. Start with what they got right, then name the specific mistake. Never be vague — say 'you forgot to carry the 1 in step 2' not 'check your work.'"\n\n"Be warm but efficient. I don't want long paragraphs. Focus on the biggest mistake only."\n\n"Use phrases I actually say: 'Nice work!', 'Watch out for...', 'Here's the trick:'. Sound like a real teacher, not a robot."`}
+                rows={8}
                 style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.5, marginBottom: '16px' }}
               />
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>

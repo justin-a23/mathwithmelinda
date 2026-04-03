@@ -616,9 +616,12 @@ function LessonPageInner() {
     }
   }
 
-  async function printAssignment() {
-    const questions = lessonTemplate?.questions?.items ?? []
-    if (questions.length === 0) return
+  async function printShowWorkSheet() {
+    const allQuestions = lessonTemplate?.questions?.items ?? []
+    if (allQuestions.length === 0) return
+    const showWorkQuestions = allQuestions.filter(q => q.questionType === 'show_work')
+    if (showWorkQuestions.length === 0) return
+
     const { default: katex } = await import('katex')
 
     function renderMath(text: string): string {
@@ -638,76 +641,77 @@ function LessonPageInner() {
     const lessonNum = lessonTemplate?.lessonNumber ?? null
     const courseName = planItem?.weeklyPlan?.course?.title || ''
     const printDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
-    const sorted = [...questions].sort((a, b) => a.order - b.order)
 
-    let printQNum = 0
-    const questionsHTML = sorted.map((q) => {
-      if (q.questionType === 'section_header') {
-        return `<div class="section-header">${q.questionText}</div>`
+    // Sort all questions, assign sequential numbers (skipping headers),
+    // then only render the show_work ones — preserving the original question numbers
+    // so students can cross-reference with their digital answers.
+    const sorted = [...allQuestions].sort((a, b) => a.order - b.order)
+    let qCounter = 0
+    const numberedItems = sorted.map(q => {
+      if (q.questionType === 'section_header') return { ...q, qNum: 0 }
+      qCounter++
+      return { ...q, qNum: qCounter }
+    })
+
+    // Determine which section headers immediately precede at least one show_work question
+    const sectionsWithShowWork = new Set<string>()
+    for (let i = 0; i < numberedItems.length; i++) {
+      if (numberedItems[i].questionType === 'section_header') {
+        for (let j = i + 1; j < numberedItems.length; j++) {
+          if (numberedItems[j].questionType === 'section_header') break
+          if (numberedItems[j].questionType === 'show_work') {
+            sectionsWithShowWork.add(numberedItems[i].id)
+            break
+          }
+        }
       }
-      printQNum++
-      const qHtml = renderMath(q.questionText)
-      let answerArea = ''
+    }
 
-      if (q.questionType === 'number') {
-        answerArea = `<div class="answer-lines"><div class="answer-line"></div></div>`
-      } else if (q.questionType === 'short_text') {
-        answerArea = `<div class="answer-lines">
-          <div class="answer-line"></div>
-          <div class="answer-line"></div>
-          <div class="answer-line"></div>
+    const questionsHTML = numberedItems
+      .filter(q => q.questionType === 'section_header' ? sectionsWithShowWork.has(q.id) : q.questionType === 'show_work')
+      .map(q => {
+        if (q.questionType === 'section_header') {
+          return `<div class="section-header">${renderMath(q.questionText)}</div>`
+        }
+        const bookNumMatch = q.questionText.match(/^(\d+\.)\s([\s\S]*)$/)
+        const qNumLabel = bookNumMatch ? bookNumMatch[1] : `${q.qNum}.`
+        const qBody = bookNumMatch ? renderMath(bookNumMatch[2]) : renderMath(q.questionText)
+        return `<div class="question">
+          <div class="question-text">
+            <span class="qnum">${qNumLabel}</span>
+            <span>${qBody}</span>
+          </div>
+          <div class="work-box"></div>
         </div>`
-      } else if (q.questionType === 'multiple_choice' && q.choices) {
-        const choices = q.choices.split('\n').filter(Boolean)
-        answerArea = `<div class="choices">${choices.map(c =>
-          `<div class="choice"><span class="bubble">○</span><span>${renderMath(c)}</span></div>`
-        ).join('')}</div>`
-      } else if (q.questionType === 'show_work') {
-        answerArea = `<div class="work-box">Show your work here</div>`
-      }
-
-      const bookNumMatch = q.questionText.match(/^(\d+\.)\s([\s\S]*)$/)
-      const qNumLabel = bookNumMatch ? bookNumMatch[1] : `${printQNum}.`
-      const qBody = bookNumMatch ? renderMath(bookNumMatch[2]) : qHtml
-      return `<div class="question">
-        <div class="question-text">
-          <span class="qnum">${qNumLabel}</span>
-          <span>${qBody}</span>
-        </div>
-        ${answerArea}
-      </div>`
-    }).join('')
+      }).join('')
 
     const html = `<!DOCTYPE html><html><head>
       <meta charset="utf-8">
-      <title>${title}</title>
+      <title>Show Work — ${title}</title>
       <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
       <style>
         *{box-sizing:border-box}
         body{font-family:'Times New Roman',serif;max-width:720px;margin:0 auto;padding:40px;color:#111;font-size:15px}
-        .header{text-align:center;margin-bottom:28px;padding-bottom:16px;border-bottom:2px solid #333}
+        .header{text-align:center;margin-bottom:20px;padding-bottom:14px;border-bottom:2px solid #333}
         .header h1{font-size:22px;margin:0 0 2px}
         .header .lessonnum{font-size:13px;color:#777;margin-bottom:2px}
-        .header .course{font-size:13px;color:#555;margin-bottom:10px}
-        .header .fields{display:flex;justify-content:space-between;margin-top:12px;gap:24px}
+        .header .course{font-size:13px;color:#555;margin-bottom:6px}
+        .header .instruction{font-size:12px;color:#666;font-style:italic;margin-bottom:10px}
+        .header .fields{display:flex;justify-content:space-between;margin-top:10px;gap:24px}
         .header .field{flex:1;font-size:13px;color:#333;padding-bottom:3px;border-bottom:1px solid #888}
-        .question{margin-bottom:18px;page-break-inside:avoid}
+        .question{margin-bottom:14px;page-break-inside:avoid}
         .question-text{display:flex;gap:10px;margin-bottom:6px;line-height:1.4}
         .qnum{font-weight:bold;min-width:22px;flex-shrink:0}
-        .answer-lines{padding-left:22px}
-        .answer-line{border-bottom:1px solid #ccc;height:28px;margin-bottom:3px}
-        .choices{padding-left:22px;display:flex;flex-direction:column;gap:6px;margin-top:4px}
-        .choice{display:flex;gap:10px;align-items:baseline;line-height:1.4}
-        .bubble{font-size:17px;line-height:1;flex-shrink:0}
-        .work-box{border:1px solid #bbb;border-radius:4px;height:80px;margin-left:22px;padding:6px 10px;color:#bbb;font-size:12px;font-style:italic}
-        .section-header{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#5b2d8e;border-bottom:2px solid #d8b4fe;padding-bottom:5px;margin:28px 0 16px;page-break-after:avoid}
+        .work-box{border:1px solid #bbb;border-radius:4px;height:110px;margin-left:22px}
+        .section-header{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#5b2d8e;border-bottom:2px solid #d8b4fe;padding-bottom:5px;margin:24px 0 14px;page-break-after:avoid}
         @media print{body{padding:20px}@page{margin:.75in}}
       </style>
     </head><body onload="setTimeout(function(){window.print()},1200)">
       <div class="header">
         ${lessonNum != null ? `<div class="lessonnum">Lesson ${lessonNum}</div>` : ''}
-        <h1>${title}</h1>
+        <h1>${title} — Show Work</h1>
         ${courseName ? `<div class="course">${courseName}</div>` : ''}
+        <div class="instruction">Complete your digital answers online first, then show your work for these problems below.</div>
         <div class="fields">
           <div class="field">Name: ${studentName || '___________________________'}</div>
           <div class="field">Date: ${printDate}</div>
@@ -873,7 +877,8 @@ function LessonPageInner() {
               const assignmentType = lessonTemplate?.assignmentType || 'upload'
               const questions = lessonTemplate?.questions?.items || []
               const showQuestions = (assignmentType === 'questions' || assignmentType === 'both') && questions.length > 0
-              const showUpload = assignmentType === 'upload' || assignmentType === 'both' || !lessonTemplate
+              const hasShowWork = questions.some(q => q.questionType === 'show_work')
+              const showUpload = assignmentType === 'upload' || assignmentType === 'both' || !lessonTemplate || hasShowWork
 
               return (
                 <div style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', padding: '24px' }}>
@@ -894,16 +899,32 @@ function LessonPageInner() {
                     <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '20px', color: 'var(--foreground)', margin: 0 }}>
                       {showQuestions ? 'Assignment' : 'Submit Your Work'}
                     </h2>
-                    {showQuestions && (lessonTemplate?.questions?.items?.length ?? 0) > 0 && (
+                    {hasShowWork && (
                       <button
                         type="button"
-                        onClick={printAssignment}
-                        style={{ background: 'var(--plum)', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontSize: '15px', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
-                        Print Assignment
+                        onClick={printShowWorkSheet}
+                        style={{ background: 'var(--plum)', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                        Print Show Work Sheet
                       </button>
                     )}
                   </div>
+
+                  {showQuestions && hasShowWork && (
+                    <div style={{ background: 'var(--plum-light)', border: '1px solid var(--plum-mid)', borderRadius: '8px', padding: '14px 18px', marginBottom: '22px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--plum)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '2px' }}>How to complete this assignment</div>
+                      {[
+                        'Watch the video above',
+                        'Answer the questions below digitally',
+                        'Click "Print Show Work Sheet" to print just the problems that need work shown — complete on paper, take a photo, and upload below',
+                      ].map((step, i) => (
+                        <div key={i} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                          <span style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'var(--plum)', color: 'white', fontSize: '11px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: '1px' }}>{i + 1}</span>
+                          <span style={{ fontSize: '13px', color: 'var(--foreground)', lineHeight: 1.5 }}>{step}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
                   {showQuestions && (
                     <div style={{ marginBottom: '28px' }}>
@@ -965,7 +986,10 @@ function LessonPageInner() {
                             </div>
                           )}
                           {q.questionType === 'show_work' && (
-                            <p style={{ fontSize: '13px', color: 'var(--gray-mid)', fontStyle: 'italic', margin: '4px 0 0' }}>Show your work on paper — submit a photo below.</p>
+                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'var(--plum-light)', border: '1px solid var(--plum-mid)', borderRadius: '6px', padding: '5px 10px', marginTop: '4px' }}>
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--plum)" strokeWidth="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                              <span style={{ fontSize: '12px', color: 'var(--plum)', fontWeight: 500 }}>Show work on printed sheet</span>
+                            </div>
                           )}
                         </div>
                           )
@@ -976,9 +1000,14 @@ function LessonPageInner() {
 
                   {showUpload && (
                     <div style={{ marginBottom: '24px' }}>
-                      <label style={{ fontSize: '12px', fontWeight: 500, color: 'var(--gray-dark)', display: 'block', marginBottom: '6px' }}>
-                        {showQuestions ? 'Additional photos (optional)' : 'Photos of your work'}
+                      <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--gray-dark)', display: 'block', marginBottom: '4px' }}>
+                        {hasShowWork ? 'Upload your show-work sheet' : 'Photos of your work'}
                       </label>
+                      {hasShowWork && (
+                        <p style={{ fontSize: '12px', color: 'var(--gray-mid)', margin: '0 0 8px' }}>
+                          Print the show-work sheet above, complete the problems on paper, then take a photo and upload it here.
+                        </p>
+                      )}
                       <div onClick={() => fileInputRef.current?.click()} onDragOver={e => e.preventDefault()}
                         onDrop={e => { e.preventDefault(); Array.from(e.dataTransfer.files).forEach(uploadFile) }}
                         style={{ border: '2px dashed var(--gray-light)', borderRadius: 'var(--radius)', padding: '24px', textAlign: 'center', cursor: 'pointer', marginBottom: '12px' }}>

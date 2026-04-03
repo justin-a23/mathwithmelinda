@@ -28,50 +28,90 @@ export async function POST(req: NextRequest) {
     if (!apiKey) return NextResponse.json({ error: 'ANTHROPIC_API_KEY is not configured' }, { status: 500 })
     const anthropic = new Anthropic({ apiKey })
 
-    const { imageKeys, questions, studentName, lessonTitle, teachingVoice } = await req.json()
+    const {
+      imageKeys,
+      questions,
+      studentName,
+      lessonTitle,
+      teachingVoice,
+      answers, // { [questionId]: string } — student's digital answers
+    } = await req.json()
 
-    if (!imageKeys || imageKeys.length === 0) {
-      return NextResponse.json({ error: 'No images provided' }, { status: 400 })
+    const hasFiles = imageKeys && imageKeys.length > 0
+    const hasAnswers = answers && Object.keys(answers).length > 0
+
+    if (!hasFiles && !hasAnswers) {
+      return NextResponse.json({ error: 'No submission content to review — no photos or digital answers found.' }, { status: 400 })
     }
 
-    // Build content blocks for up to 3 files (images or PDFs)
-    const keys = (imageKeys as string[]).slice(0, 3)
-
-    const questionList = (questions as { questionText: string; questionType: string; correctAnswer?: string | null }[])
+    // ── Build digital answers summary ──────────────────────────────────────
+    const questionList = (questions as { id?: string; questionText: string; questionType: string; correctAnswer?: string | null }[])
       .filter(q => q.questionType !== 'section_header')
-      .map((q, i) => {
-        const ans = q.correctAnswer ? ` (correct answer: ${q.correctAnswer})` : ''
-        return `${i + 1}. ${q.questionText}${ans}`
-      })
-      .join('\n')
 
+    let digitalSummary = ''
+    if (hasAnswers && questionList.length > 0) {
+      let qNum = 0
+      const lines = questionList
+        .filter(q => q.questionType !== 'show_work')
+        .map(q => {
+          qNum++
+          const bookNumMatch = q.questionText.match(/^(\d+\.)\s([\s\S]*)$/)
+          const label = bookNumMatch ? bookNumMatch[1] : `${qNum}.`
+          const text = bookNumMatch ? bookNumMatch[2] : q.questionText
+          const studentAnswer = q.id ? (answers[q.id] || '(no answer)') : '(no answer)'
+          const correct = q.correctAnswer ? ` [correct: ${q.correctAnswer}]` : ''
+          return `  ${label} ${text}\n     → Student answered: ${studentAnswer}${correct}`
+        })
+      if (lines.length > 0) {
+        digitalSummary = `DIGITAL ANSWERS (entered online):\n${lines.join('\n\n')}`
+      }
+    }
+
+    const showWorkCount = questionList.filter(q => q.questionType === 'show_work').length
+    const showWorkNote = hasFiles
+      ? `SHOW WORK (${showWorkCount} problem${showWorkCount !== 1 ? 's' : ''} — see uploaded image${(imageKeys as string[]).length > 1 ? 's' : ''} above)`
+      : ''
+
+    // ── Build voice/style instruction ─────────────────────────────────────
     const voiceInstruction = teachingVoice?.trim()
-      ? `Write in this teacher's voice: ${teachingVoice.trim()}`
-      : 'Write in a warm, encouraging, and direct tone. Point out specific mistakes and explain the correct approach. Keep comments to 2–3 sentences.'
+      ? teachingVoice.trim()
+      : 'Write in a warm, encouraging, direct tone. Point out the specific mistake and explain the correct approach. Keep the comment to 2 sentences maximum.'
 
-    const systemPrompt = `You are helping a homeschool math teacher named Melinda grade student work and write feedback.
-${voiceInstruction}
-When suggesting a grade, use a 0–100 scale. Be fair but honest.
-Respond ONLY with valid JSON in this exact format:
+    const systemPrompt = `You are helping a homeschool math teacher named Melinda grade student work and write feedback comments.
+
+Teacher's style instructions: ${voiceInstruction}
+
+Grading scale: 0–100.
+Respond ONLY with valid JSON in this exact format — no other text:
 {"grade": "85", "comment": "Your feedback here."}`
 
-    const userPrompt = `Student: ${studentName || 'Unknown'}
-Lesson: ${lessonTitle || 'Unknown'}
+    const userParts: string[] = [
+      `Student: ${studentName || 'Unknown'}`,
+      `Lesson: ${lessonTitle || 'Unknown'}`,
+    ]
+    if (digitalSummary) userParts.push(digitalSummary)
+    if (showWorkNote) userParts.push(showWorkNote)
+    if (hasFiles) userParts.push('Review the uploaded image(s) for the show-work problems.')
+    userParts.push('Provide a grade (0–100) and a brief comment for the student.')
 
-${questionList ? `Questions on this assignment:\n${questionList}\n\n` : ''}Please review the student's submitted work in the image(s) and provide:
-1. A suggested grade (0–100)
-2. A comment for the student in Melinda's voice — noting what they did well and where they went wrong`
+    const userPrompt = userParts.join('\n\n')
 
-    const fileBlocks = await Promise.all(keys.map(async (key) => {
-      const isPdf = key.toLowerCase().endsWith('.pdf')
-      if (isPdf) {
-        const data = await fetchAsBase64Pdf(key)
-        return { type: 'document' as const, source: { type: 'base64' as const, media_type: 'application/pdf' as const, data } }
-      } else {
-        const url = await getPresignedUrl(key)
-        return { type: 'image' as const, source: { type: 'url' as const, url } }
-      }
-    }))
+    // ── Build file blocks (images + PDFs) ─────────────────────────────────
+    const fileBlocks: Anthropic.MessageParam['content'] = []
+    if (hasFiles) {
+      const keys = (imageKeys as string[]).slice(0, 3)
+      const blocks = await Promise.all(keys.map(async (key) => {
+        const isPdf = key.toLowerCase().endsWith('.pdf')
+        if (isPdf) {
+          const data = await fetchAsBase64Pdf(key)
+          return { type: 'document' as const, source: { type: 'base64' as const, media_type: 'application/pdf' as const, data } }
+        } else {
+          const url = await getPresignedUrl(key)
+          return { type: 'image' as const, source: { type: 'url' as const, url } }
+        }
+      }))
+      fileBlocks.push(...blocks)
+    }
 
     const content: Anthropic.MessageParam['content'] = [
       ...fileBlocks,
