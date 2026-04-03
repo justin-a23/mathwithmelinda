@@ -1043,6 +1043,19 @@ export default function LessonLibraryPage() {
                                                     <option value="multiple_choice">Multiple Choice</option>
                                                     <option value="show_work">Show Work (photo upload)</option>
                                                   </select>
+                                                  {editingQuestionForm.questionType === 'multiple_choice' && (
+                                                    <div style={{ marginBottom: '10px' }}>
+                                                      <label style={labelStyle}>Choices — one per line</label>
+                                                      <textarea
+                                                        value={editingQuestionForm.choices}
+                                                        onChange={e => setEditingQuestionForm(f => ({ ...f, choices: e.target.value }))}
+                                                        rows={4}
+                                                        placeholder={"12\n24\n36\n48"}
+                                                        style={{ ...inputStyle, resize: 'vertical', fontFamily: 'monospace', fontSize: '13px' }}
+                                                      />
+                                                      <p style={{ fontSize: '11px', color: 'var(--gray-mid)', margin: '4px 0 0' }}>One choice per line. Letters (A, B, C…) are added automatically when displayed to students.</p>
+                                                    </div>
+                                                  )}
                                                   {(editingQuestionForm.questionType === 'number' || editingQuestionForm.questionType === 'short_text' || editingQuestionForm.questionType === 'multiple_choice') && (
                                                     <div style={{ marginBottom: '10px' }}>
                                                       <label style={labelStyle}>Correct answer (optional — for auto-grading)</label>
@@ -1161,14 +1174,15 @@ export default function LessonLibraryPage() {
                                   </div>
                                   {newQuestion.questionType === 'multiple_choice' && (
                                     <div style={{ marginBottom: '12px' }}>
-                                      <label style={labelStyle}>Choices</label>
+                                      <label style={labelStyle}>Choices — one per line</label>
                                       <textarea
                                         value={newQuestion.choices}
                                         onChange={e => setNewQuestion(q => ({ ...q, choices: e.target.value }))}
-                                        placeholder={'One choice per line\nA) ...\nB) ...'}
+                                        placeholder={"12\n24\n36\n48"}
                                         rows={4}
-                                        style={{ ...inputStyle, resize: 'vertical' }}
+                                        style={{ ...inputStyle, resize: 'vertical', fontFamily: 'monospace', fontSize: '13px' }}
                                       />
+                                      <p style={{ fontSize: '11px', color: 'var(--gray-mid)', margin: '4px 0 0' }}>One choice per line. Letters (A, B, C…) are added automatically when displayed to students.</p>
                                     </div>
                                   )}
                                   {(newQuestion.questionType === 'number' || newQuestion.questionType === 'short_text' || newQuestion.questionType === 'multiple_choice') && (
