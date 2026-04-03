@@ -979,6 +979,11 @@ export default function LessonLibraryPage() {
                                               isHeader ? (
                                                 <div>
                                                   <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--plum)', marginBottom: '10px' }}>Editing Section Header</div>
+                                                  <MathToolbar
+                                                    textareaRef={editQuestionTextareaRef}
+                                                    value={editingQuestionForm.questionText}
+                                                    onChange={val => setEditingQuestionForm(f => ({ ...f, questionText: val }))}
+                                                  />
                                                   <textarea
                                                     ref={editQuestionTextareaRef}
                                                     autoFocus
