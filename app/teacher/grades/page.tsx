@@ -274,15 +274,7 @@ function AnswersSection({ questions, content, showWorkImageUrls }: {
               <span style={{ fontSize: '14px', color: 'var(--gray-dark)' }}><MathRenderer text={q.questionText} /></span>
             </div>
             {q.questionType === 'show_work' ? (
-              swUrls.length > 0 ? (
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', paddingLeft: '34px' }}>
-                  {swUrls.map((url, i) => (
-                    <SubmissionImage key={i} url={url} alt="Show work" style={{ width: '120px', height: '90px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--gray-light)' }} />
-                  ))}
-                </div>
-              ) : (
-                <p style={{ paddingLeft: '34px', fontSize: '13px', color: 'var(--gray-mid)', fontStyle: 'italic' }}>No photo uploaded</p>
-              )
+              <p style={{ paddingLeft: '34px', fontSize: '13px', color: 'var(--gray-mid)', fontStyle: 'italic', margin: 0 }}>Show work — see submitted photo above</p>
             ) : (
               <div style={{ paddingLeft: '34px', background: answer ? 'var(--plum-light)' : 'var(--gray-light)', borderRadius: '6px', padding: '8px 12px', fontSize: '14px', color: answer ? 'var(--foreground)' : 'var(--gray-mid)', fontStyle: answer ? 'normal' : 'italic' }}>
                 {answer ? <MathRenderer text={answer} /> : 'No answer provided'}
