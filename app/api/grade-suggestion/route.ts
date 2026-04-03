@@ -15,6 +15,13 @@ async function getPresignedUrl(key: string): Promise<string> {
   return getSignedUrl(s3, command, { expiresIn: 300 })
 }
 
+async function fetchAsBase64Pdf(key: string): Promise<string> {
+  const url = await getPresignedUrl(key)
+  const res = await fetch(url)
+  const buffer = await res.arrayBuffer()
+  return Buffer.from(buffer).toString('base64')
+}
+
 export async function POST(req: NextRequest) {
   try {
     const apiKey = process.env.ANTHROPIC_API_KEY
@@ -27,10 +34,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No images provided' }, { status: 400 })
     }
 
-    // Get presigned URLs for up to 3 images
-    const imageUrls = await Promise.all(
-      (imageKeys as string[]).slice(0, 3).map(getPresignedUrl)
-    )
+    // Build content blocks for up to 3 files (images or PDFs)
+    const keys = (imageKeys as string[]).slice(0, 3)
 
     const questionList = (questions as { questionText: string; questionType: string; correctAnswer?: string | null }[])
       .filter(q => q.questionType !== 'section_header')
@@ -57,11 +62,19 @@ ${questionList ? `Questions on this assignment:\n${questionList}\n\n` : ''}Pleas
 1. A suggested grade (0–100)
 2. A comment for the student in Melinda's voice — noting what they did well and where they went wrong`
 
+    const fileBlocks = await Promise.all(keys.map(async (key) => {
+      const isPdf = key.toLowerCase().endsWith('.pdf')
+      if (isPdf) {
+        const data = await fetchAsBase64Pdf(key)
+        return { type: 'document' as const, source: { type: 'base64' as const, media_type: 'application/pdf' as const, data } }
+      } else {
+        const url = await getPresignedUrl(key)
+        return { type: 'image' as const, source: { type: 'url' as const, url } }
+      }
+    }))
+
     const content: Anthropic.MessageParam['content'] = [
-      ...imageUrls.map(url => ({
-        type: 'image' as const,
-        source: { type: 'url' as const, url },
-      })),
+      ...fileBlocks,
       { type: 'text' as const, text: userPrompt },
     ]
 
