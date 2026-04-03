@@ -10,15 +10,9 @@ const s3 = new S3Client({
   ...(accessKeyId && secretAccessKey ? { credentials: { accessKeyId, secretAccessKey } } : {}),
 })
 
-async function fetchImageAsBase64(key: string): Promise<{ data: string; mediaType: 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif' }> {
+async function getPresignedUrl(key: string): Promise<string> {
   const command = new GetObjectCommand({ Bucket: 'mathwithmelinda-submissions', Key: key })
-  const url = await getSignedUrl(s3, command, { expiresIn: 60 })
-  const res = await fetch(url)
-  const buffer = await res.arrayBuffer()
-  const base64 = Buffer.from(buffer).toString('base64')
-  const ct = res.headers.get('content-type') || 'image/jpeg'
-  const mediaType = ct.includes('png') ? 'image/png' : ct.includes('webp') ? 'image/webp' : ct.includes('gif') ? 'image/gif' : 'image/jpeg'
-  return { data: base64, mediaType }
+  return getSignedUrl(s3, command, { expiresIn: 300 })
 }
 
 export async function POST(req: NextRequest) {
@@ -33,9 +27,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No images provided' }, { status: 400 })
     }
 
-    // Fetch up to 3 images as base64 (Claude vision limit per call)
-    const images = await Promise.all(
-      (imageKeys as string[]).slice(0, 3).map(fetchImageAsBase64)
+    // Get presigned URLs for up to 3 images
+    const imageUrls = await Promise.all(
+      (imageKeys as string[]).slice(0, 3).map(getPresignedUrl)
     )
 
     const questionList = (questions as { questionText: string; questionType: string; correctAnswer?: string | null }[])
@@ -64,9 +58,9 @@ ${questionList ? `Questions on this assignment:\n${questionList}\n\n` : ''}Pleas
 2. A comment for the student in Melinda's voice — noting what they did well and where they went wrong`
 
     const content: Anthropic.MessageParam['content'] = [
-      ...images.map(img => ({
+      ...imageUrls.map(url => ({
         type: 'image' as const,
-        source: { type: 'base64' as const, media_type: img.mediaType, data: img.data },
+        source: { type: 'url' as const, url },
       })),
       { type: 'text' as const, text: userPrompt },
     ]
