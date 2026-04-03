@@ -691,9 +691,10 @@ function LessonPageInner() {
         answerArea = `<div class="work-box">Show your work here</div>`
       }
 
+      const hasBookNum = /^\d+\.\s/.test(q.questionText)
       return `<div class="question">
         <div class="question-text">
-          <span class="qnum">${printQNum}.</span>
+          ${hasBookNum ? '' : `<span class="qnum">${printQNum}.</span>`}
           <span>${qHtml}</span>
         </div>
         ${answerArea}
@@ -935,6 +936,7 @@ function LessonPageInner() {
                           const isHeader = q.questionType === 'section_header'
                           if (!isHeader) qNum++
                           const displayNum = qNum
+                          const hasBookNum = !isHeader && /^\d+\.\s/.test(q.questionText)
                           if (isHeader) {
                             return (
                               <div key={q.id} style={{ marginTop: idx === 0 ? 0 : '28px', marginBottom: '16px' }}>
@@ -952,7 +954,7 @@ function LessonPageInner() {
                           return (
                           <div key={q.id} style={{ marginBottom: '24px', paddingBottom: '24px', borderBottom: idx < questions.length - 1 ? '1px solid var(--gray-light)' : 'none' }}>
                           <div style={{ display: 'flex', gap: '12px', marginBottom: '12px' }}>
-                            <span style={{ fontWeight: 700, color: 'var(--plum)', fontSize: '16px', minWidth: '28px' }}>{displayNum}.</span>
+                            {!hasBookNum && <span style={{ fontWeight: 700, color: 'var(--plum)', fontSize: '16px', minWidth: '28px' }}>{displayNum}.</span>}
                             <div style={{ fontSize: '15px', color: 'var(--foreground)', lineHeight: '1.6', flex: 1 }}>
                               <MathRenderer text={q.questionText} />
                             </div>
