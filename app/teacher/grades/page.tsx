@@ -458,8 +458,10 @@ export default function GradingPage() {
   async function suggestWithAI() {
     if (!selectedSubmission) return
     const parsed = (() => { try { return JSON.parse(selectedSubmission.content || '{}') } catch { return {} } })()
-    if (!parsed.files || parsed.files.length === 0) {
-      setAiError('No photo submission found — AI grading requires a submitted photo.')
+    const hasFiles = parsed.files && parsed.files.length > 0
+    const hasAnswers = parsed.answers && Object.keys(parsed.answers).length > 0
+    if (!hasFiles && !hasAnswers) {
+      setAiError('No submission content found — student has not answered any questions or uploaded a photo.')
       return
     }
     setAiSuggesting(true)
@@ -467,12 +469,14 @@ export default function GradingPage() {
     try {
       const studentName = studentNameMap[selectedSubmission.studentId] || selectedSubmission.studentId
       const lessonTitle = getSubmissionTitle(selectedSubmission)
+      const digitalAnswers: Record<string, string> = parsed.answers || {}
       const res = await fetch('/api/grade-suggestion', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          imageKeys: parsed.files,
-          questions: questions.map(q => ({ questionText: q.questionText, questionType: q.questionType })),
+          imageKeys: parsed.files || [],
+          questions: questions.map(q => ({ id: q.id, questionText: q.questionText, questionType: q.questionType })),
+          answers: digitalAnswers,
           studentName,
           lessonTitle,
           teachingVoice,
@@ -1213,7 +1217,7 @@ export default function GradingPage() {
                 </div>
                 <div>
                   <label style={{ fontSize: '12px', fontWeight: 500, color: 'var(--gray-dark)', display: 'block', marginBottom: '6px' }}>Comments for student</label>
-                  <textarea value={comment} onChange={e => setComment(e.target.value)} placeholder="Great work! On problem 3, remember to..." rows={7}
+                  <textarea value={comment} onChange={e => setComment(e.target.value)} placeholder="Great work! On problem 3, remember to..." rows={12}
                     style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--gray-light)', borderRadius: '6px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)', resize: 'vertical', lineHeight: '1.5' }} />
                 </div>
               </div>
