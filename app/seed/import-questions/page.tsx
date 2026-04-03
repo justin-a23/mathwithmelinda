@@ -50,7 +50,11 @@ function parseCSV(text: string): QuestionRow[] {
       break
     }
 
-    if (firstRow) { firstRow = false; continue } // skip header
+    if (firstRow) {
+      firstRow = false
+      // Only skip if this is actually the header row, not a data row
+      if ((cols[0] ?? '').trim().toLowerCase() === 'type') continue
+    }
 
     const type = (cols[0] ?? '').trim().toLowerCase()
     if (!type) continue
