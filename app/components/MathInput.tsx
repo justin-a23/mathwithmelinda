@@ -26,10 +26,12 @@ export default function MathInput({ value, onChange, multiline = false, placehol
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const [showFraction, setShowFraction] = useState(false)
   const [showExponent, setShowExponent] = useState(false)
+  const [showOverline, setShowOverline] = useState(false)
   const [numerator, setNumerator] = useState('')
   const [denominator, setDenominator] = useState('')
   const [expBase, setExpBase] = useState('')
   const [expPower, setExpPower] = useState('')
+  const [overlineDigits, setOverlineDigits] = useState('')
 
   function insertAtCursor(text: string) {
     const el = inputRef.current
@@ -62,6 +64,13 @@ export default function MathInput({ value, onChange, multiline = false, placehol
     setShowExponent(false)
   }
 
+  function insertOverline() {
+    if (!overlineDigits.trim()) return
+    insertAtCursor(`\\(\\overline{${overlineDigits}}\\)`)
+    setOverlineDigits('')
+    setShowOverline(false)
+  }
+
   const hasMath = value.includes('\\(') || value.includes('\\[')
 
   const fracPreview = (numerator || denominator)
@@ -70,6 +79,10 @@ export default function MathInput({ value, onChange, multiline = false, placehol
 
   const expPreview = (expBase || expPower)
     ? `\\(${expBase || '\\square'}^{${expPower || '\\square'}}\\)`
+    : null
+
+  const overlinePreview = overlineDigits
+    ? `\\(\\overline{${overlineDigits}}\\)`
     : null
 
   const btnStyle: React.CSSProperties = {
@@ -246,6 +259,52 @@ export default function MathInput({ value, onChange, multiline = false, placehol
           )}
         </div>
 
+        {/* Overline (repeating decimal) button */}
+        <div style={{ position: 'relative' }}>
+          <button
+            type="button"
+            title="Insert overline (repeating decimal)"
+            style={{ ...btnStyle, fontWeight: 600, color: 'var(--plum)', borderColor: 'var(--plum-mid)', background: showOverline ? 'var(--plum-light)' : 'var(--background)' }}
+            onMouseDown={e => { e.preventDefault(); setShowOverline(v => !v); setShowFraction(false); setShowExponent(false) }}
+          >
+            x̄
+          </button>
+          {showOverline && (
+            <div style={{
+              position: 'absolute', top: 'calc(100% + 6px)', left: 0,
+              background: 'var(--background)', border: '1px solid var(--gray-light)',
+              borderRadius: '8px', padding: '12px', zIndex: 50,
+              boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+              display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '180px',
+            }}>
+              <div style={{ fontSize: '11px', color: 'var(--gray-mid)' }}>Repeating digits</div>
+              <input
+                autoFocus
+                value={overlineDigits}
+                onChange={e => setOverlineDigits(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && insertOverline()}
+                placeholder="e.g. 7 or 27"
+                style={popupInputStyle}
+              />
+              {overlinePreview && (
+                <div style={{ textAlign: 'center', fontSize: '20px', padding: '8px', background: 'var(--page-bg)', borderRadius: '6px', border: '1px solid var(--plum-mid)' }}>
+                  <MathRenderer text={overlinePreview} />
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button type="button" onClick={insertOverline} disabled={!overlineDigits.trim()}
+                  style={{ flex: 1, background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '6px', padding: '7px', cursor: 'pointer', fontSize: '13px', fontWeight: 500, opacity: !overlineDigits.trim() ? 0.5 : 1 }}>
+                  Insert
+                </button>
+                <button type="button" onClick={() => { setShowOverline(false); setOverlineDigits('') }}
+                  style={{ background: 'transparent', color: 'var(--gray-mid)', border: '1px solid var(--gray-light)', borderRadius: '6px', padding: '7px 10px', cursor: 'pointer', fontSize: '13px' }}>
+                  ✕
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Divider */}
         <div style={{ width: '1px', height: '18px', background: 'var(--gray-light)', margin: '0 2px', flexShrink: 0 }} />
 
@@ -270,7 +329,7 @@ export default function MathInput({ value, onChange, multiline = false, placehol
         onChange={e => onChange(e.target.value)}
         placeholder={placeholder ?? 'Type your answer…'}
         rows={multiline ? 3 : 1}
-        onClick={() => { setShowFraction(false); setShowExponent(false) }}
+        onClick={() => { setShowFraction(false); setShowExponent(false); setShowOverline(false) }}
         style={{
           width: '100%',
           padding: '10px 12px',
