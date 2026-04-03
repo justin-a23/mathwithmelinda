@@ -27,6 +27,7 @@ type LessonTemplate = {
   lessonNumber: number
   title: string
   instructions: string | null
+  teachingNotes: string | null
   worksheetUrl: string | null
   videoUrl: string | null
   assignmentType: string | null
@@ -46,6 +47,7 @@ type EditForm = {
   title: string
   lessonNumber: string
   instructions: string
+  teachingNotes: string
   worksheetUrl: string
   videoUrl: string
   assignmentType: string
@@ -88,7 +90,7 @@ export default function LessonLibraryPage() {
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [editForm, setEditForm] = useState<EditForm>({ title: '', lessonNumber: '', instructions: '', worksheetUrl: '', videoUrl: '', assignmentType: 'none', lessonCategory: 'lesson' })
+  const [editForm, setEditForm] = useState<EditForm>({ title: '', lessonNumber: '', instructions: '', teachingNotes: '', worksheetUrl: '', videoUrl: '', assignmentType: 'none', lessonCategory: 'lesson' })
   const [saving, setSaving] = useState(false)
   const [videoUpload, setVideoUpload] = useState<UploadState>({ uploading: false, progress: 0, error: '' })
   const [worksheetUpload, setWorksheetUpload] = useState<UploadState>({ uploading: false, progress: 0, error: '' })
@@ -218,6 +220,7 @@ export default function LessonLibraryPage() {
       title: lesson.title,
       lessonNumber: String(lesson.lessonNumber),
       instructions: lesson.instructions || '',
+      teachingNotes: lesson.teachingNotes || '',
       worksheetUrl: lesson.worksheetUrl || '',
       videoUrl: lesson.videoUrl || '',
       assignmentType: lesson.assignmentType || 'none',
@@ -313,6 +316,7 @@ export default function LessonLibraryPage() {
             title: editForm.title,
             lessonNumber: parseInt(editForm.lessonNumber) || 0,
             instructions: editForm.instructions || null,
+            teachingNotes: editForm.teachingNotes || null,
             worksheetUrl: editForm.worksheetUrl || null,
             videoUrl: editForm.videoUrl || null,
             assignmentType: editForm.assignmentType || 'none',
@@ -325,6 +329,7 @@ export default function LessonLibraryPage() {
         title: editForm.title,
         lessonNumber: parseInt(editForm.lessonNumber) || l.lessonNumber,
         instructions: editForm.instructions || null,
+        teachingNotes: editForm.teachingNotes || null,
         worksheetUrl: editForm.worksheetUrl || null,
         videoUrl: editForm.videoUrl || null,
         assignmentType: editForm.assignmentType || 'none',
@@ -733,6 +738,20 @@ export default function LessonLibraryPage() {
                                 onChange={e => setEditForm(f => ({ ...f, instructions: e.target.value }))}
                                 placeholder="Student-facing instructions for this lesson"
                                 rows={5}
+                                style={{ ...inputStyle, resize: 'vertical' }}
+                              />
+                            </div>
+
+                            <div style={{ marginBottom: '16px' }}>
+                              <label style={labelStyle}>Teaching Notes <span style={{ fontWeight: 400, color: 'var(--gray-mid)', textTransform: 'none', letterSpacing: 0 }}>(for AI grading)</span></label>
+                              <p style={{ fontSize: '11px', color: 'var(--gray-mid)', margin: '0 0 6px', lineHeight: 1.5 }}>
+                                Paste the relevant Abeka method explanation here. The AI will reference this when grading — so it evaluates student work against the curriculum method, not a different approach.
+                              </p>
+                              <textarea
+                                value={editForm.teachingNotes}
+                                onChange={e => setEditForm(f => ({ ...f, teachingNotes: e.target.value }))}
+                                placeholder={`e.g. Abeka teaches long division using the "divide-multiply-subtract-bring down" method. Students write the remainder as a fraction attached to the quotient (e.g. 4 R2 → 4 2/3). Answers should show all steps written vertically. Skipping a step is marked wrong even if the final answer is correct.`}
+                                rows={6}
                                 style={{ ...inputStyle, resize: 'vertical' }}
                               />
                             </div>

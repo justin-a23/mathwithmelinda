@@ -121,6 +121,7 @@ type LessonTemplate @model {
   lessonNumber: Int!
   title: String!
   instructions: String
+  teachingNotes: String
   worksheetUrl: String
   videoUrl: String
   assignmentType: String

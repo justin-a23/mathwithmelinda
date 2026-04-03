@@ -109,6 +109,7 @@ const listStudentProfilesQuery = /* GraphQL */`
 const getLessonTemplateQuestions = /* GraphQL */`
   query GetLessonTemplate($id: ID!) {
     getLessonTemplate(id: $id) {
+      teachingNotes
       questions {
         items {
           id
@@ -353,6 +354,7 @@ export default function GradingPage() {
   const [aiSuggesting, setAiSuggesting] = useState(false)
   const [aiError, setAiError] = useState('')
   const [teachingVoice, setTeachingVoice] = useState('')
+  const [lessonTeachingNotes, setLessonTeachingNotes] = useState('')
   const [expandedStudents, setExpandedStudents] = useState<Set<string>>(new Set())
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date())
   const [refreshing, setRefreshing] = useState(false)
@@ -480,6 +482,7 @@ export default function GradingPage() {
           studentName,
           lessonTitle,
           teachingVoice,
+          teachingNotes: lessonTeachingNotes,
         }),
       })
       const data = await res.json()
@@ -516,6 +519,7 @@ export default function GradingPage() {
     setImageUrls([])
     setQuestions([])
     setShowWorkImageUrls({})
+    setLessonTeachingNotes('')
     setAiError('')
 
     if (!submission.content) return
@@ -533,8 +537,10 @@ export default function GradingPage() {
             query: getLessonTemplateQuestions,
             variables: { id: parsed.lessonTemplateId }
           }) as any)
-          const items: Question[] = result.data.getLessonTemplate?.questions?.items || []
+          const tmpl = result.data.getLessonTemplate
+          const items: Question[] = tmpl?.questions?.items || []
           setQuestions(items.sort((a, b) => a.order - b.order))
+          setLessonTeachingNotes(tmpl?.teachingNotes || '')
         } catch { /* no questions */ }
       }
 
