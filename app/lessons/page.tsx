@@ -664,7 +664,7 @@ function LessonPageInner() {
         answerArea = `<div class="work-box">Show your work here</div>`
       }
 
-      const bookNumMatch = q.questionText.match(/^(\d+\.)\s(.*)$/s)
+      const bookNumMatch = q.questionText.match(/^(\d+\.)\s([\s\S]*)$/)
       const qNumLabel = bookNumMatch ? bookNumMatch[1] : `${printQNum}.`
       const qBody = bookNumMatch ? renderMath(bookNumMatch[2]) : qHtml
       return `<div class="question">
@@ -911,7 +911,7 @@ function LessonPageInner() {
                           const isHeader = q.questionType === 'section_header'
                           if (!isHeader) qNum++
                           const displayNum = qNum
-                          const bookNumMatch = !isHeader && q.questionText.match(/^(\d+\.)\s(.*)$/s)
+                          const bookNumMatch = !isHeader && q.questionText.match(/^(\d+\.)\s([\s\S]*)$/)
                           const hasBookNum = !!bookNumMatch
                           if (isHeader) {
                             return (

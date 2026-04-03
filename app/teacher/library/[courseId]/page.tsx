@@ -506,7 +506,7 @@ export default function LessonLibraryPage() {
       const answerBox = `<div class="work-divider"></div>`
       // If the question text already starts with a book number (e.g. "1. " or "35. "),
       // skip the auto-counter so we don't get double numbering like "1. 1. 450"
-      const bookNumMatch = q.questionText.match(/^(\d+\.)\s(.*)$/s)
+      const bookNumMatch = q.questionText.match(/^(\d+\.)\s([\s\S]*)$/)
       const qNumLabel = bookNumMatch ? bookNumMatch[1] : `${printQNum}.`
       const qBody = bookNumMatch ? renderMath(bookNumMatch[2]) : qHtml
       if (q.questionType === 'multiple_choice' && q.choices) {
