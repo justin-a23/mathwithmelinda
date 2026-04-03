@@ -666,11 +666,13 @@ function LessonPageInner() {
         answerArea = `<div class="work-box">Show your work here</div>`
       }
 
-      const hasBookNum = /^\d+\.\s/.test(q.questionText)
+      const bookNumMatch = q.questionText.match(/^(\d+\.)\s(.*)$/s)
+      const qNumLabel = bookNumMatch ? bookNumMatch[1] : `${printQNum}.`
+      const qBody = bookNumMatch ? renderMath(bookNumMatch[2]) : qHtml
       return `<div class="question">
         <div class="question-text">
-          ${hasBookNum ? '' : `<span class="qnum">${printQNum}.</span>`}
-          <span>${qHtml}</span>
+          <span class="qnum">${qNumLabel}</span>
+          <span>${qBody}</span>
         </div>
         ${answerArea}
       </div>`
@@ -911,7 +913,8 @@ function LessonPageInner() {
                           const isHeader = q.questionType === 'section_header'
                           if (!isHeader) qNum++
                           const displayNum = qNum
-                          const hasBookNum = !isHeader && /^\d+\.\s/.test(q.questionText)
+                          const bookNumMatch = !isHeader && q.questionText.match(/^(\d+\.)\s(.*)$/s)
+                          const hasBookNum = !!bookNumMatch
                           if (isHeader) {
                             return (
                               <div key={q.id} style={{ marginTop: idx === 0 ? 0 : '28px', marginBottom: '16px' }}>
@@ -929,9 +932,11 @@ function LessonPageInner() {
                           return (
                           <div key={q.id} style={{ marginBottom: '24px', paddingBottom: '24px', borderBottom: idx < questions.length - 1 ? '1px solid var(--gray-light)' : 'none' }}>
                           <div style={{ display: 'flex', gap: '12px', marginBottom: '12px' }}>
-                            {!hasBookNum && <span style={{ fontWeight: 700, color: 'var(--plum)', fontSize: '16px', minWidth: '28px' }}>{displayNum}.</span>}
+                            <span style={{ fontWeight: 700, color: 'var(--plum)', fontSize: '16px', minWidth: '28px', flexShrink: 0 }}>
+                              {bookNumMatch ? bookNumMatch[1] : `${displayNum}.`}
+                            </span>
                             <div style={{ fontSize: '15px', color: 'var(--foreground)', lineHeight: '1.6', flex: 1 }}>
-                              <MathRenderer text={q.questionText} />
+                              <MathRenderer text={bookNumMatch ? bookNumMatch[2] : q.questionText} />
                             </div>
                           </div>
                           {q.questionType === 'number' && (

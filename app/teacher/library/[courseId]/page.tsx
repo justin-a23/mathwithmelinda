@@ -506,18 +506,16 @@ export default function LessonLibraryPage() {
       const answerBox = `<div class="work-divider"></div>`
       // If the question text already starts with a book number (e.g. "1. " or "35. "),
       // skip the auto-counter so we don't get double numbering like "1. 1. 450"
-      const hasBookNum = /^\d+\.\s/.test(q.questionText)
+      const bookNumMatch = q.questionText.match(/^(\d+\.)\s(.*)$/s)
+      const qNumLabel = bookNumMatch ? bookNumMatch[1] : `${printQNum}.`
+      const qBody = bookNumMatch ? renderMath(bookNumMatch[2]) : qHtml
       if (q.questionType === 'multiple_choice' && q.choices) {
         const choices = q.choices.split('\n').filter(Boolean)
         const choiceLetters = ['A', 'B', 'C', 'D', 'E']
         const choicesHtml = choices.map((c, ci) => `<div style="margin:4px 0 4px 22px"><span class="bubble">${choiceLetters[ci] || ci + 1}.</span> ${renderMath(c)}</div>`).join('')
-        return hasBookNum
-          ? `<div class="question"><span class="qtext">${qHtml}</span>${choicesHtml}</div>`
-          : `<div class="question"><span class="qnum">${printQNum}.</span><span class="qtext">${qHtml}</span>${choicesHtml}</div>`
+        return `<div class="question"><span class="qnum">${qNumLabel}</span><span class="qtext">${qBody}</span>${choicesHtml}</div>`
       }
-      return hasBookNum
-        ? `<div class="question"><span class="qtext">${qHtml}</span>${answerBox}</div>`
-        : `<div class="question"><span class="qnum">${printQNum}.</span><span class="qtext">${qHtml}</span>${answerBox}</div>`
+      return `<div class="question"><span class="qnum">${qNumLabel}</span><span class="qtext">${qBody}</span>${answerBox}</div>`
     }).join('')
 
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
