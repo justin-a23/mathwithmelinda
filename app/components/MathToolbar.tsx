@@ -29,12 +29,15 @@ type Props = {
 export default function MathToolbar({ textareaRef, value, onChange }: Props) {
   const [showFractionPopup, setShowFractionPopup] = useState(false)
   const [showExponentPopup, setShowExponentPopup] = useState(false)
+  const [showOverlinePopup, setShowOverlinePopup] = useState(false)
   const [fracNumer, setFracNumer] = useState('')
   const [fracDenom, setFracDenom] = useState('')
   const [expBase, setExpBase] = useState('')
   const [expPower, setExpPower] = useState('')
+  const [overlineDigits, setOverlineDigits] = useState('')
   const numerRef = useRef<HTMLInputElement>(null)
   const baseRef = useRef<HTMLInputElement>(null)
+  const overlineRef = useRef<HTMLInputElement>(null)
 
   function insert(symbol: string) {
     const ta = textareaRef.current
@@ -59,6 +62,14 @@ export default function MathToolbar({ textareaRef, value, onChange }: Props) {
     setFracNumer('')
     setFracDenom('')
     setShowFractionPopup(false)
+  }
+
+  function insertOverline() {
+    if (!overlineDigits.trim()) return
+    const latex = `\\(\\overline{${overlineDigits}}\\)`
+    insert(latex)
+    setOverlineDigits('')
+    setShowOverlinePopup(false)
   }
 
   function insertExponent() {
@@ -98,6 +109,10 @@ export default function MathToolbar({ textareaRef, value, onChange }: Props) {
 
   const expPreview = expBase || expPower
     ? `\\(${expBase || '\\square'}^{${expPower || '\\square'}}\\)`
+    : null
+
+  const overlinePreview = overlineDigits
+    ? `\\(\\overline{${overlineDigits}}\\)`
     : null
 
   return (
@@ -170,6 +185,36 @@ export default function MathToolbar({ textareaRef, value, onChange }: Props) {
             <div style={{ display: 'flex', gap: '8px' }}>
               <button onClick={insertExponent} disabled={!expBase.trim() || !expPower.trim()} style={{ flex: 1, background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '6px', padding: '7px', cursor: 'pointer', fontSize: '13px', fontWeight: 500, fontFamily: 'var(--font-body)', opacity: (!expBase.trim() || !expPower.trim()) ? 0.5 : 1 }}>Insert</button>
               <button onClick={() => { setShowExponentPopup(false); setExpBase(''); setExpPower('') }} style={{ flex: 1, background: 'none', border: '1px solid var(--gray-light)', color: 'var(--gray-dark)', borderRadius: '6px', padding: '7px', cursor: 'pointer', fontSize: '13px', fontFamily: 'var(--font-body)' }}>Cancel</button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Overline (repeating decimal) button */}
+      <div style={{ position: 'relative' }}>
+        <button
+          type="button"
+          title="Insert overline (repeating decimal)"
+          onClick={() => { setShowOverlinePopup(v => !v); setShowFractionPopup(false); setShowExponentPopup(false); setTimeout(() => overlineRef.current?.focus(), 50) }}
+          style={{ ...btnStyle, background: showOverlinePopup ? 'var(--plum)' : 'var(--background)', color: showOverlinePopup ? 'white' : 'var(--foreground)', fontWeight: 700 }}
+        >
+          x̄
+        </button>
+        {showOverlinePopup && (
+          <div style={popupStyle}>
+            <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--gray-dark)', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Repeating Decimal</div>
+            <div style={{ marginBottom: '12px' }}>
+              <label style={{ fontSize: '12px', color: 'var(--gray-dark)', display: 'block', marginBottom: '4px' }}>Repeating digits</label>
+              <input ref={overlineRef} value={overlineDigits} onChange={e => setOverlineDigits(e.target.value)} onKeyDown={e => e.key === 'Enter' && insertOverline()} style={popupInputStyle} placeholder="e.g. 7 or 27" />
+            </div>
+            {overlinePreview && (
+              <div style={{ textAlign: 'center', fontSize: '20px', marginBottom: '12px', padding: '10px', background: 'var(--page-bg)', borderRadius: '6px', border: '1px solid var(--plum-mid)' }}>
+                <MathRenderer text={overlinePreview} />
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button onClick={insertOverline} disabled={!overlineDigits.trim()} style={{ flex: 1, background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '6px', padding: '7px', cursor: 'pointer', fontSize: '13px', fontWeight: 500, fontFamily: 'var(--font-body)', opacity: !overlineDigits.trim() ? 0.5 : 1 }}>Insert</button>
+              <button onClick={() => { setShowOverlinePopup(false); setOverlineDigits('') }} style={{ flex: 1, background: 'none', border: '1px solid var(--gray-light)', color: 'var(--gray-dark)', borderRadius: '6px', padding: '7px', cursor: 'pointer', fontSize: '13px', fontFamily: 'var(--font-body)' }}>Cancel</button>
             </div>
           </div>
         )}
