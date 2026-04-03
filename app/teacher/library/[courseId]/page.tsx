@@ -4,8 +4,30 @@ import { useAuthenticator } from '@aws-amplify/ui-react'
 import { useRouter, useParams } from 'next/navigation'
 import { useEffect, useState, useRef } from 'react'
 import { generateClient } from 'aws-amplify/api'
-import { listLessonTemplates, getCourse, listAssignmentQuestions } from '../../../../src/graphql/queries'
-import { updateLessonTemplate, createAssignmentQuestion, deleteAssignmentQuestion, updateAssignmentQuestion } from '../../../../src/graphql/mutations'
+import { getCourse, listAssignmentQuestions } from '../../../../src/graphql/queries'
+import { createAssignmentQuestion, deleteAssignmentQuestion, updateAssignmentQuestion } from '../../../../src/graphql/mutations'
+
+// Inline queries include teachingNotes which postdates the generated types
+const listLessonTemplatesInline = /* GraphQL */`
+  query ListLessonTemplates($filter: ModelLessonTemplateFilterInput, $limit: Int, $nextToken: String) {
+    listLessonTemplates(filter: $filter, limit: $limit, nextToken: $nextToken) {
+      items {
+        id lessonNumber title instructions teachingNotes
+        worksheetUrl videoUrl assignmentType lessonCategory
+        courseLessonTemplatesId updatedAt
+      }
+      nextToken
+    }
+  }
+`
+const updateLessonTemplateInline = /* GraphQL */`
+  mutation UpdateLessonTemplate($input: UpdateLessonTemplateInput!) {
+    updateLessonTemplate(input: $input) {
+      id lessonNumber title instructions teachingNotes
+      worksheetUrl videoUrl assignmentType lessonCategory updatedAt
+    }
+  }
+`
 import TeacherNav from '../../../components/TeacherNav'
 import { useRoleGuard } from '../../../hooks/useRoleGuard'
 import MathToolbar from '../../../components/MathToolbar'
@@ -166,7 +188,7 @@ export default function LessonLibraryPage() {
       let nextToken: string | null = null
       do {
         const result: any = await client.graphql({
-          query: listLessonTemplates,
+          query: listLessonTemplatesInline,
           variables: {
             filter: { courseLessonTemplatesId: { eq: courseId } },
             limit: 200,
@@ -308,8 +330,8 @@ export default function LessonLibraryPage() {
   async function saveEdit(id: string) {
     setSaving(true)
     try {
-      await client.graphql({
-        query: updateLessonTemplate,
+      await (client.graphql({
+        query: updateLessonTemplateInline,
         variables: {
           input: {
             id,
@@ -323,7 +345,7 @@ export default function LessonLibraryPage() {
             lessonCategory: editForm.lessonCategory || 'lesson'
           }
         }
-      })
+      }) as any)
       setLessons(prev => prev.map(l => l.id === id ? {
         ...l,
         title: editForm.title,
