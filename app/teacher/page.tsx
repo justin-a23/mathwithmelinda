@@ -94,6 +94,48 @@ const listPendingStudentsQuery = /* GraphQL */`
   }
 `
 
+const listActiveStudentsQuery = /* GraphQL */`
+  query ListActiveStudents {
+    listStudentProfiles(limit: 200, filter: { status: { eq: "active" } }) {
+      items { id userId email firstName lastName }
+    }
+  }
+`
+
+const listAllSubmissionsForAlertsQuery = /* GraphQL */`
+  query ListAllSubmissionsForAlerts {
+    listSubmissions(limit: 1000) {
+      items {
+        id
+        studentId
+        grade
+        submittedAt
+        isArchived
+        content
+      }
+    }
+  }
+`
+
+const listWeeklyPlansQuery = /* GraphQL */`
+  query ListWeeklyPlans {
+    listWeeklyPlans(limit: 200) {
+      items {
+        id
+        weekStart
+        courseId
+      }
+    }
+  }
+`
+
+type Alert = {
+  id: string
+  level: 'urgent' | 'warning' | 'info'
+  message: string
+  href?: string
+}
+
 export default function TeacherDashboard() {
   const router = useRouter()
   const { checking } = useRoleGuard('teacher')
@@ -105,18 +147,128 @@ export default function TeacherDashboard() {
   const [weekStats, setWeekStats] = useState<CourseWeekStats[]>([])
   const [statsLoading, setStatsLoading] = useState(true)
   const [pendingStudents, setPendingStudents] = useState<{ id: string; firstName: string; lastName: string; email: string; gradeLevel: string | null }[]>([])
+  const [alerts, setAlerts] = useState<Alert[]>([])
 
   useEffect(() => {
+    fetchAll()
+    // Auto-refresh every 60 seconds
+    const interval = setInterval(fetchAll, 60_000)
+    // Refresh when tab becomes visible again
+    const onVisible = () => { if (document.visibilityState === 'visible') fetchAll() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => { clearInterval(interval); document.removeEventListener('visibilitychange', onVisible) }
+  }, [])
+
+  function fetchAll() {
     fetchCourses()
     fetchWeekStats()
     fetchPendingStudents()
-  }, [])
+    fetchAlerts()
+  }
 
   async function fetchPendingStudents() {
     try {
       const result = await (client.graphql({ query: listPendingStudentsQuery }) as any)
       setPendingStudents(result.data.listStudentProfiles.items)
     } catch { /* silent */ }
+  }
+
+  async function fetchAlerts() {
+    try {
+      const now = new Date()
+      const monday = getMonday(now)
+      const nextMonday = new Date(monday); nextMonday.setDate(monday.getDate() + 7)
+      const nextMondayStr = nextMonday.toISOString().slice(0, 10)
+      const dayOfWeek = now.getDay() // 0=Sun,1=Mon...5=Fri,6=Sat
+      const newAlerts: Alert[] = []
+
+      const [subsResult, studentsResult, plansResult] = await Promise.all([
+        client.graphql({ query: listAllSubmissionsForAlertsQuery }) as any,
+        client.graphql({ query: listActiveStudentsQuery }) as any,
+        client.graphql({ query: listWeeklyPlansQuery }) as any,
+      ])
+
+      const allSubs = subsResult.data.listSubmissions.items
+      const activeStudents: { id: string; userId: string; email: string; firstName: string; lastName: string }[] =
+        studentsResult.data.listStudentProfiles.items
+      const weeklyPlans: { id: string; weekStart: string; courseId: string }[] =
+        plansResult.data.listWeeklyPlans.items
+
+      const fiveDaysAgo = new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000)
+      const weekStartMs = monday.getTime()
+
+      // 1. Ungraded submissions older than 5 days
+      const staleUngraded = allSubs.filter((s: any) =>
+        !s.isArchived && !s.grade && s.submittedAt && new Date(s.submittedAt) < fiveDaysAgo
+      )
+      if (staleUngraded.length > 0) {
+        newAlerts.push({
+          id: 'stale-ungraded',
+          level: 'urgent',
+          message: `${staleUngraded.length} submission${staleUngraded.length > 1 ? 's have' : ' has'} been waiting to be graded for 5+ days`,
+          href: '/teacher/grades',
+        })
+      }
+
+      // 2. Students who haven't submitted anything this week
+      const submittedThisWeek = new Set(
+        allSubs
+          .filter((s: any) => !s.isArchived && s.submittedAt && new Date(s.submittedAt).getTime() >= weekStartMs)
+          .map((s: any) => s.studentId)
+      )
+      const notSubmitted = activeStudents.filter(s => !submittedThisWeek.has(s.userId) && !submittedThisWeek.has(s.email))
+      if (notSubmitted.length > 0 && notSubmitted.length <= activeStudents.length) {
+        const names = notSubmitted.slice(0, 3).map(s => s.firstName).join(', ')
+        const extra = notSubmitted.length > 3 ? ` +${notSubmitted.length - 3} more` : ''
+        newAlerts.push({
+          id: 'no-submission-this-week',
+          level: 'warning',
+          message: `${notSubmitted.length} student${notSubmitted.length > 1 ? 's haven\'t' : ' hasn\'t'} submitted anything this week — ${names}${extra}`,
+          href: '/teacher/grades',
+        })
+      }
+
+      // 3. Next week's plans not set yet (warn Thu/Fri/weekend)
+      if (dayOfWeek === 4 || dayOfWeek === 5 || dayOfWeek === 0 || dayOfWeek === 6) {
+        const nextWeekPlanned = weeklyPlans.some(p => p.weekStart === nextMondayStr)
+        if (!nextWeekPlanned) {
+          const dayName = dayOfWeek === 4 ? 'Thursday' : dayOfWeek === 5 ? 'Friday' : 'the weekend'
+          newAlerts.push({
+            id: 'next-week-not-planned',
+            level: 'warning',
+            message: `It's ${dayName} — next week's assignments haven't been set yet`,
+            href: '/teacher/plans',
+          })
+        }
+      }
+
+      // 4. Students with 3+ consecutive missed submissions (no submission for last 3 assignments)
+      const studentSubCounts: Record<string, number> = {}
+      for (const s of allSubs) {
+        if (s.isArchived) continue
+        const sid = s.studentId
+        if (!studentSubCounts[sid]) studentSubCounts[sid] = 0
+        studentSubCounts[sid]++
+      }
+      // Students with zero submissions ever among active students
+      const neverSubmitted = activeStudents.filter(s =>
+        !studentSubCounts[s.userId] && !studentSubCounts[s.email]
+      )
+      if (neverSubmitted.length > 0) {
+        const names = neverSubmitted.slice(0, 2).map(s => s.firstName).join(', ')
+        const extra = neverSubmitted.length > 2 ? ` +${neverSubmitted.length - 2} more` : ''
+        newAlerts.push({
+          id: 'never-submitted',
+          level: 'info',
+          message: `${neverSubmitted.length} active student${neverSubmitted.length > 1 ? 's have' : ' has'} never submitted work — ${names}${extra}`,
+          href: '/teacher/students',
+        })
+      }
+
+      setAlerts(newAlerts)
+    } catch (err) {
+      console.error('Error fetching alerts:', err)
+    }
   }
 
   async function fetchCourses() {
@@ -230,6 +382,37 @@ export default function TeacherDashboard() {
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#D97706" strokeWidth="2">
               <path d="M9 18l6-6-6-6"/>
             </svg>
+          </div>
+        )}
+
+        {/* ── SMART ALERTS ── */}
+        {alerts.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '28px' }}>
+            {alerts.map(alert => {
+              const colors = {
+                urgent: { bg: '#FEF2F2', border: '#FECACA', icon: '#DC2626', text: '#991B1B', sub: '#B91C1C' },
+                warning: { bg: '#FFFBEB', border: '#FDE68A', icon: '#D97706', text: '#92400E', sub: '#B45309' },
+                info: { bg: '#EFF6FF', border: '#BFDBFE', icon: '#2563EB', text: '#1E3A8A', sub: '#1D4ED8' },
+              }[alert.level]
+              const icons = {
+                urgent: <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>,
+                warning: <><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></>,
+                info: <><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></>,
+              }[alert.level]
+              return (
+                <div
+                  key={alert.id}
+                  onClick={() => alert.href && router.push(alert.href)}
+                  style={{ background: colors.bg, border: `1px solid ${colors.border}`, borderRadius: '10px', padding: '14px 18px', display: 'flex', alignItems: 'center', gap: '12px', cursor: alert.href ? 'pointer' : 'default' }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={colors.icon} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>{icons}</svg>
+                  <span style={{ fontSize: '14px', color: colors.text, fontWeight: 500, flex: 1 }}>{alert.message}</span>
+                  {alert.href && (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={colors.sub} strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
+                  )}
+                </div>
+              )
+            })}
           </div>
         )}
 
