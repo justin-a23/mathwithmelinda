@@ -34,7 +34,8 @@ export async function POST(req: NextRequest) {
       studentName,
       lessonTitle,
       teachingVoice,
-      answers, // { [questionId]: string } — student's digital answers
+      answers,      // { [questionId]: string } — student's digital answers
+      teachingNotes, // Abeka/curriculum method notes from the lesson template
     } = await req.json()
 
     const hasFiles = imageKeys && imageKeys.length > 0
@@ -77,11 +78,15 @@ export async function POST(req: NextRequest) {
       ? teachingVoice.trim()
       : 'Write in a warm, encouraging, direct tone. Point out the specific mistake and explain the correct approach. Keep the comment to 2 sentences maximum.'
 
+    const curriculumSection = teachingNotes?.trim()
+      ? `\nCURRICULUM METHOD (Abeka — grade against this, not other approaches):\n${teachingNotes.trim()}`
+      : ''
+
     const systemPrompt = `You are helping a homeschool math teacher named Melinda grade student work and write feedback comments.
 
-Teacher's style instructions: ${voiceInstruction}
+Teacher's style instructions: ${voiceInstruction}${curriculumSection}
 
-Grading scale: 0–100.
+Grading scale: 0–100. If curriculum method notes are provided, evaluate whether the student used the correct method — not just whether the final answer is right.
 Respond ONLY with valid JSON in this exact format — no other text:
 {"grade": "85", "comment": "Your feedback here."}`
 
