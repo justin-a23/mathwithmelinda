@@ -978,8 +978,6 @@ export default function LessonLibraryPage() {
                                         return (
                                           <div
                                             key={q.id}
-                                            draggable={true}
-                                            onDragStart={() => setDragIndex(i)}
                                             onDragOver={e => { e.preventDefault(); setDragOverIndex(i) }}
                                             onDrop={() => { if (dragIndex !== null && dragIndex !== i) reorderQuestions(dragIndex, i); setDragIndex(null); setDragOverIndex(null) }}
                                             onDragEnd={() => { setDragIndex(null); setDragOverIndex(null) }}
@@ -989,7 +987,7 @@ export default function LessonLibraryPage() {
                                               borderTop: dragOverIndex === i ? '3px solid var(--plum)' : undefined,
                                               borderRadius: '8px',
                                               padding: '14px 16px',
-                                              cursor: editingQuestionId === q.id ? 'default' : 'grab',
+                                              cursor: 'default',
                                             }}
                                           >
                                             {editingQuestionId === q.id ? (
@@ -1093,7 +1091,7 @@ export default function LessonLibraryPage() {
                                               )
                                             ) : isHeader ? (
                                               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                                <div style={{ color: 'var(--gray-mid)', fontSize: '16px', cursor: 'grab', userSelect: 'none' }}>⠿</div>
+                                                <div draggable={true} onDragStart={() => setDragIndex(i)} style={{ color: 'var(--gray-mid)', fontSize: '16px', cursor: 'grab', userSelect: 'none' }}>⠿</div>
                                                 <div style={{ flex: 1, minWidth: 0 }}>
                                                   <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--plum)', display: 'flex', alignItems: 'center', gap: '8px' }}>
                                                     <span style={{ fontSize: '10px', background: 'var(--plum)', color: 'white', padding: '1px 6px', borderRadius: '4px', letterSpacing: '0.5px', flexShrink: 0 }}>HEADER</span>
