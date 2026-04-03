@@ -28,7 +28,7 @@ function SubmissionImage({ url, alt, style }: { url: string; alt: string; style?
     )
   }
   return (
-    <a href={url} target="_blank" rel="noopener noreferrer">
+    <a href={url} target="_blank" rel="noopener noreferrer" style={{ display: 'block' }}>
       <img src={url} alt={alt} style={style} onError={() => setFailed(true)} />
     </a>
   )

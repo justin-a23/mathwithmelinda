@@ -3,8 +3,6 @@ import Anthropic from '@anthropic-ai/sdk'
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-
 const accessKeyId = process.env.MWM_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID || ''
 const secretAccessKey = process.env.MWM_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY || ''
 const s3 = new S3Client({
@@ -25,6 +23,10 @@ async function fetchImageAsBase64(key: string): Promise<{ data: string; mediaTyp
 
 export async function POST(req: NextRequest) {
   try {
+    const apiKey = process.env.ANTHROPIC_API_KEY
+    if (!apiKey) return NextResponse.json({ error: 'ANTHROPIC_API_KEY is not configured' }, { status: 500 })
+    const anthropic = new Anthropic({ apiKey })
+
     const { imageKeys, questions, studentName, lessonTitle, teachingVoice } = await req.json()
 
     if (!imageKeys || imageKeys.length === 0) {
