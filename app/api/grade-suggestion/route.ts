@@ -5,12 +5,11 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
+const accessKeyId = process.env.MWM_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID || ''
+const secretAccessKey = process.env.MWM_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY || ''
 const s3 = new S3Client({
   region: 'us-east-1',
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
-  },
+  ...(accessKeyId && secretAccessKey ? { credentials: { accessKeyId, secretAccessKey } } : {}),
 })
 
 async function fetchImageAsBase64(key: string): Promise<{ data: string; mediaType: 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif' }> {
@@ -71,7 +70,7 @@ ${questionList ? `Questions on this assignment:\n${questionList}\n\n` : ''}Pleas
     ]
 
     const message = await anthropic.messages.create({
-      model: 'claude-opus-4-6',
+      model: 'claude-opus-4-5',
       max_tokens: 512,
       system: systemPrompt,
       messages: [{ role: 'user', content }],

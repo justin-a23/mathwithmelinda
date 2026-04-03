@@ -691,15 +691,15 @@ function LessonPageInner() {
         .header .course{font-size:13px;color:#555;margin-bottom:10px}
         .header .fields{display:flex;justify-content:space-between;margin-top:12px;gap:24px}
         .header .field{flex:1;font-size:13px;color:#333;padding-bottom:3px;border-bottom:1px solid #888}
-        .question{margin-bottom:32px;page-break-inside:avoid}
-        .question-text{display:flex;gap:10px;margin-bottom:12px;line-height:1.7}
+        .question{margin-bottom:18px;page-break-inside:avoid}
+        .question-text{display:flex;gap:10px;margin-bottom:6px;line-height:1.4}
         .qnum{font-weight:bold;min-width:22px;flex-shrink:0}
         .answer-lines{padding-left:22px}
-        .answer-line{border-bottom:1px solid #ccc;height:36px;margin-bottom:4px}
-        .choices{padding-left:22px;display:flex;flex-direction:column;gap:10px;margin-top:4px}
-        .choice{display:flex;gap:10px;align-items:baseline;line-height:1.6}
+        .answer-line{border-bottom:1px solid #ccc;height:28px;margin-bottom:3px}
+        .choices{padding-left:22px;display:flex;flex-direction:column;gap:6px;margin-top:4px}
+        .choice{display:flex;gap:10px;align-items:baseline;line-height:1.4}
         .bubble{font-size:17px;line-height:1;flex-shrink:0}
-        .work-box{border:1px solid #bbb;border-radius:4px;height:130px;margin-left:22px;padding:8px 12px;color:#bbb;font-size:12px;font-style:italic}
+        .work-box{border:1px solid #bbb;border-radius:4px;height:80px;margin-left:22px;padding:6px 10px;color:#bbb;font-size:12px;font-style:italic}
         .section-header{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#5b2d8e;border-bottom:2px solid #d8b4fe;padding-bottom:5px;margin:28px 0 16px;page-break-after:avoid}
         @media print{body{padding:20px}@page{margin:.75in}}
       </style>

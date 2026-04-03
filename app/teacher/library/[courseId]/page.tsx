@@ -527,7 +527,7 @@ export default function LessonLibraryPage() {
       .question{display:flex;align-items:flex-start;gap:8px;margin-bottom:0;page-break-inside:avoid}
       .qnum{font-weight:700;min-width:22px;flex-shrink:0}.qtext{flex:1}
       .bubble{font-size:17px;line-height:1;flex-shrink:0}
-      .work-divider{border-bottom:1px solid #ccc;margin:18px 0 24px;}
+      .work-divider{border-bottom:1px solid #ccc;margin:10px 0 14px;}
       .section-header{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#5b2d8e;border-bottom:2px solid #d8b4fe;padding-bottom:5px;margin:28px 0 16px;page-break-after:avoid}
       @media print{body{padding:20px}@page{margin:.75in}}
     </style>
