@@ -9,27 +9,55 @@ import MathRenderer from '../../components/MathRenderer'
 import TeacherNav from '../../components/TeacherNav'
 import { useRoleGuard } from '../../hooks/useRoleGuard'
 
-function SubmissionImage({ url, alt, style }: { url: string; alt: string; style?: React.CSSProperties }) {
+function SubmissionFile({ url, alt, inline }: { url: string; alt: string; inline?: boolean }) {
   const [failed, setFailed] = useState(false)
+  const lc = url.toLowerCase()
+  const isPdf = lc.includes('.pdf') || lc.includes('application%2Fpdf') || lc.includes('content-type=application')
+
+  if (isPdf) {
+    return inline ? (
+      <div style={{ width: '100%', marginBottom: '16px', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--gray-light)' }}>
+        <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--gray-mid)', padding: '6px 12px', background: 'var(--gray-light)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>📄 {alt}</span>
+          <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--plum)', textDecoration: 'none', fontSize: '11px', fontWeight: 600 }}>Open ↗</a>
+        </div>
+        <iframe src={url} style={{ width: '100%', height: '600px', border: 'none', display: 'block' }} title={alt} />
+      </div>
+    ) : (
+      <a href={url} target="_blank" rel="noopener noreferrer" style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        gap: '6px', padding: '12px', borderRadius: '6px', border: '1px solid var(--plum-mid)',
+        background: 'var(--plum-light)', textDecoration: 'none', color: 'var(--plum)',
+        fontSize: '12px', fontWeight: 600, textAlign: 'center', minHeight: '90px', width: '100%'
+      }}>
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+          <line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
+        </svg>
+        PDF — Open to view
+      </a>
+    )
+  }
+
   if (failed) {
-    const isHeic = url.toLowerCase().includes('.heic') || url.toLowerCase().includes('.heif')
     return (
       <a href={url} target="_blank" rel="noopener noreferrer" style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
         gap: '6px', padding: '12px', borderRadius: '6px', border: '1px solid var(--gray-light)',
         background: 'var(--gray-light)', textDecoration: 'none', color: 'var(--plum)',
-        fontSize: '12px', fontWeight: 500, textAlign: 'center', ...style, minHeight: style?.height || '90px'
+        fontSize: '12px', fontWeight: 500, textAlign: 'center', minHeight: '90px', width: '100%'
       }}>
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
         </svg>
-        {isHeic ? 'HEIC — open to view' : 'View file'}
+        Open file ↗
       </a>
     )
   }
+
   return (
     <a href={url} target="_blank" rel="noopener noreferrer" style={{ display: 'block' }}>
-      <img src={url} alt={alt} style={style} onError={() => setFailed(true)} />
+      <img src={url} alt={alt} style={{ width: '100%', minHeight: '150px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--gray-light)', cursor: 'pointer', display: 'block' }} onError={() => setFailed(true)} />
     </a>
   )
 }
@@ -1070,12 +1098,14 @@ export default function GradingPage() {
 
               {imageUrls.length > 0 && (
                 <div style={{ marginBottom: '24px' }}>
-                  <div style={{ fontSize: '11px', fontWeight: 500, color: 'var(--gray-mid)', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '1px' }}>Submitted photos ({imageUrls.length})</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 200px))', gap: '12px' }}>
-                    {imageUrls.map((url, i) => (
-                      <SubmissionImage key={i} url={url} alt={'Submission ' + (i + 1)} style={{ width: '100%', minHeight: '150px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--gray-light)', cursor: 'pointer' }} />
-                    ))}
-                  </div>
+                  <div style={{ fontSize: '11px', fontWeight: 500, color: 'var(--gray-mid)', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '1px' }}>Submitted files ({imageUrls.length})</div>
+                  {imageUrls.map((url, i) => {
+                    const lc = url.toLowerCase()
+                    const isPdf = lc.includes('.pdf') || lc.includes('application%2Fpdf')
+                    return isPdf
+                      ? <SubmissionFile key={i} url={url} alt={`Submission ${i + 1}`} inline />
+                      : <div key={i} style={{ marginBottom: '12px' }}><SubmissionFile url={url} alt={`Submission ${i + 1}`} /></div>
+                  })}
                 </div>
               )}
 

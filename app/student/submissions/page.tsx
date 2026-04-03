@@ -50,6 +50,20 @@ type Question = { id: string; order: number; questionText: string; questionType:
 
 function SubmissionImage({ url, alt, style }: { url: string; alt: string; style?: React.CSSProperties }) {
   const [failed, setFailed] = useState(false)
+  const isPdf = url.toLowerCase().includes('.pdf') || url.toLowerCase().includes('application%2Fpdf')
+
+  if (isPdf) {
+    return (
+      <div style={{ width: '100%', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--gray-light)', marginBottom: '8px' }}>
+        <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--gray-mid)', padding: '6px 12px', background: 'var(--gray-light)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>📄 {alt}</span>
+          <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--plum)', textDecoration: 'none', fontSize: '11px', fontWeight: 600 }}>Open ↗</a>
+        </div>
+        <iframe src={url} style={{ width: '100%', height: '500px', border: 'none', display: 'block' }} title={alt} />
+      </div>
+    )
+  }
+
   if (failed) {
     return (
       <a href={url} target="_blank" rel="noopener noreferrer" style={{
@@ -61,12 +75,12 @@ function SubmissionImage({ url, alt, style }: { url: string; alt: string; style?
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
         </svg>
-        View file
+        Open file ↗
       </a>
     )
   }
   return (
-    <a href={url} target="_blank" rel="noopener noreferrer">
+    <a href={url} target="_blank" rel="noopener noreferrer" style={{ display: 'block' }}>
       <img src={url} alt={alt} style={style} onError={() => setFailed(true)} />
     </a>
   )
