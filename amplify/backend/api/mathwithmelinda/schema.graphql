@@ -146,6 +146,7 @@ type TeacherProfile @model {
   displayName: String
   bio: String
   profilePictureKey: String
+  teachingVoice: String
 }
 
 type VideoWatch @model {
