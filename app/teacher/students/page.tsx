@@ -196,6 +196,14 @@ export default function StudentsPage() {
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
 
+  const [archiveConfirmId, setArchiveConfirmId] = useState<string | null>(null)
+  const [archivingId, setArchivingId] = useState<string | null>(null)
+  const [archiveError, setArchiveError] = useState<string | null>(null)
+  const [showArchived, setShowArchived] = useState(false)
+  const [yearEndConfirm, setYearEndConfirm] = useState(false)
+  const [yearEndRunning, setYearEndRunning] = useState(false)
+  const [yearEndProgress, setYearEndProgress] = useState({ done: 0, total: 0 })
+
   // Pending approval modal
   const [approveStudent, setApproveStudent] = useState<Student | null>(null)
   // Decline modal
@@ -464,6 +472,51 @@ export default function StudentsPage() {
     }
   }
 
+  async function archiveStudent(s: Student) {
+    setArchivingId(s.id)
+    setArchiveError(null)
+    try {
+      const res = await fetch('/api/archive-student', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: s.userId, profileId: s.id }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Archive failed')
+      // Update local state: profile stays in list but as archived
+      setStudents(prev => prev.map(st => st.id === s.id ? { ...st, status: 'archived' } : st))
+      setArchiveConfirmId(null)
+    } catch (err: any) {
+      console.error(err)
+      setArchiveError(err.message || 'Something went wrong')
+    } finally {
+      setArchivingId(null)
+    }
+  }
+
+  async function archiveAllStudents() {
+    const toArchive = activeStudents.filter(s => s.status === 'active')
+    setYearEndRunning(true)
+    setYearEndProgress({ done: 0, total: toArchive.length })
+    let done = 0
+    for (const s of toArchive) {
+      try {
+        await fetch('/api/archive-student', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: s.userId, profileId: s.id }),
+        })
+        setStudents(prev => prev.map(st => st.id === s.id ? { ...st, status: 'archived' } : st))
+      } catch (err) {
+        console.error('Failed to archive', s.firstName, s.lastName, err)
+      }
+      done++
+      setYearEndProgress({ done, total: toArchive.length })
+    }
+    setYearEndRunning(false)
+    setYearEndConfirm(false)
+  }
+
   async function createInvite() {
     if (!studentName.trim() || !studentEmail.trim()) return
     setCreating(true)
@@ -502,9 +555,10 @@ export default function StudentsPage() {
   for (const inv of invites) inviteMap[inv.studentEmail.toLowerCase()] = inv
 
   const pendingStudents = students.filter(s => s.status === 'pending')
-  const activeStudents = students.filter(s => s.status !== 'removed' && s.status !== 'pending' && s.status !== 'declined')
+  const activeStudents = students.filter(s => s.status !== 'removed' && s.status !== 'pending' && s.status !== 'declined' && s.status !== 'archived')
   const removedStudents = students.filter(s => s.status === 'removed')
   const declinedStudents = students.filter(s => s.status === 'declined')
+  const archivedStudents = students.filter(s => s.status === 'archived')
 
   const filteredStudents = activeStudents
     .filter(s => {
@@ -550,6 +604,60 @@ export default function StudentsPage() {
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#b91c1c" strokeWidth="2" style={{ flexShrink: 0, marginTop: '2px' }}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
             <span style={{ fontSize: '13px', color: '#b91c1c', flex: 1 }}>{deleteError}</span>
             <button onClick={() => setDeleteError(null)} style={{ background: 'none', border: 'none', color: '#b91c1c', cursor: 'pointer', fontSize: '16px', lineHeight: 1, padding: 0 }}>×</button>
+          </div>
+        )}
+
+        {/* ── ARCHIVE ERROR BANNER ── */}
+        {archiveError && (
+          <div style={{ background: '#FEF2F2', border: '1px solid #fca5a5', borderRadius: '10px', padding: '14px 18px', marginBottom: '20px', display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#b91c1c" strokeWidth="2" style={{ flexShrink: 0, marginTop: '2px' }}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <span style={{ fontSize: '13px', color: '#b91c1c', flex: 1 }}>{archiveError}</span>
+            <button onClick={() => setArchiveError(null)} style={{ background: 'none', border: 'none', color: '#b91c1c', cursor: 'pointer', fontSize: '16px', lineHeight: 1, padding: 0 }}>×</button>
+          </div>
+        )}
+
+        {/* ── YEAR-END ARCHIVE MODAL ── */}
+        {yearEndConfirm && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+            <div style={{ background: 'var(--background)', borderRadius: '16px', padding: '32px', maxWidth: '480px', width: '100%', boxShadow: '0 24px 64px rgba(0,0,0,0.25)' }}>
+              <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px' }}>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#D97706" strokeWidth="2"><path d="M21 8v13H3V8"/><path d="M23 3H1v5h22V3z"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
+              </div>
+              <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', color: 'var(--foreground)', marginBottom: '10px' }}>End of Year — Archive All Students</h2>
+              <p style={{ fontSize: '14px', color: 'var(--gray-mid)', lineHeight: 1.6, marginBottom: '16px' }}>
+                This will archive all <strong>{activeStudents.filter(s => s.status === 'active').length} active students</strong>:
+              </p>
+              <ul style={{ fontSize: '13px', color: 'var(--gray-mid)', lineHeight: 1.8, paddingLeft: '20px', marginBottom: '20px' }}>
+                <li>Their <strong>Cognito login is deleted</strong> — they cannot sign in next year</li>
+                <li>All <strong>grades, submissions, and comments are preserved</strong> for your records</li>
+                <li>Student names remain visible in the gradebook and grade history</li>
+                <li>To re-enroll next year, they create a <strong>fresh account</strong> and you approve them again</li>
+              </ul>
+              {yearEndRunning && (
+                <div style={{ marginBottom: '20px' }}>
+                  <div style={{ fontSize: '13px', color: 'var(--gray-mid)', marginBottom: '8px' }}>
+                    Archiving… {yearEndProgress.done} / {yearEndProgress.total}
+                  </div>
+                  <div style={{ height: '6px', background: 'var(--gray-light)', borderRadius: '3px', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', background: 'var(--plum)', borderRadius: '3px', width: `${yearEndProgress.total > 0 ? (yearEndProgress.done / yearEndProgress.total) * 100 : 0}%`, transition: 'width 0.3s ease' }} />
+                  </div>
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  onClick={() => setYearEndConfirm(false)}
+                  disabled={yearEndRunning}
+                  style={{ flex: 1, padding: '11px', borderRadius: '8px', border: '1px solid var(--gray-light)', background: 'transparent', color: 'var(--gray-mid)', fontSize: '14px', cursor: yearEndRunning ? 'not-allowed' : 'pointer', fontFamily: 'var(--font-body)' }}>
+                  Cancel
+                </button>
+                <button
+                  onClick={archiveAllStudents}
+                  disabled={yearEndRunning}
+                  style={{ flex: 2, padding: '11px', borderRadius: '8px', border: 'none', background: yearEndRunning ? '#92400E' : '#D97706', color: 'white', fontSize: '14px', fontWeight: 600, cursor: yearEndRunning ? 'not-allowed' : 'pointer', fontFamily: 'var(--font-body)' }}>
+                  {yearEndRunning ? `Archiving ${yearEndProgress.done}/${yearEndProgress.total}…` : 'Archive All Students'}
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
@@ -714,11 +822,19 @@ export default function StudentsPage() {
         )}
 
         {/* ── STUDENTS ROSTER ── */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '24px' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '24px', gap: '16px', flexWrap: 'wrap' }}>
           <div>
             <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '32px', color: 'var(--foreground)', marginBottom: '6px' }}>Students</h1>
             <p style={{ color: 'var(--gray-mid)', fontSize: '14px' }}>{activeStudents.length} enrolled across {courses.length} courses</p>
           </div>
+          {activeStudents.filter(s => s.status === 'active').length > 0 && (
+            <button
+              onClick={() => setYearEndConfirm(true)}
+              style={{ display: 'flex', alignItems: 'center', gap: '7px', padding: '9px 18px', borderRadius: '8px', border: '1px solid #FDE68A', background: '#FFFBEB', color: '#92400E', fontSize: '13px', fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font-body)', whiteSpace: 'nowrap' }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 8v13H3V8"/><path d="M23 3H1v5h22V3z"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
+              End of Year…
+            </button>
+          )}
         </div>
 
         {/* Filters */}
@@ -819,6 +935,11 @@ export default function StudentsPage() {
                         {isEditing ? 'Cancel' : 'Edit'}
                       </button>
                       <button
+                        onClick={() => setArchiveConfirmId(archiveConfirmId === s.id ? null : s.id)}
+                        style={{ background: archiveConfirmId === s.id ? '#FEF3C7' : 'transparent', color: '#92400E', border: '1px solid #FDE68A', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}>
+                        Archive
+                      </button>
+                      <button
                         onClick={() => setRemoveConfirmId(isRemoving ? null : s.id)}
                         style={{ background: 'transparent', color: '#ef4444', border: '1px solid #fca5a5', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}>
                         Remove
@@ -909,6 +1030,28 @@ export default function StudentsPage() {
                         {savingEdit ? 'Saving...' : 'Save Changes'}
                       </button>
                       </div>
+                    </div>
+                  )}
+
+                  {/* Archive confirm */}
+                  {archiveConfirmId === s.id && (
+                    <div style={{ borderTop: '1px solid #FDE68A', padding: '12px 20px', background: '#FFFBEB', display: 'flex', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap' }}>
+                      <div style={{ flex: 1, minWidth: '200px' }}>
+                        <div style={{ fontSize: '13px', color: '#92400E', fontWeight: 500, marginBottom: '4px' }}>
+                          Archive {s.firstName} {s.lastName} for the year?
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#92400E', opacity: 0.8 }}>
+                          Their login is removed — all grades and history are preserved. They re-enroll fresh next year.
+                        </div>
+                      </div>
+                      <button onClick={() => archiveStudent(s)} disabled={archivingId === s.id}
+                        style={{ background: '#D97706', color: 'white', border: 'none', padding: '7px 16px', borderRadius: '6px', cursor: archivingId === s.id ? 'not-allowed' : 'pointer', fontSize: '13px', fontWeight: 500, whiteSpace: 'nowrap' }}>
+                        {archivingId === s.id ? 'Archiving…' : 'Yes, Archive'}
+                      </button>
+                      <button onClick={() => setArchiveConfirmId(null)}
+                        style={{ background: 'transparent', color: '#92400E', border: '1px solid #FDE68A', padding: '7px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px' }}>
+                        Cancel
+                      </button>
                     </div>
                   )}
 
@@ -1036,6 +1179,55 @@ export default function StudentsPage() {
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* ── ARCHIVED STUDENTS ── */}
+        {archivedStudents.length > 0 && (
+          <div style={{ marginBottom: '56px' }}>
+            <button
+              onClick={() => setShowArchived(v => !v)}
+              style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'none', border: 'none', cursor: 'pointer', padding: '0 0 12px', fontFamily: 'var(--font-body)' }}
+            >
+              <span style={{ fontSize: '11px', fontWeight: 500, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--gray-mid)' }}>
+                Archived — Past Students ({archivedStudents.length})
+              </span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--gray-mid)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                style={{ transform: showArchived ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+            </button>
+            {showArchived && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {archivedStudents
+                  .slice()
+                  .sort((a, b) => (a.firstName + a.lastName).localeCompare(b.firstName + b.lastName))
+                  .map(s => {
+                    const courseName = s.courseId ? (courseMap[s.courseId] || '') : ''
+                    return (
+                      <div key={s.id} style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', padding: '12px 20px', display: 'flex', alignItems: 'center', gap: '16px', opacity: 0.75 }}>
+                        <div style={{ width: '34px', height: '34px', borderRadius: '50%', background: 'var(--gray-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--gray-mid)' }}>{s.firstName.charAt(0)}{s.lastName.charAt(0)}</span>
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            <span style={{ fontWeight: 600, fontSize: '14px', color: 'var(--foreground)' }}>{s.firstName} {s.lastName}</span>
+                            {courseName && (
+                              <span style={{ background: 'var(--gray-light)', color: 'var(--gray-dark)', fontSize: '11px', padding: '2px 8px', borderRadius: '20px' }}>{courseName}</span>
+                            )}
+                            <span style={{ background: 'var(--gray-light)', color: 'var(--gray-mid)', fontSize: '11px', fontWeight: 500, padding: '2px 8px', borderRadius: '20px' }}>Archived</span>
+                          </div>
+                          <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginTop: '2px' }}>{s.email}</div>
+                        </div>
+                        <span style={{ fontSize: '11px', color: 'var(--gray-mid)', whiteSpace: 'nowrap' }}>History preserved</span>
+                      </div>
+                    )
+                  })}
+                <p style={{ fontSize: '12px', color: 'var(--gray-mid)', fontStyle: 'italic', marginTop: '4px' }}>
+                  These students&apos; grades and submissions remain accessible in your gradebook and grade history. Their login has been removed — to re-enroll next year, they sign up fresh.
+                </p>
+              </div>
+            )}
           </div>
         )}
 
