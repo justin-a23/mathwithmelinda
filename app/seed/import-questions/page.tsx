@@ -77,6 +77,7 @@ export default function ImportQuestionsPage() {
   const [error, setError] = useState('')
   const [loaded, setLoaded] = useState(false)
   const [clearFirst, setClearFirst] = useState(false)
+  const [instructionsResult, setInstructionsResult] = useState<'ok' | 'error' | null>(null)
 
   async function loadCourses() {
     try {
@@ -153,10 +154,16 @@ export default function ImportQuestionsPage() {
 
         // instructions row → update the lesson's instructions field, not a question
         if (row.type === 'instructions') {
-          await client.graphql({
-            query: updateLessonTemplate,
-            variables: { input: { id: selectedLesson, instructions: row.text } },
-          })
+          try {
+            await client.graphql({
+              query: updateLessonTemplate,
+              variables: { input: { id: selectedLesson, instructions: row.text } },
+            })
+            setInstructionsResult('ok')
+          } catch (instrErr) {
+            console.error('Instructions update failed:', instrErr)
+            setInstructionsResult('error')
+          }
           continue
         }
 
@@ -224,13 +231,27 @@ export default function ImportQuestionsPage() {
           <div style={{ background: '#dcfce7', border: '1px solid #86efac', borderRadius: '8px', padding: '28px', textAlign: 'center' }}>
             <div style={{ fontFamily: 'var(--font-display)', fontSize: '22px', color: '#16a34a', marginBottom: '8px' }}>
               Imported {parsed.filter(r => r.type !== 'instructions' && r.type !== 'section_header').length} questions
-              {parsed.some(r => r.type === 'instructions') ? ' + instructions' : ''}
             </div>
-            <div style={{ color: '#166534', fontSize: '14px', marginBottom: '20px' }}>
+            <div style={{ color: '#166534', fontSize: '14px', marginBottom: '12px' }}>
               Into: {selectedLessonObj ? `Lesson ${selectedLessonObj.lessonNumber} — ${selectedLessonObj.title}` : ''}
             </div>
+            {instructionsResult === 'ok' && (
+              <div style={{ color: '#166534', fontSize: '13px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontWeight: 700 }}>✓</span> Lesson instructions updated
+              </div>
+            )}
+            {instructionsResult === 'error' && (
+              <div style={{ color: '#dc2626', fontSize: '13px', marginBottom: '20px', fontWeight: 500 }}>
+                ⚠ Instructions row found but update failed — check console for details
+              </div>
+            )}
+            {instructionsResult === null && parsed.some(r => r.type === 'instructions') && (
+              <div style={{ color: '#854d0e', fontSize: '13px', marginBottom: '20px' }}>
+                ⚠ Instructions row was in the CSV but did not run
+              </div>
+            )}
             <button
-              onClick={() => { setDone(false); setCsvText(''); setParsed([]); setSelectedLesson('') }}
+              onClick={() => { setDone(false); setCsvText(''); setParsed([]); setSelectedLesson(''); setInstructionsResult(null) }}
               style={{ background: 'var(--plum)', color: 'white', padding: '10px 24px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '14px' }}>
               Import Another Lesson
             </button>
