@@ -354,25 +354,38 @@ export default function StudentSubmissions() {
                     )}
 
                     {/* Answers section */}
-                    {questions.length > 0 && (
+                    {questions.filter(q => q.questionType !== 'section_header' && q.questionType !== 'show_work').length > 0 && (
                       <div style={{ marginTop: '16px' }}>
                         <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--foreground)', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '1px' }}>
                           Answers
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                          {questions.map((q, idx) => (
-                            <div key={q.id} style={{ padding: '12px 14px', background: 'var(--page-bg)', borderRadius: 'var(--radius)', border: '1px solid var(--gray-light)' }}>
-                              <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--gray-mid)', marginBottom: '6px' }}>
-                                {idx + 1}.{' '}<MathRenderer text={q.questionText} />
-                              </div>
-                              <div style={{ fontSize: '14px', color: 'var(--foreground)' }}>
-                                {answers[q.id]
-                                  ? <MathRenderer text={answers[q.id]} />
-                                  : <span style={{ color: 'var(--gray-mid)' }}>No answer provided</span>
-                                }
-                              </div>
-                            </div>
-                          ))}
+                          {(() => {
+                            let qNum = 0
+                            return questions.map((q) => {
+                              const isHeader = q.questionType === 'section_header'
+                              const isShowWork = q.questionType === 'show_work'
+                              if (!isHeader) qNum++
+                              if (isHeader || isShowWork) return null
+                              const bookNumMatch = q.questionText.match(/^(\d+\.)\s([\s\S]*)$/)
+                              const qLabel = bookNumMatch ? bookNumMatch[1] : `${qNum}.`
+                              const qBody = bookNumMatch ? bookNumMatch[2] : q.questionText
+                              return (
+                                <div key={q.id} style={{ padding: '12px 14px', background: 'var(--page-bg)', borderRadius: 'var(--radius)', border: '1px solid var(--gray-light)' }}>
+                                  <div style={{ display: 'flex', gap: '8px', fontSize: '13px', fontWeight: 600, color: 'var(--gray-mid)', marginBottom: '6px' }}>
+                                    <span style={{ flexShrink: 0 }}>{qLabel}</span>
+                                    <MathRenderer text={qBody} />
+                                  </div>
+                                  <div style={{ fontSize: '14px', color: 'var(--foreground)' }}>
+                                    {answers[q.id]
+                                      ? <MathRenderer text={answers[q.id]} />
+                                      : <span style={{ color: 'var(--gray-mid)' }}>No answer provided</span>
+                                    }
+                                  </div>
+                                </div>
+                              )
+                            })
+                          })()}
                         </div>
                       </div>
                     )}
