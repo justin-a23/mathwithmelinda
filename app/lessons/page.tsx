@@ -155,8 +155,6 @@ function LessonPageInner() {
   const [loading, setLoading] = useState(true)
   const [lessonTemplate, setLessonTemplate] = useState<LessonTemplateData | null>(null)
   const [answers, setAnswers] = useState<Record<string, string>>({})
-  const [showWorkFiles, setShowWorkFiles] = useState<Record<string, UploadedFile[]>>({})
-  const showWorkInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
   const [studentName, setStudentName] = useState('')
 
   const [existingSubmissionId, setExistingSubmissionId] = useState<string | null>(null)
@@ -521,28 +519,6 @@ function LessonPageInner() {
     }
   }
 
-  async function uploadShowWorkFile(questionId: string, file: File) {
-    const uid = `${Date.now()}-${Math.random().toString(36).slice(2)}`
-    setShowWorkFiles(prev => ({ ...prev, [questionId]: [...(prev[questionId] || []), { uid, name: file.name, key: '', status: 'uploading' as const, progress: 0 }] }))
-    try {
-      const formData = new FormData()
-      formData.append('file', file)
-      formData.append('studentId', user?.signInDetails?.loginId || user?.userId || 'unknown')
-      formData.append('lessonId', planItem?.lesson?.id || itemId || 'unknown')
-      const res = await fetch('/api/submit', { method: 'POST', body: formData })
-      if (!res.ok) throw new Error('Upload failed')
-      const { key } = await res.json()
-      setShowWorkFiles(prev => ({
-        ...prev,
-        [questionId]: (prev[questionId] || []).map(f => f.uid === uid ? { ...f, key, status: 'done' as const, progress: 100 } : f)
-      }))
-    } catch {
-      setShowWorkFiles(prev => ({
-        ...prev,
-        [questionId]: (prev[questionId] || []).map(f => f.uid === uid ? { ...f, status: 'error' as const } : f)
-      }))
-    }
-  }
 
   async function handleSubmit() {
     const assignmentType = lessonTemplate?.assignmentType || 'upload'
@@ -601,9 +577,6 @@ function LessonPageInner() {
         dueDateTime,
         lessonTemplateId: lessonTemplate?.id || null,
         answers,
-        showWorkFiles: Object.fromEntries(
-          Object.entries(showWorkFiles).map(([qId, fs]) => [qId, fs.filter(f => f.status === 'done').map(f => f.key)])
-        )
       }
       if (existingSubmissionId) {
         const { updateSubmission } = await import('../../src/graphql/mutations')
@@ -987,22 +960,7 @@ function LessonPageInner() {
                             </div>
                           )}
                           {q.questionType === 'show_work' && (
-                            <div>
-                              <p style={{ fontSize: '13px', color: 'var(--gray-mid)', marginBottom: '8px' }}>Upload a photo of your work for this question.</p>
-                              <div onClick={() => showWorkInputRefs.current[q.id]?.click()}
-                                style={{ border: '2px dashed var(--gray-light)', borderRadius: '8px', padding: '16px', textAlign: 'center', cursor: 'pointer', marginBottom: '8px' }}>
-                                <input type="file" accept="image/*,.heic,.heif" ref={el => { showWorkInputRefs.current[q.id] = el }} style={{ display: 'none' }}
-                                  onChange={e => { if (e.target.files) Array.from(e.target.files).forEach(f => uploadShowWorkFile(q.id, f)) }} />
-                                <div style={{ color: 'var(--gray-mid)', fontSize: '14px' }}>+ Tap to upload photo</div>
-                              </div>
-                              {(showWorkFiles[q.id] || []).map((f, i) => (
-                                <div key={i} style={{ background: 'var(--gray-light)', borderRadius: '6px', padding: '8px 12px', fontSize: '13px', color: 'var(--foreground)', display: 'flex', justifyContent: 'space-between' }}>
-                                  <span>{f.name}</span>
-                                  {f.status === 'done' && <span style={{ color: 'var(--plum)', fontWeight: 500 }}>✓ Ready</span>}
-                                  {f.status === 'uploading' && <span style={{ color: 'var(--gray-mid)' }}>Uploading...</span>}
-                                </div>
-                              ))}
-                            </div>
+                            <p style={{ fontSize: '13px', color: 'var(--gray-mid)', fontStyle: 'italic', margin: '4px 0 0' }}>Show your work on paper — submit a photo below.</p>
                           )}
                         </div>
                           )
