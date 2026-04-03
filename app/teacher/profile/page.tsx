@@ -20,6 +20,7 @@ const getTeacherProfileQuery = /* GraphQL */`
         displayName
         bio
         profilePictureKey
+        teachingVoice
       }
     }
   }
@@ -45,6 +46,7 @@ const updateTeacherProfileMutation = /* GraphQL */`
       displayName
       bio
       profilePictureKey
+      teachingVoice
     }
   }
 `
@@ -57,6 +59,7 @@ type TeacherProfile = {
   displayName: string | null
   bio: string | null
   profilePictureKey: string | null
+  teachingVoice: string | null
 }
 
 const inputStyle: React.CSSProperties = {
@@ -81,6 +84,7 @@ export default function TeacherProfilePage() {
 
   const [displayName, setDisplayName] = useState('')
   const [bio, setBio] = useState('')
+  const [teachingVoice, setTeachingVoice] = useState('')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [saveError, setSaveError] = useState('')
@@ -131,6 +135,7 @@ export default function TeacherProfilePage() {
           setProfile(p)
           setDisplayName(p.displayName || '')
           setBio(p.bio || '')
+          setTeachingVoice(p.teachingVoice || '')
           if (p.profilePictureKey) {
             // Base64 data URLs are used directly; legacy S3 keys fetch a signed URL
             if (p.profilePictureKey.startsWith('data:')) {
@@ -170,12 +175,12 @@ export default function TeacherProfilePage() {
     try {
       const result = await client.graphql({
         query: updateTeacherProfileMutation,
-        variables: { input: { id: profile.id, displayName: displayName.trim(), bio: bio.trim() } },
+        variables: { input: { id: profile.id, displayName: displayName.trim(), bio: bio.trim(), teachingVoice: teachingVoice.trim() } },
       }) as any
       if (result.errors && result.errors.length > 0) {
         throw new Error(result.errors[0].message)
       }
-      setProfile(prev => prev ? { ...prev, displayName: displayName.trim(), bio: bio.trim() } : prev)
+      setProfile(prev => prev ? { ...prev, displayName: displayName.trim(), bio: bio.trim(), teachingVoice: teachingVoice.trim() } : prev)
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
     } catch (err: any) {
@@ -281,7 +286,7 @@ export default function TeacherProfilePage() {
     ? displayName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
     : email.slice(0, 2).toUpperCase()
 
-  const isDirty = displayName.trim() !== (profile?.displayName || '') || bio.trim() !== (profile?.bio || '')
+  const isDirty = displayName.trim() !== (profile?.displayName || '') || bio.trim() !== (profile?.bio || '') || teachingVoice.trim() !== (profile?.teachingVoice || '')
 
   if (checking) return null
 
@@ -378,6 +383,30 @@ export default function TeacherProfilePage() {
                 </button>
                 {saved && <span style={{ fontSize: '13px', color: '#16a34a', fontWeight: 500 }}>✓ Saved!</span>}
                 {saveError && <span style={{ fontSize: '13px', color: '#b91c1c', fontWeight: 500 }}>{saveError}</span>}
+              </div>
+            </div>
+
+            {/* Teaching Voice for AI */}
+            <div style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', padding: '28px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 500, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--gray-mid)', marginBottom: '6px' }}>AI Teaching Voice</div>
+              <p style={{ fontSize: '13px', color: 'var(--gray-mid)', marginBottom: '16px', lineHeight: 1.5 }}>
+                Describe how you like to communicate with students. The AI will use this when writing grade comments in your voice.
+              </p>
+              <textarea
+                value={teachingVoice}
+                onChange={e => setTeachingVoice(e.target.value)}
+                placeholder={`e.g. I'm warm and encouraging but direct. I like to point out exactly where a student went wrong, then walk through the correct steps. I use phrases like "Great effort!" and "Here's the key thing to remember:". I keep comments to 2–3 sentences.`}
+                rows={5}
+                style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.5, marginBottom: '16px' }}
+              />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <button
+                  onClick={saveInfo}
+                  disabled={saving || !isDirty}
+                  style={{ background: 'var(--plum)', color: 'white', border: 'none', padding: '9px 22px', borderRadius: '8px', cursor: isDirty ? 'pointer' : 'not-allowed', fontSize: '14px', fontWeight: 500, opacity: isDirty ? 1 : 0.5 }}>
+                  {saving ? 'Saving…' : 'Save'}
+                </button>
+                {saved && <span style={{ fontSize: '13px', color: '#16a34a', fontWeight: 500 }}>✓ Saved!</span>}
               </div>
             </div>
 

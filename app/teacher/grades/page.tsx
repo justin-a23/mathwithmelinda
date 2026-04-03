@@ -330,6 +330,9 @@ export default function GradingPage() {
   const [videoWatchMap, setVideoWatchMap] = useState<Record<string, VideoWatchRecord>>({})
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [aiSuggesting, setAiSuggesting] = useState(false)
+  const [aiError, setAiError] = useState('')
+  const [teachingVoice, setTeachingVoice] = useState('')
   const [expandedStudents, setExpandedStudents] = useState<Set<string>>(new Set())
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date())
   const [refreshing, setRefreshing] = useState(false)
@@ -343,6 +346,7 @@ export default function GradingPage() {
     fetchSubmissions()
     fetchStudentProfiles()
     fetchVideoWatches()
+    fetchTeachingVoice()
   }, [])
 
   // Auto-refresh submissions every 60 seconds
@@ -419,6 +423,52 @@ export default function GradingPage() {
     }
   }
 
+  async function fetchTeachingVoice() {
+    try {
+      const userId = user?.userId || user?.username || ''
+      const result = await (client.graphql({
+        query: `query GetTeacherProfile($userId: String!) { listTeacherProfiles(filter: { userId: { eq: $userId } }, limit: 1) { items { teachingVoice } } }`,
+        variables: { userId }
+      }) as any)
+      const items = result.data?.listTeacherProfiles?.items || []
+      if (items.length > 0) setTeachingVoice(items[0].teachingVoice || '')
+    } catch { /* silent */ }
+  }
+
+  async function suggestWithAI() {
+    if (!selectedSubmission) return
+    const parsed = (() => { try { return JSON.parse(selectedSubmission.content || '{}') } catch { return {} } })()
+    if (!parsed.files || parsed.files.length === 0) {
+      setAiError('No photo submission found — AI grading requires a submitted photo.')
+      return
+    }
+    setAiSuggesting(true)
+    setAiError('')
+    try {
+      const studentName = studentNameMap[selectedSubmission.studentId] || selectedSubmission.studentId
+      const lessonTitle = getSubmissionTitle(selectedSubmission)
+      const res = await fetch('/api/grade-suggestion', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          imageKeys: parsed.files,
+          questions: questions.map(q => ({ questionText: q.questionText, questionType: q.questionType })),
+          studentName,
+          lessonTitle,
+          teachingVoice,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'AI suggestion failed')
+      if (data.grade) setGrade(data.grade)
+      if (data.comment) setComment(data.comment)
+    } catch (err: any) {
+      setAiError(err.message || 'AI suggestion failed. Please try again.')
+    } finally {
+      setAiSuggesting(false)
+    }
+  }
+
   async function fetchPresignedUrl(key: string): Promise<string> {
     const res = await fetch('/api/view-submission', {
       method: 'POST',
@@ -442,6 +492,7 @@ export default function GradingPage() {
     setImageUrls([])
     setQuestions([])
     setShowWorkImageUrls({})
+    setAiError('')
 
     if (!submission.content) return
     try {
@@ -1082,6 +1133,29 @@ export default function GradingPage() {
                   </div>
                 )
               })()}
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+                <button
+                  onClick={suggestWithAI}
+                  disabled={aiSuggesting}
+                  style={{ display: 'flex', alignItems: 'center', gap: '7px', background: aiSuggesting ? 'var(--gray-light)' : 'var(--plum-light)', color: aiSuggesting ? 'var(--gray-mid)' : 'var(--plum)', border: '1px solid var(--plum-mid)', padding: '8px 16px', borderRadius: '8px', cursor: aiSuggesting ? 'not-allowed' : 'pointer', fontSize: '13px', fontWeight: 600, fontFamily: 'var(--font-body)' }}>
+                  {aiSuggesting ? (
+                    <>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ animation: 'spin 0.8s linear infinite' }}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                      Analyzing…
+                    </>
+                  ) : (
+                    <>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+                      Suggest with AI
+                    </>
+                  )}
+                </button>
+                {aiError && <span style={{ fontSize: '12px', color: '#b91c1c' }}>{aiError}</span>}
+                {!aiError && !aiSuggesting && (grade || comment) && (
+                  <span style={{ fontSize: '12px', color: 'var(--gray-mid)', fontStyle: 'italic' }}>Edit the suggestion below before saving</span>
+                )}
+              </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '16px', marginBottom: '20px' }}>
                 <div>
