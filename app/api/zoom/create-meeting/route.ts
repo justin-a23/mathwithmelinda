@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 async function getZoomAccessToken(): Promise<string> {
-  const accountId = process.env.ZOOM_ACCOUNT_ID!
-  const clientId = process.env.ZOOM_CLIENT_ID!
-  const clientSecret = process.env.ZOOM_CLIENT_SECRET!
+  const accountId = (process.env.ZOOM_ACCOUNT_ID || '').trim()
+  const clientId = (process.env.ZOOM_CLIENT_ID || '').trim()
+  const clientSecret = (process.env.ZOOM_CLIENT_SECRET || '').trim()
+
+  console.log('Zoom creds check — accountId length:', accountId.length, '| clientId length:', clientId.length, '| secret length:', clientSecret.length)
 
   const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64')
 
