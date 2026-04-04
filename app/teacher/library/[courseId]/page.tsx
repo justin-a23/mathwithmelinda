@@ -116,6 +116,9 @@ export default function LessonLibraryPage() {
   const [editForm, setEditForm] = useState<EditForm>({ title: '', lessonNumber: '', instructions: '', teachingNotes: '', worksheetUrl: '', videoUrl: '', assignmentType: 'none', lessonCategory: 'lesson' })
   const [saving, setSaving] = useState(false)
   const [videoUpload, setVideoUpload] = useState<UploadState>({ uploading: false, progress: 0, error: '' })
+  const [orphanVideos, setOrphanVideos] = useState<{ key: string; label: string }[] | null>(null)
+  const [loadingOrphans, setLoadingOrphans] = useState(false)
+  const [showOrphanPicker, setShowOrphanPicker] = useState(false)
   const [worksheetUpload, setWorksheetUpload] = useState<UploadState>({ uploading: false, progress: 0, error: '' })
   const [videoFile, setVideoFile] = useState<File | null>(null)
   const [worksheetFile, setWorksheetFile] = useState<File | null>(null)
@@ -889,6 +892,58 @@ export default function LessonLibraryPage() {
                               </div>
                             )}
                             {videoUpload.error && <p style={{ color: '#e05252', fontSize: '13px', marginBottom: '8px' }}>{videoUpload.error}</p>}
+
+                            {/* Attach an existing unattached video */}
+                            <div style={{ marginBottom: '16px' }}>
+                              <button
+                                onClick={async () => {
+                                  if (showOrphanPicker) { setShowOrphanPicker(false); return }
+                                  setShowOrphanPicker(true)
+                                  if (orphanVideos !== null) return // already loaded
+                                  setLoadingOrphans(true)
+                                  try {
+                                    const res = await fetch(`/api/orphan-videos?courseTitle=${encodeURIComponent(course?.title || '')}`)
+                                    const data = await res.json()
+                                    setOrphanVideos(data.orphans || [])
+                                  } catch { setOrphanVideos([]) }
+                                  finally { setLoadingOrphans(false) }
+                                }}
+                                style={{ background: 'none', border: '1px dashed var(--gray-light)', color: 'var(--gray-mid)', borderRadius: '6px', padding: '7px 14px', cursor: 'pointer', fontSize: '13px', fontFamily: 'var(--font-body)' }}
+                              >
+                                {showOrphanPicker ? '▲ Hide' : '📎 Attach existing video…'}
+                              </button>
+
+                              {showOrphanPicker && (
+                                <div style={{ marginTop: '10px', padding: '14px', background: 'var(--page-bg)', border: '1px solid var(--gray-light)', borderRadius: '8px' }}>
+                                  <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginBottom: '8px' }}>
+                                    Videos already uploaded to S3 but not attached to any lesson:
+                                  </div>
+                                  {loadingOrphans ? (
+                                    <p style={{ fontSize: '13px', color: 'var(--gray-mid)' }}>Loading…</p>
+                                  ) : !orphanVideos || orphanVideos.length === 0 ? (
+                                    <p style={{ fontSize: '13px', color: 'var(--gray-mid)', fontStyle: 'italic' }}>No unattached videos found for this course.</p>
+                                  ) : (
+                                    <select
+                                      defaultValue=""
+                                      onChange={e => {
+                                        if (!e.target.value) return
+                                        setEditForm(f => ({ ...f, videoUrl: e.target.value }))
+                                        setIsDirty(true)
+                                        setShowOrphanPicker(false)
+                                        // Remove from orphan list immediately so it doesn't show again
+                                        setOrphanVideos(prev => prev?.filter(v => v.key !== e.target.value) ?? null)
+                                      }}
+                                      style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--gray-light)', borderRadius: '6px', fontSize: '13px', fontFamily: 'var(--font-body)', background: 'var(--white)', color: 'var(--foreground)' }}
+                                    >
+                                      <option value="">— pick a video —</option>
+                                      {orphanVideos.map(v => (
+                                        <option key={v.key} value={v.key}>{v.label}</option>
+                                      ))}
+                                    </select>
+                                  )}
+                                </div>
+                              )}
+                            </div>
 
                             {/* Worksheet */}
                             <div style={sectionHeadStyle}>Worksheet</div>
