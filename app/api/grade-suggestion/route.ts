@@ -45,12 +45,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No submission content to review — no photos or digital answers found.' }, { status: 400 })
     }
 
-    // ── Build digital answers summary ──────────────────────────────────────
+    // ── Build question list ────────────────────────────────────────────────
     const questionList = (questions as { id?: string; questionText: string; questionType: string; correctAnswer?: string | null }[])
       .filter(q => q.questionType !== 'section_header')
 
+    // ── Digital answers summary ────────────────────────────────────────────
     let digitalSummary = ''
-    if (hasAnswers && questionList.length > 0) {
+    {
       let qNum = 0
       const lines = questionList
         .filter(q => q.questionType !== 'show_work')
@@ -59,72 +60,75 @@ export async function POST(req: NextRequest) {
           const bookNumMatch = q.questionText.match(/^(\d+\.)\s([\s\S]*)$/)
           const label = bookNumMatch ? bookNumMatch[1] : `${qNum}.`
           const text = bookNumMatch ? bookNumMatch[2] : q.questionText
-          const studentAnswer = q.id ? (answers[q.id] || '(no answer)') : '(no answer)'
-          const correct = q.correctAnswer ? ` [correct: ${q.correctAnswer}]` : ''
-          return `  ${label} ${text}\n     → Student answered: ${studentAnswer}${correct}`
+          const studentAnswer = q.id ? ((answers as Record<string, string>)[q.id] || '(no answer)') : '(no answer)'
+          const correctHint = q.correctAnswer ? ` [correct: ${q.correctAnswer}]` : ''
+          return `  [id:${q.id}] ${label} ${text}\n     → Student answered: ${studentAnswer}${correctHint}`
         })
       if (lines.length > 0) {
-        digitalSummary = `DIGITAL ANSWERS (entered online):\n${lines.join('\n\n')}`
+        digitalSummary = `DIGITAL ANSWERS (compare student answers to [correct:] values if provided):\n${lines.join('\n\n')}`
       }
     }
 
-    const showWorkCount = questionList.filter(q => q.questionType === 'show_work').length
-    const showWorkNote = hasFiles
-      ? `SHOW WORK (${showWorkCount} problem${showWorkCount !== 1 ? 's' : ''} — see uploaded image${(imageKeys as string[]).length > 1 ? 's' : ''} above)`
-      : ''
+    // ── Show-work questions list ───────────────────────────────────────────
+    const showWorkQuestions = questionList.filter(q => q.questionType === 'show_work')
+    const showWorkCount = showWorkQuestions.length
+    let showWorkSummary = ''
+    if (showWorkCount > 0) {
+      if (hasFiles) {
+        let swNum = 0
+        const lines = showWorkQuestions.map(q => {
+          swNum++
+          const bookNumMatch = q.questionText.match(/^(\d+\.)\s([\s\S]*)$/)
+          const label = bookNumMatch ? bookNumMatch[1] : `${swNum}.`
+          const text = bookNumMatch ? bookNumMatch[2] : q.questionText
+          const correctHint = q.correctAnswer ? ` [correct: ${q.correctAnswer}]` : ''
+          return `  [id:${q.id}] ${label} ${text}${correctHint}`
+        })
+        showWorkSummary = `SHOW-WORK QUESTIONS (student wrote answers on paper — see the uploaded worksheet image${showWorkCount > 1 ? 's' : ''}):\n${lines.join('\n')}\nLook at the uploaded image carefully. Find each question and mark it correct or wrong.`
+      } else {
+        showWorkSummary = `SHOW-WORK QUESTIONS: This assignment had ${showWorkCount} show-work problem(s) but the student did NOT upload a photo. Mark all show-work questions as wrong (false).`
+      }
+    }
 
-    // ── Build voice/style instruction ─────────────────────────────────────
+    // ── Voice/style instruction ────────────────────────────────────────────
     const voiceInstruction = teachingVoice?.trim()
       ? teachingVoice.trim()
-      : 'Write in a warm, encouraging, direct tone. Point out the specific mistake and explain the correct approach. Keep the comment to 2 sentences maximum.'
+      : 'Write in a warm, encouraging, direct tone. Point out the specific mistake and explain the correct approach. Keep the comment to 2–3 sentences.'
 
     const curriculumSection = teachingNotes?.trim()
-      ? `\nCURRICULUM METHOD (Abeka — grade against this, not other approaches):\n${teachingNotes.trim()}`
+      ? `\nCURRICULUM METHOD (Abeka — grade against this method, not other approaches):\n${teachingNotes.trim()}`
       : ''
 
-    const showWorkQuestionCount = (questions as { questionType: string }[]).filter(q => q.questionType === 'show_work').length
-    const expectedUploadCount = showWorkQuestionCount > 0 ? showWorkQuestionCount : 0
-    const actualUploadCount = hasFiles ? (imageKeys as string[]).length : 0
-    const missingUploadNote = expectedUploadCount > 0 && actualUploadCount === 0
-      ? `\nWARNING: This assignment has ${expectedUploadCount} show-work problem(s) that require a photo upload. NO photo was uploaded. Treat all show-work questions as unanswered (0 credit).`
-      : ''
+    const systemPrompt = `You are grading a math assignment for a homeschool teacher named Melinda.
 
-    const systemPrompt = `You are helping a homeschool math teacher named Melinda grade student work.
+Teacher's feedback style: ${voiceInstruction}${curriculumSection}
 
-Teacher's style instructions: ${voiceInstruction}${curriculumSection}
+GRADING RULES:
+1. Grade on a 0–100 scale. Every non-header question has equal weight.
+2. DIGITAL questions: compare the student's answer to the [correct:] value if one is given. Blank answer = wrong.
+3. SHOW-WORK questions: examine the uploaded image carefully. Find the question number on the worksheet and determine if the student's work and answer are correct. Mark true or false.
+4. If no [correct:] hint is given and you can't verify an answer from the image, mark it false (don't guess correct).
+5. Never give 100% unless every question is clearly correct.
 
-GRADING RULES — follow these exactly:
-1. Grade on a 0–100 scale. Each non-header question carries equal weight.
-2. A blank or missing answer = wrong. Set correct: false for that question.
-3. If a correct answer is provided in [correct: ...], compare it to the student's answer. Even minor arithmetic errors = wrong.
-4. For show_work questions: set correct: null (teacher reviews the uploaded image manually). Unless NO photo was uploaded — then set correct: false.
-5. Do NOT assume answers are correct when you cannot verify them.
-6. If curriculum method notes are provided, evaluate whether the student used the correct method.
-7. Never give 100% unless every single digital answer is verified correct.${missingUploadNote}
-
-Evaluate each question individually and return a JSON object in EXACTLY this format — no other text, no markdown:
+Return a JSON object — EXACTLY this format, no markdown, no extra text:
 {
   "grade": "73",
-  "comment": "Feedback for student (2-3 sentences max).",
+  "comment": "2–3 sentence summary for the student covering digital and show-work performance.",
   "questionResults": [
-    {"id": "QUESTION_ID_HERE", "correct": true},
-    {"id": "QUESTION_ID_HERE", "correct": false},
-    {"id": "QUESTION_ID_HERE", "correct": null}
+    {"id": "EXACT_QUESTION_ID", "correct": true},
+    {"id": "EXACT_QUESTION_ID", "correct": false}
   ]
 }
 
-Use true = correct, false = wrong, null = needs manual review (show_work or uncertain).
-Only include gradable questions (not section headers). The grade should match the ratio of correct answers.`
+Include every gradable question in questionResults. Use the exact id values from the question list.`
 
     const userParts: string[] = [
       `Student: ${studentName || 'Unknown'}`,
       `Lesson: ${lessonTitle || 'Unknown'}`,
     ]
     if (digitalSummary) userParts.push(digitalSummary)
-    if (showWorkNote) userParts.push(showWorkNote)
-    if (hasFiles) userParts.push('Review the uploaded image(s) for the show-work problems.')
-    userParts.push('Evaluate each question individually. Return the JSON with grade, comment, and questionResults array as described.')
-    userParts.push(`Question IDs for reference:\n${questionList.map(q => `  id: ${q.id} (type: ${q.questionType})`).join('\n')}`)
+    if (showWorkSummary) userParts.push(showWorkSummary)
+    if (hasFiles) userParts.push('The uploaded image shows the student\'s handwritten show-work sheet. Use it to grade the show-work questions listed above.')
 
     const userPrompt = userParts.join('\n\n')
 
