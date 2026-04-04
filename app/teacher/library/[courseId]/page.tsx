@@ -28,6 +28,14 @@ const updateLessonTemplateInline = /* GraphQL */`
     }
   }
 `
+const createLessonTemplateInline = /* GraphQL */`
+  mutation CreateLessonTemplate($input: CreateLessonTemplateInput!) {
+    createLessonTemplate(input: $input) {
+      id lessonNumber title instructions teachingNotes
+      worksheetUrl videoUrl assignmentType lessonCategory updatedAt
+    }
+  }
+`
 import TeacherNav from '../../../components/TeacherNav'
 import { useRoleGuard } from '../../../hooks/useRoleGuard'
 import MathToolbar from '../../../components/MathToolbar'
@@ -145,6 +153,12 @@ export default function LessonLibraryPage() {
   const editFormLoadedRef = useRef(false)
   const [activeTab, setActiveTab] = useState<'details' | 'questions'>('details')
 
+  // New lesson creation
+  const [showNewLessonForm, setShowNewLessonForm] = useState(false)
+  const [newLessonForm, setNewLessonForm] = useState({ lessonNumber: '', title: '' })
+  const [creatingLesson, setCreatingLesson] = useState(false)
+  const [createError, setCreateError] = useState('')
+
   useEffect(() => {
     if (user === null) router.replace('/login')
   }, [user, router])
@@ -259,6 +273,53 @@ export default function LessonLibraryPage() {
     setQuestions([])
     setNewQuestion({ questionText: '', questionType: 'number', choices: '', correctAnswer: '' })
     fetchQuestions(lesson.id)
+  }
+
+  async function handleCreateLesson() {
+    const num = parseFloat(newLessonForm.lessonNumber)
+    if (!newLessonForm.title.trim()) { setCreateError('Title is required.'); return }
+    if (isNaN(num)) { setCreateError('Lesson number is required.'); return }
+    if (!course) return
+    setCreatingLesson(true)
+    setCreateError('')
+    try {
+      const result: any = await client.graphql({
+        query: createLessonTemplateInline,
+        variables: {
+          input: {
+            lessonNumber: num,
+            title: newLessonForm.title.trim(),
+            assignmentType: 'none',
+            lessonCategory: 'lesson',
+            courseLessonTemplatesId: course.id,
+          } as any
+        }
+      })
+      const created = result.data.createLessonTemplate
+      const newLesson: LessonTemplate = {
+        id: created.id,
+        lessonNumber: created.lessonNumber,
+        title: created.title,
+        instructions: null,
+        teachingNotes: null,
+        worksheetUrl: null,
+        videoUrl: null,
+        assignmentType: 'none',
+        lessonCategory: 'lesson',
+        courseLessonTemplatesId: course.id,
+        updatedAt: created.updatedAt,
+      }
+      setLessons(prev => [...prev, newLesson].sort((a, b) => a.lessonNumber - b.lessonNumber))
+      setShowNewLessonForm(false)
+      setNewLessonForm({ lessonNumber: '', title: '' })
+      // Open the new lesson for editing immediately
+      startEdit(newLesson)
+    } catch (err) {
+      console.error(err)
+      setCreateError('Failed to create lesson. Please try again.')
+    } finally {
+      setCreatingLesson(false)
+    }
   }
 
   function cancelEdit() {
@@ -639,15 +700,70 @@ export default function LessonLibraryPage() {
 
       <main style={{ maxWidth: '1100px', margin: '0 auto', padding: '48px 24px' }}>
         {/* Header */}
-        <div style={{ marginBottom: '32px' }}>
-          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '32px', color: 'var(--foreground)', marginBottom: '8px' }}>
-            {course?.title} — Lesson Library
-          </h1>
-          <p style={{ color: 'var(--gray-mid)' }}>
-            {lessons.length} lessons total
-            {missingCount > 0 && <span style={{ marginLeft: '12px', color: '#e05252', fontWeight: 500 }}>⚠ {missingCount} missing video</span>}
-          </p>
+        <div style={{ marginBottom: '32px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap' }}>
+          <div>
+            <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '32px', color: 'var(--foreground)', marginBottom: '8px' }}>
+              {course?.title} — Lesson Library
+            </h1>
+            <p style={{ color: 'var(--gray-mid)' }}>
+              {lessons.length} lessons total
+              {missingCount > 0 && <span style={{ marginLeft: '12px', color: '#e05252', fontWeight: 500 }}>⚠ {missingCount} missing video</span>}
+            </p>
+          </div>
+          <button
+            onClick={() => { setShowNewLessonForm(v => !v); setCreateError('') }}
+            style={{ background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '8px', padding: '10px 22px', cursor: 'pointer', fontSize: '14px', fontWeight: 600, fontFamily: 'var(--font-body)', whiteSpace: 'nowrap' }}
+          >
+            + New Lesson
+          </button>
         </div>
+
+        {/* New lesson creation form */}
+        {showNewLessonForm && (
+          <div style={{ marginBottom: '24px', background: 'var(--white)', border: '2px solid var(--plum)', borderRadius: '10px', padding: '20px 24px' }}>
+            <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--plum)', marginBottom: '16px' }}>New Lesson</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '12px', marginBottom: '12px' }}>
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--gray-dark)', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Lesson #</label>
+                <input
+                  type="text"
+                  value={newLessonForm.lessonNumber}
+                  onChange={e => setNewLessonForm(f => ({ ...f, lessonNumber: e.target.value }))}
+                  placeholder="e.g. 156"
+                  autoFocus
+                  style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--gray-light)', borderRadius: '6px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)', boxSizing: 'border-box' }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--gray-dark)', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Title</label>
+                <input
+                  type="text"
+                  value={newLessonForm.title}
+                  onChange={e => setNewLessonForm(f => ({ ...f, title: e.target.value }))}
+                  placeholder="e.g. Direct Variation"
+                  onKeyDown={e => { if (e.key === 'Enter') handleCreateLesson() }}
+                  style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--gray-light)', borderRadius: '6px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)', boxSizing: 'border-box' }}
+                />
+              </div>
+            </div>
+            {createError && <p style={{ color: '#e05252', fontSize: '13px', marginBottom: '10px' }}>{createError}</p>}
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                onClick={handleCreateLesson}
+                disabled={creatingLesson}
+                style={{ background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '6px', padding: '9px 24px', cursor: 'pointer', fontSize: '14px', fontWeight: 500, fontFamily: 'var(--font-body)' }}
+              >
+                {creatingLesson ? 'Creating…' : 'Create & Edit'}
+              </button>
+              <button
+                onClick={() => { setShowNewLessonForm(false); setNewLessonForm({ lessonNumber: '', title: '' }); setCreateError('') }}
+                style={{ background: 'none', border: '1px solid var(--gray-light)', color: 'var(--gray-mid)', borderRadius: '6px', padding: '9px 18px', cursor: 'pointer', fontSize: '14px', fontFamily: 'var(--font-body)' }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Filters + Search */}
         <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', flexWrap: 'wrap', alignItems: 'center' }}>
