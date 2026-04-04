@@ -2,7 +2,7 @@
 
 import { useAuthenticator } from '@aws-amplify/ui-react'
 import { useRouter } from 'next/navigation'
-import StudentNav from '../../../components/StudentNav'
+import StudentNav from '../../components/StudentNav'
 import { useEffect, useState } from 'react'
 import { generateClient } from 'aws-amplify/api'
 
