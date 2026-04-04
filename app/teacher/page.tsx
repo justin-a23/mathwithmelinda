@@ -152,14 +152,15 @@ export default function TeacherDashboard() {
   const [pendingStudents, setPendingStudents] = useState<{ id: string; firstName: string; lastName: string; email: string; gradeLevel: string | null }[]>([])
   const [alerts, setAlerts] = useState<Alert[]>([])
   const [briefing, setBriefing] = useState<string>('')
-  const [briefingLoading, setBriefingLoading] = useState(true)
+  const [briefingLoading, setBriefingLoading] = useState(false)
   const [todayMeetings, setTodayMeetings] = useState<{ topic: string; startTime: string; startUrl: string | null; joinUrl: string }[]>([])
+
+  const BRIEFING_CACHE_KEY = 'mwm:teacherBriefing'
 
   useEffect(() => {
     fetchAll()
-    // Auto-refresh every 60 seconds
+    // Auto-refresh every 60 seconds (data only — not briefing)
     const interval = setInterval(fetchAll, 60_000)
-    // Refresh when tab becomes visible again
     const onVisible = () => { if (document.visibilityState === 'visible') fetchAll() }
     document.addEventListener('visibilitychange', onVisible)
     return () => { clearInterval(interval); document.removeEventListener('visibilitychange', onVisible) }
@@ -170,8 +171,19 @@ export default function TeacherDashboard() {
     fetchWeekStats()
     fetchPendingStudents()
     fetchAlerts()
-    fetchMeetingsAndBriefing()
+    fetchMeetingsAndBriefing(false)
   }
+
+  // Load cached briefing on mount
+  useEffect(() => {
+    const today = new Date().toISOString().slice(0, 10)
+    try {
+      const cached = JSON.parse(localStorage.getItem(BRIEFING_CACHE_KEY) || '{}')
+      if (cached.date === today && cached.text) {
+        setBriefing(cached.text)
+      }
+    } catch { /* ignore */ }
+  }, [])
 
   async function fetchPendingStudents() {
     try {
@@ -180,7 +192,22 @@ export default function TeacherDashboard() {
     } catch { /* silent */ }
   }
 
-  async function fetchMeetingsAndBriefing() {
+  async function fetchMeetingsAndBriefing(force = false) {
+    const today = new Date().toISOString().slice(0, 10)
+
+    // Check cache first — skip API call if we have today's briefing and not forcing
+    if (!force) {
+      try {
+        const cached = JSON.parse(localStorage.getItem(BRIEFING_CACHE_KEY) || '{}')
+        if (cached.date === today && cached.text) {
+          // Still fetch meetings data to update the meeting cards
+          // but skip the Claude API call
+          fetchTodayMeetingsOnly()
+          return
+        }
+      } catch { /* ignore */ }
+    }
+
     setBriefingLoading(true)
     try {
       const now = new Date()
@@ -259,12 +286,31 @@ PENDING STUDENT APPROVALS:
         body: JSON.stringify({ context }),
       })
       const data = await res.json()
-      if (data.briefing) setBriefing(data.briefing)
+      if (data.briefing) {
+        setBriefing(data.briefing)
+        // Cache with today's date
+        localStorage.setItem(BRIEFING_CACHE_KEY, JSON.stringify({ date: today, text: data.briefing }))
+      }
     } catch (err) {
       console.error('Briefing fetch error:', err)
     } finally {
       setBriefingLoading(false)
     }
+  }
+
+  async function fetchTodayMeetingsOnly() {
+    try {
+      const now = new Date()
+      const dayStart = new Date(now); dayStart.setHours(0,0,0,0)
+      const dayEnd = new Date(now); dayEnd.setHours(23,59,59,999)
+      const meetingsRes = await (client.graphql({
+        query: `query { listZoomMeetings(limit: 100) { items { id topic startTime durationMinutes startUrl joinUrl } } }`
+      }) as any)
+      const meetsToday = (meetingsRes.data.listZoomMeetings.items as any[])
+        .filter(m => { const s = new Date(m.startTime); return s >= dayStart && s <= dayEnd })
+        .sort((a: any, b: any) => a.startTime.localeCompare(b.startTime))
+      setTodayMeetings(meetsToday)
+    } catch { /* non-critical */ }
   }
 
   async function fetchAlerts() {
@@ -450,20 +496,37 @@ PENDING STUDENT APPROVALS:
 
         {/* ── AI BRIEFING + TODAY'S MEETINGS ── */}
         <div style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', padding: '22px 28px', marginBottom: '24px' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px', width: '100%' }}>
             <div style={{ width: '36px', height: '36px', background: 'var(--plum-light)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: '2px' }}>
               <span style={{ fontSize: '18px' }}>✨</span>
             </div>
             <div style={{ flex: 1 }}>
               {briefingLoading ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--plum)', opacity: 0.4, animation: 'pulse 1.2s ease-in-out infinite' }} />
+                  <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--plum)', opacity: 0.4 }} />
                   <span style={{ fontSize: '14px', color: 'var(--gray-mid)', fontStyle: 'italic' }}>Getting your briefing…</span>
                 </div>
               ) : briefing ? (
                 <p style={{ fontSize: '15px', color: 'var(--foreground)', lineHeight: '1.65', margin: 0 }}>{briefing}</p>
-              ) : null}
+              ) : (
+                <button
+                  onClick={() => fetchMeetingsAndBriefing(true)}
+                  style={{ background: 'none', border: 'none', color: 'var(--plum)', fontSize: '14px', cursor: 'pointer', padding: 0, fontFamily: 'var(--font-body)' }}
+                >
+                  Get today's briefing →
+                </button>
+              )}
             </div>
+            {/* Manual refresh button */}
+            {!briefingLoading && briefing && (
+              <button
+                onClick={() => fetchMeetingsAndBriefing(true)}
+                title="Refresh briefing"
+                style={{ background: 'transparent', border: 'none', color: 'var(--gray-mid)', cursor: 'pointer', padding: '4px', borderRadius: '4px', fontSize: '14px', flexShrink: 0, lineHeight: 1 }}
+              >
+                ↺
+              </button>
+            )}
           </div>
 
           {/* Today's meetings — shown below briefing if any */}
