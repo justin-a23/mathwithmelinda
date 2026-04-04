@@ -96,6 +96,7 @@ const QUESTION_TYPE_LABELS: Record<string, string> = {
   number: 'Number',
   short_text: 'Short Text',
   multiple_choice: 'Multiple Choice',
+  multiple_choice_multi: 'Multiple Choice (multi)',
   show_work: 'Show Work',
 }
 
@@ -376,8 +377,8 @@ export default function LessonLibraryPage() {
           input: {
             questionText: newQuestion.questionText.trim(),
             questionType: newQuestion.questionType,
-            choices: newQuestion.questionType === 'multiple_choice' && newQuestion.choices.trim() ? newQuestion.choices.trim() : null,
-            correctAnswer: (newQuestion.questionType === 'number' || newQuestion.questionType === 'multiple_choice') && newQuestion.correctAnswer.trim() ? newQuestion.correctAnswer.trim() : null,
+            choices: (newQuestion.questionType === 'multiple_choice' || newQuestion.questionType === 'multiple_choice_multi') && newQuestion.choices.trim() ? newQuestion.choices.trim() : null,
+            correctAnswer: (newQuestion.questionType === 'number' || newQuestion.questionType === 'multiple_choice' || newQuestion.questionType === 'multiple_choice_multi') && newQuestion.correctAnswer.trim() ? newQuestion.correctAnswer.trim() : null,
             order: questions.length + 1,
             lessonTemplateQuestionsId: lessonId
           }
@@ -495,8 +496,8 @@ export default function LessonLibraryPage() {
             id: questionId,
             questionText: editingQuestionForm.questionText.trim(),
             questionType: editingQuestionForm.questionType,
-            choices: editingQuestionForm.questionType === 'multiple_choice' && editingQuestionForm.choices.trim() ? editingQuestionForm.choices.trim() : null,
-            correctAnswer: (editingQuestionForm.questionType === 'number' || editingQuestionForm.questionType === 'multiple_choice') && editingQuestionForm.correctAnswer.trim() ? editingQuestionForm.correctAnswer.trim() : null,
+            choices: (editingQuestionForm.questionType === 'multiple_choice' || editingQuestionForm.questionType === 'multiple_choice_multi') && editingQuestionForm.choices.trim() ? editingQuestionForm.choices.trim() : null,
+            correctAnswer: (editingQuestionForm.questionType === 'number' || editingQuestionForm.questionType === 'multiple_choice' || editingQuestionForm.questionType === 'multiple_choice_multi') && editingQuestionForm.correctAnswer.trim() ? editingQuestionForm.correctAnswer.trim() : null,
           }
         }
       })
@@ -514,6 +515,27 @@ export default function LessonLibraryPage() {
   async function previewWorksheet(lesson: LessonTemplate) {
     const qs = questions.filter(q => q.lessonTemplateAssignmentQuestionsId === lesson.id || questions.length > 0)
     if (qs.length === 0) { alert('No questions to preview.'); return }
+
+    // Only show show_work questions (and section headers that group them) — matching student print exactly
+    const sorted = [...qs].sort((a, b) => a.order - b.order)
+    // Determine which section headers have at least one show_work under them
+    const showWorkOnly: typeof sorted = []
+    let pendingHeader: (typeof sorted[0]) | null = null
+    for (const q of sorted) {
+      if (q.questionType === 'section_header') {
+        pendingHeader = q
+      } else if (q.questionType === 'show_work') {
+        if (pendingHeader) { showWorkOnly.push(pendingHeader); pendingHeader = null }
+        showWorkOnly.push(q)
+      }
+      // Skip all other types
+    }
+
+    if (showWorkOnly.length === 0) {
+      alert('No show-work questions to preview. Add questions with type "Show Work" to see the worksheet preview.')
+      return
+    }
+
     const { default: katex } = await import('katex')
 
     function renderMath(text: string): string {
@@ -522,44 +544,41 @@ export default function LessonLibraryPage() {
         .replace(/\\\((.+?)\\\)/g, (_, m) => { try { return katex.renderToString(m, { throwOnError: false }) } catch { return m } })
     }
 
-    const sorted = [...qs].sort((a, b) => a.order - b.order)
-    let printQNum = 0
-    const questionsHTML = sorted.map(q => {
+    // Preserve original question numbers from the full sorted list
+    let fullQNum = 0
+    const origNums = new Map<string, number>()
+    for (const q of sorted) {
+      if (q.questionType !== 'section_header') { fullQNum++; origNums.set(q.id, fullQNum) }
+    }
+
+    const questionsHTML = showWorkOnly.map(q => {
       if (q.questionType === 'section_header') {
         return `<div class="section-header">${q.questionText || 'Section Header'}</div>`
       }
-      printQNum++
       const qHtml = renderMath(q.questionText)
-      const answerBox = `<div class="work-divider"></div>`
-      // If the question text already starts with a book number (e.g. "1. " or "35. "),
-      // skip the auto-counter so we don't get double numbering like "1. 1. 450"
+      const answerBox = `<div class="work-box"></div>`
       const bookNumMatch = q.questionText.match(/^(\d+\.)\s([\s\S]*)$/)
-      const qNumLabel = bookNumMatch ? bookNumMatch[1] : `${printQNum}.`
+      const qNumLabel = bookNumMatch ? bookNumMatch[1] : `${origNums.get(q.id) ?? ''}.`
       const qBody = bookNumMatch ? renderMath(bookNumMatch[2]) : qHtml
-      if (q.questionType === 'multiple_choice' && q.choices) {
-        const choices = q.choices.split('\n').filter(Boolean)
-        const choiceLetters = ['A', 'B', 'C', 'D', 'E']
-        const choicesHtml = choices.map((c, ci) => `<div style="margin:4px 0 4px 22px"><span class="bubble">${choiceLetters[ci] || ci + 1}.</span> ${renderMath(c)}</div>`).join('')
-        return `<div class="question"><span class="qnum">${qNumLabel}</span><span class="qtext">${qBody}</span>${choicesHtml}</div>`
-      }
       return `<div class="question"><span class="qnum">${qNumLabel}</span><span class="qtext">${qBody}</span>${answerBox}</div>`
     }).join('')
 
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
-    <title>${lesson.title} — Preview</title>
+    <title>Show Work — ${lesson.title}</title>
     <style>
       body{font-family:'Times New Roman',serif;font-size:14px;padding:40px;max-width:720px;margin:0 auto;color:#111}
-      h1{font-size:20px;margin-bottom:4px}.header{border-bottom:2px solid #333;padding-bottom:10px;margin-bottom:24px}
+      h1{font-size:20px;margin-bottom:4px}.header{border-bottom:2px solid #333;padding-bottom:10px;margin-bottom:16px}
+      .note{font-size:11px;color:#555;margin-bottom:24px;padding:8px 12px;border-left:3px solid #7B4FA6}
       .question{display:flex;align-items:flex-start;gap:8px;margin-bottom:0;page-break-inside:avoid}
       .qnum{font-weight:700;min-width:22px;flex-shrink:0}.qtext{flex:1}
-      .bubble{font-size:17px;line-height:1;flex-shrink:0}
-      .work-divider{border-bottom:1px solid #ccc;margin:10px 0 14px;}
+      .work-box{border:1px solid #ccc;border-radius:4px;min-height:80px;margin:8px 0 18px;}
       .section-header{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#5b2d8e;border-bottom:2px solid #d8b4fe;padding-bottom:5px;margin:28px 0 16px;page-break-after:avoid}
       @media print{body{padding:20px}@page{margin:.75in}}
     </style>
   </head><body onload="setTimeout(function(){window.print()},1200)">
-    <div class="header"><h1>${lesson.title}</h1><div style="font-size:12px;color:#666">Lesson ${lesson.lessonNumber} · Preview</div></div>
+    <div class="header"><h1>Show Work — ${lesson.title}</h1><div style="font-size:12px;color:#666">Lesson ${lesson.lessonNumber} · Teacher Preview</div></div>
+    <div class="note">Complete your digital answers online first, then print this sheet and show your work in the boxes below.</div>
     ${questionsHTML}
   </body></html>`
 
@@ -1060,10 +1079,11 @@ export default function LessonLibraryPage() {
                                                     style={{ ...inputStyle, marginBottom: '10px' }}>
                                                     <option value="number">Number</option>
                                                     <option value="short_text">Short Text</option>
-                                                    <option value="multiple_choice">Multiple Choice</option>
+                                                    <option value="multiple_choice">Multiple Choice (pick one)</option>
+                                                    <option value="multiple_choice_multi">Multiple Choice (pick all that apply)</option>
                                                     <option value="show_work">Show Work (photo upload)</option>
                                                   </select>
-                                                  {editingQuestionForm.questionType === 'multiple_choice' && (
+                                                  {(editingQuestionForm.questionType === 'multiple_choice' || editingQuestionForm.questionType === 'multiple_choice_multi') && (
                                                     <div style={{ marginBottom: '10px' }}>
                                                       <label style={labelStyle}>Choices — one per line</label>
                                                       <textarea
@@ -1076,7 +1096,7 @@ export default function LessonLibraryPage() {
                                                       <p style={{ fontSize: '11px', color: 'var(--gray-mid)', margin: '4px 0 0' }}>One choice per line. Letters (A, B, C…) are added automatically when displayed to students.</p>
                                                     </div>
                                                   )}
-                                                  {(editingQuestionForm.questionType === 'number' || editingQuestionForm.questionType === 'short_text' || editingQuestionForm.questionType === 'multiple_choice') && (
+                                                  {(editingQuestionForm.questionType === 'number' || editingQuestionForm.questionType === 'short_text' || editingQuestionForm.questionType === 'multiple_choice' || editingQuestionForm.questionType === 'multiple_choice_multi') && (
                                                     <div style={{ marginBottom: '10px' }}>
                                                       <label style={labelStyle}>Correct answer (optional — for auto-grading)</label>
                                                       <MathToolbar
@@ -1161,7 +1181,7 @@ export default function LessonLibraryPage() {
                                 )}
 
                                 {/* Add Question form */}
-                                <div id={`question-builder-${lesson.id}`} style={{ background: 'var(--white)', border: '1px solid var(--gray-light)', borderRadius: '8px', padding: '16px' }}>
+                                <div id={`question-builder-${lesson.id}`} style={{ background: 'var(--white)', border: '1px solid var(--gray-light)', borderRadius: '8px', padding: '16px', marginBottom: '0' }}>
                                   <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--gray-dark)', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Add Question</div>
                                   <div style={{ marginBottom: '12px' }}>
                                     <label style={labelStyle}>Question</label>
@@ -1188,11 +1208,12 @@ export default function LessonLibraryPage() {
                                     >
                                       <option value="number">Number answer</option>
                                       <option value="short_text">Short text answer</option>
-                                      <option value="multiple_choice">Multiple choice</option>
+                                      <option value="multiple_choice">Multiple choice (pick one)</option>
+                                      <option value="multiple_choice_multi">Multiple choice (pick all that apply)</option>
                                       <option value="show_work">Show work (photo)</option>
                                     </select>
                                   </div>
-                                  {newQuestion.questionType === 'multiple_choice' && (
+                                  {(newQuestion.questionType === 'multiple_choice' || newQuestion.questionType === 'multiple_choice_multi') && (
                                     <div style={{ marginBottom: '12px' }}>
                                       <label style={labelStyle}>Choices — one per line</label>
                                       <textarea
@@ -1205,7 +1226,7 @@ export default function LessonLibraryPage() {
                                       <p style={{ fontSize: '11px', color: 'var(--gray-mid)', margin: '4px 0 0' }}>One choice per line. Letters (A, B, C…) are added automatically when displayed to students.</p>
                                     </div>
                                   )}
-                                  {(newQuestion.questionType === 'number' || newQuestion.questionType === 'short_text' || newQuestion.questionType === 'multiple_choice') && (
+                                  {(newQuestion.questionType === 'number' || newQuestion.questionType === 'short_text' || newQuestion.questionType === 'multiple_choice' || newQuestion.questionType === 'multiple_choice_multi') && (
                                     <div style={{ marginBottom: '12px' }}>
                                       <label style={labelStyle}>Correct answer (optional — for auto-grading)</label>
                                       <MathToolbar
@@ -1241,6 +1262,19 @@ export default function LessonLibraryPage() {
                                   >
                                     {addingQuestion ? 'Adding...' : 'Add Question'}
                                   </button>
+                                </div>
+
+                                {/* Save / Cancel row — bottom of Questions tab */}
+                                <div style={{ marginTop: '24px', paddingTop: '20px', borderTop: '1px solid var(--gray-light)', display: 'flex', gap: '12px', alignItems: 'center' }}>
+                                  <button onClick={() => saveEdit(lesson.id)} disabled={saving} style={{ background: 'var(--plum)', color: 'white', padding: '10px 28px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '14px', fontWeight: 500, fontFamily: 'var(--font-body)' }}>
+                                    {saving ? 'Saving...' : 'Save Changes'}
+                                  </button>
+                                  <button onClick={cancelEdit} style={{ background: 'none', border: '1px solid var(--gray-light)', color: 'var(--gray-mid)', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontFamily: 'var(--font-body)' }}>
+                                    Cancel
+                                  </button>
+                                  {isDirty && (
+                                    <span style={{ fontSize: '12px', color: '#e07b00', fontWeight: 500 }}>● Unsaved changes</span>
+                                  )}
                                 </div>
                               </>
                             )}
