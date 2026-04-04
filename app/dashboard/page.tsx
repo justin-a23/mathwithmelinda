@@ -30,6 +30,7 @@ const listWeeklyPlansWithItems = /* GraphQL */`
             dayOfWeek
             dueTime
             isPublished
+            zoomJoinUrl
             lesson {
               id
               title
@@ -171,6 +172,7 @@ type WeeklyPlanItem = {
   dayOfWeek: string
   dueTime: string | null
   isPublished: boolean | null
+  zoomJoinUrl?: string | null
   lesson?: {
     id: string
     title: string
@@ -756,36 +758,49 @@ export default function Dashboard() {
 
                     return (
                       <div key={item.id}
-                        onClick={() => router.push('/lessons?id=' + item.id)}
-                        style={{ background: cardBg, border: '1px solid ' + cardBorder, borderRadius: 'var(--radius)', padding: '20px 24px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                        onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 4px 16px rgba(123,79,166,0.12)')}
-                        onMouseLeave={e => (e.currentTarget.style.boxShadow = 'none')}>
-                        <div>
-                          <div style={{ fontSize: '12px', fontWeight: 500, marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ textTransform: 'uppercase', letterSpacing: '1px', color: isOverdue ? '#b91c1c' : 'var(--plum)' }}>{item.dayOfWeek}</span>
-                            {isOverdue && (
-                              <span style={{ background: '#FEE2E2', color: '#b91c1c', fontSize: '10px', fontWeight: 700, padding: '2px 9px', borderRadius: '20px', letterSpacing: '0.3px' }}>
-                                Past Due
-                              </span>
-                            )}
-                            {isDueToday && (
-                              <span style={{ background: '#FEF3C7', color: '#92400E', fontSize: '10px', fontWeight: 700, padding: '2px 9px', borderRadius: '20px', letterSpacing: '0.3px' }}>
-                                Due Today
-                              </span>
-                            )}
+                        style={{ background: cardBg, border: '1px solid ' + cardBorder, borderRadius: 'var(--radius)', overflow: 'hidden' }}>
+                        <div
+                          onClick={() => router.push('/lessons?id=' + item.id)}
+                          style={{ padding: '20px 24px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                          onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 4px 16px rgba(123,79,166,0.12)')}
+                          onMouseLeave={e => (e.currentTarget.style.boxShadow = 'none')}>
+                          <div>
+                            <div style={{ fontSize: '12px', fontWeight: 500, marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ textTransform: 'uppercase', letterSpacing: '1px', color: isOverdue ? '#b91c1c' : 'var(--plum)' }}>{item.dayOfWeek}</span>
+                              {isOverdue && (
+                                <span style={{ background: '#FEE2E2', color: '#b91c1c', fontSize: '10px', fontWeight: 700, padding: '2px 9px', borderRadius: '20px', letterSpacing: '0.3px' }}>
+                                  Past Due
+                                </span>
+                              )}
+                              {isDueToday && (
+                                <span style={{ background: '#FEF3C7', color: '#92400E', fontSize: '10px', fontWeight: 700, padding: '2px 9px', borderRadius: '20px', letterSpacing: '0.3px' }}>
+                                  Due Today
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ fontFamily: 'var(--font-display)', fontSize: '18px', color: 'var(--foreground)' }}>
+                              {item.lesson?.order ? 'Lesson ' + item.lesson.order + ' — ' : ''}{item.lesson?.title || 'Lesson'}
+                            </div>
                           </div>
-                          <div style={{ fontFamily: 'var(--font-display)', fontSize: '18px', color: 'var(--foreground)' }}>
-                            {item.lesson?.order ? 'Lesson ' + item.lesson.order + ' — ' : ''}{item.lesson?.title || 'Lesson'}
+                          <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                            <div style={{ fontSize: '12px', color: isOverdue ? '#b91c1c' : 'var(--gray-mid)', marginBottom: '8px' }}>
+                              Due by {dueLabel}
+                            </div>
+                            <span style={{ background: isOverdue ? '#b91c1c' : 'var(--plum)', color: 'white', fontSize: '12px', padding: '4px 12px', borderRadius: '20px' }}>
+                              {isOverdue ? 'Submit Late →' : 'Watch →'}
+                            </span>
                           </div>
                         </div>
-                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                          <div style={{ fontSize: '12px', color: isOverdue ? '#b91c1c' : 'var(--gray-mid)', marginBottom: '8px' }}>
-                            Due by {dueLabel}
-                          </div>
-                          <span style={{ background: isOverdue ? '#b91c1c' : 'var(--plum)', color: 'white', fontSize: '12px', padding: '4px 12px', borderRadius: '20px' }}>
-                            {isOverdue ? 'Submit Late →' : 'Watch →'}
-                          </span>
-                        </div>
+                        {item.zoomJoinUrl && (
+                          <a
+                            href={item.zoomJoinUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={e => e.stopPropagation()}
+                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '10px 24px', background: '#0b5cff', color: 'white', textDecoration: 'none', fontSize: '13px', fontWeight: 600, borderTop: '1px solid rgba(0,0,0,0.1)' }}>
+                            🎥 Join Zoom Session
+                          </a>
+                        )}
                       </div>
                     )
                   })}

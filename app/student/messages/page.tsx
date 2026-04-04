@@ -2,7 +2,7 @@
 
 import { useAuthenticator } from '@aws-amplify/ui-react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, Suspense } from 'react'
 import { generateClient } from 'aws-amplify/api'
 import StudentNav from '../../components/StudentNav'
 
@@ -52,7 +52,7 @@ function fmtDate(s: string): string {
     ' at ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
 }
 
-export default function StudentMessagesPage() {
+function StudentMessagesPageInner() {
   const { user, signOut, authStatus } = useAuthenticator()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -338,5 +338,13 @@ export default function StudentMessagesPage() {
         </p>
       </main>
     </div>
+  )
+}
+
+export default function StudentMessagesPage() {
+  return (
+    <Suspense fallback={null}>
+      <StudentMessagesPageInner />
+    </Suspense>
   )
 }

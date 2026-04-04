@@ -69,6 +69,8 @@ type WeeklyPlanItem @model {
   lessonTemplateId: ID
   weeklyPlan: WeeklyPlan @belongsTo
   assignments: [Assignment] @hasMany
+  zoomJoinUrl: String
+  zoomMeetingId: String
 }
 
 type Assignment @model {

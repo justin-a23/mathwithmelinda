@@ -17,6 +17,8 @@ type PlanItem = {
   isPublished: boolean | null
   lessonTemplateId: string | null
   lesson?: { id: string; title: string } | null
+  zoomJoinUrl?: string | null
+  zoomMeetingId?: string | null
 }
 
 type WeeklyPlan = {
@@ -51,6 +53,8 @@ const LIST_WEEKLY_PLANS = /* GraphQL */ `
             isPublished
             lessonTemplateId
             lesson { id title }
+            zoomJoinUrl
+            zoomMeetingId
           }
         }
       }
@@ -60,7 +64,7 @@ const LIST_WEEKLY_PLANS = /* GraphQL */ `
 
 const UPDATE_PLAN_ITEM = /* GraphQL */ `
   mutation UpdateWeeklyPlanItem($input: UpdateWeeklyPlanItemInput!) {
-    updateWeeklyPlanItem(input: $input) { id isPublished }
+    updateWeeklyPlanItem(input: $input) { id isPublished zoomJoinUrl zoomMeetingId }
   }
 `
 
@@ -162,6 +166,8 @@ export default function ManagePlansPage() {
   const [confirmRemoveItemId, setConfirmRemoveItemId] = useState<string | null>(null)
   const [confirmDeletePlanId, setConfirmDeletePlanId] = useState<string | null>(null)
   const [togglingItemId, setTogglingItemId] = useState<string | null>(null)
+  const [zoomCreatingId, setZoomCreatingId] = useState<string | null>(null)
+  const [zoomError, setZoomError] = useState<Record<string, string>>({})
 
   useEffect(() => {
     if (user === null) router.replace('/login')
@@ -303,6 +309,41 @@ export default function ManagePlansPage() {
       })
     } catch (err) {
       console.error('Error deleting plan:', err)
+    }
+  }
+
+  async function createZoomMeeting(planId: string, item: PlanItem) {
+    setZoomCreatingId(item.id)
+    setZoomError(prev => { const n = { ...prev }; delete n[item.id]; return n })
+    try {
+      const topic = `Math with Melinda — ${item.lesson?.title || item.dayOfWeek}`
+      const res = await fetch('/api/zoom/create-meeting', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic, durationMinutes: 60 }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to create meeting')
+      // Save join URL + meeting ID back to the plan item
+      await (client.graphql({
+        query: UPDATE_PLAN_ITEM,
+        variables: { input: { id: item.id, zoomJoinUrl: data.joinUrl, zoomMeetingId: data.meetingId } },
+      }) as any)
+      // Update local state
+      setPlans(prev => prev.map(p =>
+        p.id !== planId ? p : {
+          ...p,
+          items: {
+            items: (p.items?.items ?? []).map(i =>
+              i.id !== item.id ? i : { ...i, zoomJoinUrl: data.joinUrl, zoomMeetingId: data.meetingId }
+            ),
+          },
+        }
+      ))
+    } catch (err: any) {
+      setZoomError(prev => ({ ...prev, [item.id]: err.message || 'Failed to create Zoom meeting' }))
+    } finally {
+      setZoomCreatingId(null)
     }
   }
 
@@ -478,6 +519,43 @@ export default function ManagePlansPage() {
                               >
                                 {published ? 'Published' : 'Hidden'}
                               </button>
+
+                              {/* Zoom button */}
+                              {item.zoomJoinUrl ? (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                                  <a
+                                    href={item.zoomJoinUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={e => e.stopPropagation()}
+                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#0b5cff', color: 'white', borderRadius: '6px', padding: '4px 10px', fontSize: '12px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>
+                                    🎥 Join
+                                  </a>
+                                  <button
+                                    title="Copy join link"
+                                    onClick={() => navigator.clipboard.writeText(item.zoomJoinUrl!)}
+                                    style={{ background: 'transparent', border: '1px solid var(--gray-light)', borderRadius: '6px', padding: '4px 8px', cursor: 'pointer', fontSize: '11px', color: 'var(--gray-mid)', whiteSpace: 'nowrap' }}>
+                                    Copy
+                                  </button>
+                                  <button
+                                    title="Replace with new meeting"
+                                    onClick={() => createZoomMeeting(plan.id, item)}
+                                    disabled={zoomCreatingId === item.id}
+                                    style={{ background: 'transparent', border: 'none', color: 'var(--gray-mid)', fontSize: '11px', cursor: 'pointer', padding: '0 2px' }}>
+                                    ↺
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => createZoomMeeting(plan.id, item)}
+                                  disabled={zoomCreatingId === item.id}
+                                  style={{ background: 'transparent', border: '1px solid var(--gray-light)', borderRadius: '6px', padding: '4px 10px', fontSize: '12px', color: 'var(--gray-mid)', cursor: zoomCreatingId === item.id ? 'default' : 'pointer', whiteSpace: 'nowrap', flexShrink: 0, opacity: zoomCreatingId === item.id ? 0.6 : 1 }}>
+                                  {zoomCreatingId === item.id ? 'Creating…' : '+ Zoom'}
+                                </button>
+                              )}
+                              {zoomError[item.id] && (
+                                <span style={{ fontSize: '11px', color: '#dc2626', flexShrink: 0 }}>{zoomError[item.id]}</span>
+                              )}
 
                               {/* Remove button / confirm */}
                               {isConfirmingRemove ? (
