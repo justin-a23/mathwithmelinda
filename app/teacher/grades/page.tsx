@@ -699,16 +699,35 @@ export default function GradingPage() {
     setSaving(true)
     try {
       const { updateSubmission } = await import('../../../src/graphql/mutations')
+
+      // Pack per-question results into content so student can see their breakdown
+      let updatedContent = selectedSubmission.content || '{}'
+      if (Object.keys(questionResults).length > 0 && questions.length > 0) {
+        const parsed = (() => { try { return JSON.parse(selectedSubmission.content || '{}') } catch { return {} } })()
+        const studentAnswers: Record<string, string> = parsed.answers || {}
+        const gradedQuestions = questions
+          .filter(q => q.questionType !== 'section_header' && questionResults[q.id] !== undefined && questionResults[q.id] !== null)
+          .map(q => ({
+            id: q.id,
+            questionText: q.questionText,
+            questionType: q.questionType,
+            correct: questionResults[q.id] as boolean,
+            studentAnswer: studentAnswers[q.id] || null,
+            correctAnswer: q.correctAnswer || null,
+          }))
+        updatedContent = JSON.stringify({ ...parsed, gradedQuestions })
+      }
+
       await client.graphql({
         query: updateSubmission,
-        variables: { input: { id: selectedSubmission.id, grade, teacherComment: comment } }
+        variables: { input: { id: selectedSubmission.id, grade, teacherComment: comment, content: updatedContent } }
       })
       setSaved(true)
       setTimeout(() => {
         setSelectedSubmission(null)
         setSaved(false)
       }, 1500)
-      setSubmissions(prev => prev.map(s => s.id === selectedSubmission.id ? { ...s, grade, teacherComment: comment } : s))
+      setSubmissions(prev => prev.map(s => s.id === selectedSubmission.id ? { ...s, grade, teacherComment: comment, content: updatedContent } : s))
     } catch (err) {
       console.error(err)
     } finally {

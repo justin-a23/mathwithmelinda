@@ -94,11 +94,21 @@ type LessonColumn = {
   templateId: string | null
 }
 
+type GradedQuestion = {
+  id: string
+  questionText: string
+  questionType: string
+  correct: boolean
+  studentAnswer: string | null
+  correctAnswer: string | null
+}
+
 type AssignmentGrade = {
   col: LessonColumn
   grade: string | null | 'pending'
   teacherComment: string | null
   submittedAt: string | null
+  gradedQuestions: GradedQuestion[]
 }
 
 function categoryLabel(cat: string | null | undefined): string {
@@ -262,30 +272,36 @@ export default function StudentGradesPage() {
 
       // 6. Match submissions to lessons
       const lessonIdSet = new Set(cols.map(c => c.lessonId))
-      const subByLesson = new Map<string, { grade: string | null; teacherComment: string | null; submittedAt: string | null }>()
+      const subByLesson = new Map<string, { grade: string | null; teacherComment: string | null; submittedAt: string | null; gradedQuestions: GradedQuestion[] }>()
       for (const sub of subs) {
         let parsedLessonId: string | null = null
+        let gradedQuestions: GradedQuestion[] = []
         try {
           const content = JSON.parse(sub.content || '{}')
           parsedLessonId = content.lessonId || null
+          if (Array.isArray(content.gradedQuestions)) {
+            gradedQuestions = content.gradedQuestions
+          }
         } catch { continue }
         if (!parsedLessonId || !lessonIdSet.has(parsedLessonId)) continue
         subByLesson.set(parsedLessonId, {
           grade: sub.grade,
           teacherComment: sub.teacherComment,
           submittedAt: sub.submittedAt,
+          gradedQuestions,
         })
       }
 
       // 7. Build assignment grades list
       const result: AssignmentGrade[] = cols.map(col => {
         const sub = subByLesson.get(col.lessonId)
-        if (!sub) return { col, grade: null, teacherComment: null, submittedAt: null }
+        if (!sub) return { col, grade: null, teacherComment: null, submittedAt: null, gradedQuestions: [] }
         return {
           col,
           grade: sub.grade ? sub.grade : 'pending',
           teacherComment: sub.teacherComment,
           submittedAt: sub.submittedAt,
+          gradedQuestions: sub.gradedQuestions,
         }
       })
 
@@ -505,17 +521,19 @@ export default function StudentGradesPage() {
                       }
 
                       const hasComment = ag.teacherComment && ag.teacherComment.trim().length > 0
+                      const hasResults = ag.gradedQuestions.length > 0
+                      const isExpandable = hasComment || hasResults
 
                       return (
                         <div key={ag.col.lessonId}>
                           <div
                             className="grade-row"
-                            onClick={() => hasComment ? setExpandedId(isExpanded ? null : ag.col.lessonId) : undefined}
+                            onClick={() => isExpandable ? setExpandedId(isExpanded ? null : ag.col.lessonId) : undefined}
                             style={{
                               display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 20px',
                               background: isEven ? 'var(--background)' : 'rgba(0,0,0,0.015)',
                               borderTop: i === 0 ? 'none' : '1px solid rgba(0,0,0,0.05)',
-                              cursor: hasComment ? 'pointer' : 'default',
+                              cursor: isExpandable ? 'pointer' : 'default',
                             }}>
                             <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '20px', background: catBg, color: catColor, border: `1px solid ${catColor}22`, fontWeight: 600, flexShrink: 0, whiteSpace: 'nowrap' }}>
                               {catIcon}
@@ -529,7 +547,7 @@ export default function StudentGradesPage() {
                               </span>
                             )}
                             <div style={{ flexShrink: 0, minWidth: 80, textAlign: 'right' }}>{scoreEl}</div>
-                            {hasComment && (
+                            {isExpandable && (
                               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--plum)" strokeWidth="2"
                                 style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s', flexShrink: 0 }}>
                                 <polyline points="6 9 12 15 18 9"/>
@@ -537,15 +555,102 @@ export default function StudentGradesPage() {
                             )}
                           </div>
 
-                          {/* Teacher comment expansion */}
-                          {isExpanded && hasComment && (
-                            <div style={{ padding: '12px 20px 14px 52px', background: 'rgba(123,79,166,0.03)', borderTop: '1px solid rgba(123,79,166,0.1)' }}>
-                              <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--plum)', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '6px' }}>
-                                Teacher Comment
-                              </div>
-                              <p style={{ margin: 0, fontSize: '14px', color: 'var(--foreground)', lineHeight: 1.6 }}>
-                                {ag.teacherComment}
-                              </p>
+                          {/* Expanded: teacher comment + per-question breakdown */}
+                          {isExpanded && isExpandable && (
+                            <div style={{ background: 'rgba(123,79,166,0.03)', borderTop: '1px solid rgba(123,79,166,0.1)' }}>
+
+                              {/* Teacher comment */}
+                              {hasComment && (
+                                <div style={{ padding: '14px 20px 12px 20px', borderBottom: hasResults ? '1px solid rgba(123,79,166,0.08)' : 'none' }}>
+                                  <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--plum)', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '6px' }}>
+                                    Teacher Comment
+                                  </div>
+                                  <p style={{ margin: 0, fontSize: '14px', color: 'var(--foreground)', lineHeight: 1.6 }}>
+                                    {ag.teacherComment}
+                                  </p>
+                                </div>
+                              )}
+
+                              {/* Per-question results */}
+                              {hasResults && (() => {
+                                const correctCount = ag.gradedQuestions.filter(q => q.correct).length
+                                const total = ag.gradedQuestions.length
+                                return (
+                                  <div style={{ padding: '14px 20px 16px 20px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                                      <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--plum)', letterSpacing: '1px', textTransform: 'uppercase' }}>
+                                        Question Results
+                                      </div>
+                                      <div style={{ fontSize: '12px', color: 'var(--gray-mid)' }}>
+                                        <span style={{ color: '#15803d', fontWeight: 600 }}>{correctCount} correct</span>
+                                        {' · '}
+                                        <span style={{ color: '#dc2626', fontWeight: 600 }}>{total - correctCount} wrong</span>
+                                        {' · '}
+                                        {total} total
+                                      </div>
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                      {ag.gradedQuestions.map((q, qi) => {
+                                        const isShowWork = q.questionType === 'show_work'
+                                        // Extract question number prefix if present (e.g. "12. Find x")
+                                        const numMatch = q.questionText.match(/^(\d+\.)\s([\s\S]*)$/)
+                                        const label = numMatch ? numMatch[1] : `${qi + 1}.`
+                                        const text = numMatch ? numMatch[2] : q.questionText
+                                        // Truncate long question text
+                                        const displayText = text.length > 80 ? text.substring(0, 80) + '…' : text
+                                        return (
+                                          <div key={q.id} style={{
+                                            display: 'flex', alignItems: 'flex-start', gap: '10px',
+                                            padding: '8px 12px', borderRadius: '8px',
+                                            background: q.correct ? 'rgba(21,128,61,0.06)' : 'rgba(220,38,38,0.06)',
+                                            border: `1px solid ${q.correct ? 'rgba(21,128,61,0.15)' : 'rgba(220,38,38,0.15)'}`,
+                                          }}>
+                                            {/* ✓ / ✗ icon */}
+                                            <div style={{
+                                              width: 22, height: 22, borderRadius: '50%', flexShrink: 0, marginTop: '1px',
+                                              background: q.correct ? '#dcfce7' : '#fee2e2',
+                                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            }}>
+                                              {q.correct
+                                                ? <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#15803d" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
+                                                : <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="3"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                                              }
+                                            </div>
+                                            {/* Question content */}
+                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                              <div style={{ fontSize: '13px', color: 'var(--foreground)', lineHeight: 1.4 }}>
+                                                <span style={{ fontWeight: 600, marginRight: '4px' }}>{label}</span>
+                                                {displayText}
+                                              </div>
+                                              {!isShowWork && q.studentAnswer && (
+                                                <div style={{ marginTop: '4px', fontSize: '12px', color: q.correct ? '#15803d' : '#dc2626' }}>
+                                                  Your answer: <span style={{ fontWeight: 600 }}>{q.studentAnswer}</span>
+                                                  {!q.correct && q.correctAnswer && (
+                                                    <span style={{ color: '#15803d', marginLeft: '10px' }}>
+                                                      Correct: <span style={{ fontWeight: 600 }}>{q.correctAnswer}</span>
+                                                    </span>
+                                                  )}
+                                                </div>
+                                              )}
+                                              {!isShowWork && !q.studentAnswer && !q.correct && (
+                                                <div style={{ marginTop: '4px', fontSize: '12px', color: '#dc2626' }}>
+                                                  No answer given
+                                                  {q.correctAnswer && <span style={{ color: '#15803d', marginLeft: '10px' }}>Correct: <span style={{ fontWeight: 600 }}>{q.correctAnswer}</span></span>}
+                                                </div>
+                                              )}
+                                              {isShowWork && (
+                                                <div style={{ marginTop: '4px', fontSize: '12px', color: 'var(--gray-mid)' }}>
+                                                  Show your work
+                                                </div>
+                                              )}
+                                            </div>
+                                          </div>
+                                        )
+                                      })}
+                                    </div>
+                                  </div>
+                                )
+                              })()}
                             </div>
                           )}
                         </div>
