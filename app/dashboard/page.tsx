@@ -383,16 +383,11 @@ export default function Dashboard() {
           const myMeetings = allMeetings.filter(m => {
             const end = new Date(new Date(m.startTime).getTime() + m.durationMinutes * 60000)
             if (end < now) return false // already ended
-            if (m.inviteeType === 'students') {
+            if (m.inviteeType === 'students' || m.inviteeType === 'parent-student') {
               try {
                 const ids: string[] = JSON.parse(m.studentIds || '[]')
-                return ids.includes(studentId) || ids.includes(loginId)
-              } catch { return false }
-            }
-            if (m.inviteeType === 'parent-student') {
-              try {
-                const ids: string[] = JSON.parse(m.studentIds || '[]')
-                return ids.includes(studentId) || ids.includes(loginId)
+                // Check all possible ID forms: Cognito sub (userId), loginId (email), studentId
+                return ids.includes(userId) || ids.includes(loginId) || ids.includes(studentId)
               } catch { return false }
             }
             if (m.inviteeType === 'course' && studentCourseId && m.courseId === studentCourseId) return true
@@ -640,6 +635,29 @@ export default function Dashboard() {
             Melinda replied to {unreadReplies === 1 ? 'your message' : `${unreadReplies} messages`} — tap to read
             <span style={{ marginLeft: '4px', fontSize: '13px', opacity: 0.8 }}>→</span>
           </div>
+        )
+      })()}
+
+      {/* Zoom meeting proximity banner — shown when a meeting is within 2 hours or live */}
+      {upcomingMeetings.length > 0 && (() => {
+        const now = new Date()
+        const next = upcomingMeetings[0]
+        const start = new Date(next.startTime)
+        const end = new Date(start.getTime() + next.durationMinutes * 60000)
+        const minUntil = Math.round((start.getTime() - now.getTime()) / 60000)
+        const isLive = now >= start && now < end
+        if (!isLive && minUntil > 120) return null
+        const timeStr = start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+        const bg = isLive ? '#16a34a' : minUntil <= 15 ? '#EA580C' : '#2563EB'
+        const label = isLive
+          ? `🎥 Your Zoom session is live now — ${next.topic}`
+          : `🎥 Zoom with Melinda at ${timeStr} — in ${minUntil} min — ${next.topic}`
+        return (
+          <a href={next.joinUrl} target="_blank" rel="noopener noreferrer"
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', padding: '13px 24px', background: bg, color: 'white', textDecoration: 'none', fontSize: '14px', fontWeight: 600 }}>
+            {label}
+            <span style={{ opacity: 0.85, fontSize: '13px' }}>Join →</span>
+          </a>
         )
       })()}
 

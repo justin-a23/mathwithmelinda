@@ -116,13 +116,20 @@ function isUpcoming(startTime: string): boolean {
   return new Date(startTime) > new Date()
 }
 
-function getMeetingStatus(startTime: string, durationMinutes: number): 'upcoming' | 'live' | 'past' {
+function getMeetingStatus(startTime: string, durationMinutes: number, now: Date): 'upcoming' | 'live' | 'past' {
   const start = new Date(startTime)
   const end = new Date(start.getTime() + durationMinutes * 60000)
-  const now = new Date()
   if (now < start) return 'upcoming'
   if (now < end) return 'live'
   return 'past'
+}
+
+function getCountdownLabel(startTime: string, now: Date): string | null {
+  const start = new Date(startTime)
+  const minUntil = Math.round((start.getTime() - now.getTime()) / 60000)
+  if (minUntil <= 0 || minUntil > 120) return null
+  if (minUntil < 60) return `In ${minUntil} min`
+  return `In ${Math.round(minUntil / 60)} hr`
 }
 
 function buildInviteeSummary(meeting: ZoomMeeting, studentMap: Record<string, string>): string {
@@ -150,6 +157,13 @@ export default function ZoomMeetingsPage() {
   const { checking } = useRoleGuard('teacher')
 
   const [meetings, setMeetings] = useState<ZoomMeeting[]>([])
+  const [now, setNow] = useState(new Date())
+
+  // Tick every 60s so countdown badges stay accurate
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 60_000)
+    return () => clearInterval(t)
+  }, [])
   const [students, setStudents] = useState<StudentProfile[]>([])
   const [courses, setCourses] = useState<Course[]>([])
   const [parents, setParents] = useState<ParentProfile[]>([])
@@ -300,8 +314,8 @@ export default function ZoomMeetingsPage() {
     )
   }
 
-  const upcomingMeetings = meetings.filter(m => getMeetingStatus(m.startTime, m.durationMinutes) !== 'past')
-  const pastMeetings = meetings.filter(m => getMeetingStatus(m.startTime, m.durationMinutes) === 'past')
+  const upcomingMeetings = meetings.filter(m => getMeetingStatus(m.startTime, m.durationMinutes, now) !== 'past')
+  const pastMeetings = meetings.filter(m => getMeetingStatus(m.startTime, m.durationMinutes, now) === 'past')
     .slice().reverse() // most recent first
 
   const inputStyle: React.CSSProperties = {
@@ -571,8 +585,9 @@ export default function ZoomMeetingsPage() {
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 {upcomingMeetings.map(meeting => {
-                  const status = getMeetingStatus(meeting.startTime, meeting.durationMinutes)
+                  const status = getMeetingStatus(meeting.startTime, meeting.durationMinutes, now)
                   const isLive = status === 'live'
+                  const countdown = getCountdownLabel(meeting.startTime, now)
                   const inviteeSummary = buildInviteeSummary(meeting, studentMap)
                   const isConfirming = confirmDeleteId === meeting.id
 
@@ -622,6 +637,17 @@ export default function ZoomMeetingsPage() {
                               : meeting.durationMinutes === 60 ? '1 hr'
                               : `${meeting.durationMinutes / 60} hr`}
                           </span>
+                          {/* Countdown badge */}
+                          {isLive && (
+                            <span style={{ fontSize: '12px', fontWeight: 700, background: '#F0FDF4', color: '#166534', border: '1px solid #86EFAC', borderRadius: '20px', padding: '2px 10px' }}>
+                              🔴 Live now
+                            </span>
+                          )}
+                          {!isLive && countdown && (
+                            <span style={{ fontSize: '12px', fontWeight: 700, background: '#FFFBEB', color: '#92400E', border: '1px solid #FDE68A', borderRadius: '20px', padding: '2px 10px' }}>
+                              ⏰ {countdown}
+                            </span>
+                          )}
                         </div>
                         {meeting.notes && (
                           <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginTop: '6px', fontStyle: 'italic' }}>
