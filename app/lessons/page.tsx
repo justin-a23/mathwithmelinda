@@ -3,10 +3,10 @@
 import { useAuthenticator } from '@aws-amplify/ui-react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState, useRef, Suspense } from 'react'
-import { useTheme } from '../ThemeProvider'
 import { generateClient } from 'aws-amplify/api'
 import MathRenderer from '../components/MathRenderer'
 import MathInput from '../components/MathInput'
+import StudentNav from '../components/StudentNav'
 
 const CLOUDFRONT_URL = 'https://dgmfzo1xk5r4e.cloudfront.net'
 
@@ -138,15 +138,39 @@ type UploadedFile = {
   key: string
   status: 'uploading' | 'done' | 'error'
   progress: number
+  previewUrl?: string   // object URL for in-browser thumbnail (standard images only)
+  warning?: string      // quality warning (landscape, low-res, etc.)
+}
+
+function checkImageQuality(file: File): Promise<string | null> {
+  return new Promise((resolve) => {
+    const previewable = file.type === 'image/jpeg' || file.type === 'image/png' || file.type === 'image/webp' || file.type === 'image/gif'
+    if (!previewable) { resolve(null); return }
+    const url = URL.createObjectURL(file)
+    const img = new window.Image()
+    img.onload = () => {
+      URL.revokeObjectURL(url)
+      const w = img.naturalWidth, h = img.naturalHeight
+      if (w < 600 || h < 600) {
+        resolve('Low resolution — move your camera closer so your writing is easy to read.')
+      } else if (w > h * 1.15) {
+        resolve('Photo is sideways (landscape) — rotate your phone upright before taking the photo.')
+      } else {
+        resolve(null)
+      }
+    }
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(null) }
+    img.src = url
+  })
 }
 
 function LessonPageInner() {
   const { user } = useAuthenticator()
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { theme, toggleTheme } = useTheme()
   const [notes, setNotes] = useState('')
   const [files, setFiles] = useState<UploadedFile[]>([])
+  const [showPhotoTips, setShowPhotoTips] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState('')
@@ -505,7 +529,10 @@ function LessonPageInner() {
 
   async function uploadFile(file: File) {
     const uid = `${Date.now()}-${Math.random().toString(36).slice(2)}`
-    setFiles(prev => [...prev, { uid, name: file.name, key: '', status: 'uploading', progress: 0 }])
+    const isPreviewable = file.type === 'image/jpeg' || file.type === 'image/png' || file.type === 'image/webp' || file.type === 'image/gif'
+    const previewUrl = isPreviewable ? URL.createObjectURL(file) : undefined
+    const warning = await checkImageQuality(file)
+    setFiles(prev => [...prev, { uid, name: file.name, key: '', status: 'uploading', progress: 0, previewUrl, warning }])
     try {
       const formData = new FormData()
       formData.append('file', file)
@@ -800,25 +827,7 @@ function LessonPageInner() {
 
   return (
     <div style={{ fontFamily: 'var(--font-body)', background: 'var(--page-bg)', minHeight: '100vh' }}>
-      <nav style={{ background: 'var(--nav-bg)', padding: '0 48px', height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{ width: '36px', height: '36px', background: 'var(--plum)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <svg width="20" height="20" viewBox="0 0 40 40" fill="none">
-              <rect x="17" y="6" width="6" height="28" rx="3" fill="white"/>
-              <rect x="6" y="17" width="28" height="6" rx="3" fill="white"/>
-            </svg>
-          </div>
-          <span style={{ fontFamily: 'var(--font-display)', color: 'white', fontSize: '20px' }}>Math with Melinda</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <button onClick={toggleTheme} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'white', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '14px' }}>
-            {theme === 'light' ? '🌙 Dark' : '☀️ Light'}
-          </button>
-          <button onClick={() => router.push('/dashboard')} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'white', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '14px' }}>
-            ← Dashboard
-          </button>
-        </div>
-      </nav>
+      <StudentNav />
 
       <main style={{ maxWidth: '860px', margin: '0 auto', padding: '48px 24px' }}>
         {loading ? (
@@ -1052,35 +1061,102 @@ function LessonPageInner() {
 
                   {showUpload && (
                     <div style={{ marginBottom: '24px' }}>
-                      <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--gray-dark)', display: 'block', marginBottom: '4px' }}>
-                        {hasShowWork ? 'Upload your show-work sheet' : 'Photos of your work'}
-                      </label>
+                      {/* Header row with label + photo tips toggle */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                        <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--gray-dark)' }}>
+                          {hasShowWork ? 'Upload your show-work sheet' : 'Photos of your work'}
+                        </label>
+                        <button
+                          onClick={() => setShowPhotoTips(t => !t)}
+                          style={{ background: 'none', border: '1px solid var(--gray-light)', borderRadius: '20px', padding: '3px 10px', fontSize: '11px', fontWeight: 600, color: 'var(--plum)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                          {showPhotoTips ? 'Hide tips' : 'Photo tips'}
+                        </button>
+                      </div>
+
+                      {/* Collapsible photo tips panel */}
+                      {showPhotoTips && (
+                        <div style={{ background: 'rgba(123,79,166,0.05)', border: '1px solid var(--plum-mid)', borderRadius: '10px', padding: '14px 16px', marginBottom: '12px' }}>
+                          <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--plum)', marginBottom: '10px', letterSpacing: '0.5px', textTransform: 'uppercase' }}>📷 How to take a great photo</div>
+                          <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '7px' }}>
+                            {[
+                              ['📱', 'Hold your phone upright (portrait), not sideways'],
+                              ['☀️', 'Use good lighting — no shadows covering your work'],
+                              ['📐', 'Lay the paper flat on a table and shoot straight down'],
+                              ['🔍', 'Get close enough that all writing fills the frame'],
+                              ['✅', 'Check the photo before uploading — is everything readable?'],
+                            ].map(([icon, tip], i) => (
+                              <li key={i} style={{ display: 'flex', gap: '8px', fontSize: '12px', color: 'var(--foreground)', lineHeight: 1.4 }}>
+                                <span style={{ flexShrink: 0 }}>{icon}</span>
+                                <span>{tip}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
                       {hasShowWork && (
                         <p style={{ fontSize: '12px', color: 'var(--gray-mid)', margin: '0 0 8px' }}>
                           Print the show-work sheet above, complete the problems on paper, then take a photo and upload it here.
                         </p>
                       )}
+
+                      {/* Drop zone */}
                       <div onClick={() => fileInputRef.current?.click()} onDragOver={e => e.preventDefault()}
                         onDrop={e => { e.preventDefault(); Array.from(e.dataTransfer.files).forEach(uploadFile) }}
-                        style={{ border: '2px dashed var(--gray-light)', borderRadius: 'var(--radius)', padding: '24px', textAlign: 'center', cursor: 'pointer', marginBottom: '12px' }}>
+                        style={{ border: '2px dashed var(--plum-mid)', borderRadius: 'var(--radius)', padding: files.length > 0 ? '16px' : '28px', textAlign: 'center', cursor: 'pointer', marginBottom: '12px', background: 'rgba(123,79,166,0.03)', transition: 'background 0.15s' }}>
                         <input ref={fileInputRef} type="file" accept="image/*,.heic,.heif,.pdf,application/pdf" multiple style={{ display: 'none' }}
                           onChange={e => { if (e.target.files) Array.from(e.target.files).forEach(uploadFile) }} />
-                        <div style={{ fontSize: '24px', marginBottom: '8px' }}>+</div>
-                        <div style={{ color: 'var(--gray-mid)', fontSize: '14px' }}>Click or drag files here</div>
-                        <div style={{ color: 'var(--gray-mid)', fontSize: '12px', marginTop: '4px' }}>Supports JPG, PNG, HEIC, PDF</div>
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--plum)" strokeWidth="1.5" style={{ marginBottom: '8px', opacity: 0.7 }}>
+                          <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                          <circle cx="12" cy="13" r="4"/>
+                        </svg>
+                        <div style={{ color: 'var(--plum)', fontSize: '14px', fontWeight: 600 }}>
+                          {files.length > 0 ? 'Add another photo' : 'Tap to take a photo or choose a file'}
+                        </div>
+                        <div style={{ color: 'var(--gray-mid)', fontSize: '11px', marginTop: '4px' }}>JPG, PNG, HEIC, PDF</div>
                       </div>
+
+                      {/* File previews */}
                       {files.length > 0 && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                           {files.map((f, i) => (
-                            <div key={i} style={{ background: 'var(--gray-light)', borderRadius: '6px', padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                              <span style={{ fontSize: '13px', color: 'var(--foreground)' }}>{f.name}</span>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                {f.status === 'uploading' && <span style={{ fontSize: '12px', color: 'var(--gray-mid)' }}>Converting...</span>}
-                                {f.status === 'done' && <span style={{ fontSize: '12px', color: 'var(--plum)', fontWeight: 500 }}>✓ Ready</span>}
-                                {f.status === 'error' && <span style={{ fontSize: '12px', color: 'red' }}>Failed</span>}
+                            <div key={i} style={{ borderRadius: '10px', border: `1px solid ${f.warning && f.status === 'done' ? '#fde68a' : 'var(--gray-light)'}`, overflow: 'hidden', background: f.warning && f.status === 'done' ? '#fffbeb' : 'var(--gray-light)' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px' }}>
+                                {/* Thumbnail */}
+                                {f.previewUrl ? (
+                                  <a href={f.previewUrl} target="_blank" rel="noopener noreferrer" style={{ flexShrink: 0 }}>
+                                    <img src={f.previewUrl} alt={f.name} style={{ width: '52px', height: '52px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--gray-light)', display: 'block' }} />
+                                  </a>
+                                ) : (
+                                  <div style={{ flexShrink: 0, width: '52px', height: '52px', borderRadius: '6px', background: 'rgba(123,79,166,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--plum)" strokeWidth="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                                  </div>
+                                )}
+                                {/* Name + status */}
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ fontSize: '13px', color: 'var(--foreground)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</div>
+                                  <div style={{ fontSize: '12px', marginTop: '2px' }}>
+                                    {f.status === 'uploading' && <span style={{ color: 'var(--gray-mid)' }}>Uploading…</span>}
+                                    {f.status === 'done' && !f.warning && <span style={{ color: '#16a34a', fontWeight: 600 }}>✓ Ready</span>}
+                                    {f.status === 'done' && f.warning && <span style={{ color: '#92400e', fontWeight: 600 }}>✓ Uploaded</span>}
+                                    {f.status === 'error' && <span style={{ color: '#dc2626', fontWeight: 600 }}>Upload failed — try again</span>}
+                                  </div>
+                                </div>
+                                {/* Remove */}
                                 <button onClick={() => setFiles(prev => prev.filter((_, idx) => idx !== i))}
-                                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--gray-mid)', fontSize: '16px' }}>×</button>
+                                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--gray-mid)', fontSize: '20px', lineHeight: 1, flexShrink: 0, padding: '0 4px' }}>×</button>
                               </div>
+                              {/* Quality warning stripe */}
+                              {f.warning && f.status === 'done' && (
+                                <div style={{ padding: '8px 12px', borderTop: '1px solid #fde68a', background: '#fef3c7', display: 'flex', alignItems: 'flex-start', gap: '6px' }}>
+                                  <span style={{ fontSize: '14px', flexShrink: 0 }}>⚠️</span>
+                                  <div>
+                                    <span style={{ fontSize: '12px', color: '#92400e', fontWeight: 600 }}>{f.warning}</span>
+                                    <span style={{ fontSize: '12px', color: '#92400e' }}> You can still submit, but a better photo helps Melinda grade accurately.</span>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           ))}
                         </div>

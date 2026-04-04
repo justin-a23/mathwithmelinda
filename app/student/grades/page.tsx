@@ -2,9 +2,9 @@
 
 import { useAuthenticator } from '@aws-amplify/ui-react'
 import { useRouter } from 'next/navigation'
+import StudentNav from '../../../components/StudentNav'
 import { useEffect, useState } from 'react'
 import { generateClient } from 'aws-amplify/api'
-import ThemeToggle from '../../components/ThemeToggle'
 
 const client = generateClient()
 
@@ -109,6 +109,7 @@ type AssignmentGrade = {
   teacherComment: string | null
   submittedAt: string | null
   gradedQuestions: GradedQuestion[]
+  submissionId: string | null
 }
 
 function categoryLabel(cat: string | null | undefined): string {
@@ -272,7 +273,7 @@ export default function StudentGradesPage() {
 
       // 6. Match submissions to lessons
       const lessonIdSet = new Set(cols.map(c => c.lessonId))
-      const subByLesson = new Map<string, { grade: string | null; teacherComment: string | null; submittedAt: string | null; gradedQuestions: GradedQuestion[] }>()
+      const subByLesson = new Map<string, { grade: string | null; teacherComment: string | null; submittedAt: string | null; gradedQuestions: GradedQuestion[]; submissionId: string }>()
       for (const sub of subs) {
         let parsedLessonId: string | null = null
         let gradedQuestions: GradedQuestion[] = []
@@ -289,19 +290,21 @@ export default function StudentGradesPage() {
           teacherComment: sub.teacherComment,
           submittedAt: sub.submittedAt,
           gradedQuestions,
+          submissionId: sub.id,
         })
       }
 
       // 7. Build assignment grades list
       const result: AssignmentGrade[] = cols.map(col => {
         const sub = subByLesson.get(col.lessonId)
-        if (!sub) return { col, grade: null, teacherComment: null, submittedAt: null, gradedQuestions: [] }
+        if (!sub) return { col, grade: null, teacherComment: null, submittedAt: null, gradedQuestions: [], submissionId: null }
         return {
           col,
           grade: sub.grade ? sub.grade : 'pending',
           teacherComment: sub.teacherComment,
           submittedAt: sub.submittedAt,
           gradedQuestions: sub.gradedQuestions,
+          submissionId: sub.submissionId,
         }
       })
 
@@ -357,30 +360,7 @@ export default function StudentGradesPage() {
         .grade-row:hover { background: rgba(123,79,166,0.04) !important; }
       `}</style>
 
-      {/* Nav */}
-      <nav style={{ background: 'var(--nav-bg)', padding: '0 48px', height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{ width: '36px', height: '36px', background: 'var(--plum)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <svg width="20" height="20" viewBox="0 0 40 40" fill="none">
-              <rect x="17" y="6" width="6" height="28" rx="3" fill="white"/>
-              <rect x="6" y="17" width="28" height="6" rx="3" fill="white"/>
-            </svg>
-          </div>
-          <span style={{ fontFamily: 'var(--font-display)', color: 'white', fontSize: '20px' }}>Math with Melinda</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <ThemeToggle />
-          <button onClick={() => router.push('/student/syllabus')}
-            style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.8)', padding: '8px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px' }}>
-            Syllabus
-          </button>
-          <button onClick={() => router.push('/dashboard')}
-            style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'white', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
-            Dashboard
-          </button>
-        </div>
-      </nav>
+      <StudentNav />
 
       <main style={{ padding: '32px 40px 80px', maxWidth: '760px', margin: '0 auto' }}>
 
@@ -562,8 +542,25 @@ export default function StudentGradesPage() {
                               {/* Teacher comment */}
                               {hasComment && (
                                 <div style={{ padding: '14px 20px 12px 20px', borderBottom: hasResults ? '1px solid rgba(123,79,166,0.08)' : 'none' }}>
-                                  <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--plum)', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '6px' }}>
-                                    Teacher Comment
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                                    <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--plum)', letterSpacing: '1px', textTransform: 'uppercase' }}>
+                                      Teacher Comment
+                                    </div>
+                                    {ag.submissionId && ag.grade && ag.grade !== 'pending' && (
+                                      <button
+                                        onClick={e => {
+                                          e.stopPropagation()
+                                          const params = new URLSearchParams({
+                                            gradeQuestion: '1',
+                                            submissionId: ag.submissionId!,
+                                            lessonTitle: ag.col.title,
+                                          })
+                                          router.push(`/student/messages?${params.toString()}`)
+                                        }}
+                                        style={{ background: 'none', border: '1px solid var(--plum-mid)', color: 'var(--plum)', borderRadius: '6px', padding: '4px 10px', fontSize: '11px', fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font-body)' }}>
+                                        Question about this grade →
+                                      </button>
+                                    )}
                                   </div>
                                   <p style={{ margin: 0, fontSize: '14px', color: 'var(--foreground)', lineHeight: 1.6 }}>
                                     {ag.teacherComment}

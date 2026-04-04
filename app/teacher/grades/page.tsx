@@ -1,8 +1,8 @@
 'use client'
 
 import { useAuthenticator } from '@aws-amplify/ui-react'
-import { useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { useEffect, useRef, useState } from 'react'
 import { generateClient } from 'aws-amplify/api'
 import { useTheme } from '../../ThemeProvider'
 import MathRenderer from '../../components/MathRenderer'
@@ -415,6 +415,9 @@ function QuestionScorecardSection({ questions, content, worksheetImageUrls, ques
 export default function GradingPage() {
   const { user } = useAuthenticator()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const pendingSubmissionId = searchParams.get('submissionId')
+  const autoSelectedRef = useRef(false)
   const { checking } = useRoleGuard('teacher')
   const [submissions, setSubmissions] = useState<Submission[]>([])
   const [loading, setLoading] = useState(true)
@@ -467,6 +470,20 @@ export default function GradingPage() {
     fetchVideoWatches()
     fetchTeachingVoice()
   }, [])
+
+  // Auto-select submission from URL param (grade dispute deep-link)
+  useEffect(() => {
+    if (!pendingSubmissionId || autoSelectedRef.current || submissions.length === 0) return
+    const target = submissions.find(s => s.id === pendingSubmissionId)
+    if (target) {
+      autoSelectedRef.current = true
+      // Clear the URL param without a navigation so the page doesn't re-trigger
+      window.history.replaceState(null, '', '/teacher/grades')
+      // Switch filter to show graded+ungraded so the submission is visible
+      setFilterStatus('all')
+      openSubmission(target)
+    }
+  }, [submissions, pendingSubmissionId])
 
   // Auto-refresh submissions every 60 seconds
   useEffect(() => {

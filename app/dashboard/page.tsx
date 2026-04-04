@@ -4,8 +4,7 @@ import { useAuthenticator } from '@aws-amplify/ui-react'
 import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import { generateClient } from 'aws-amplify/api'
-import { useTheme } from '../ThemeProvider'
-import ThemeToggle from '../components/ThemeToggle'
+import StudentNav from '../components/StudentNav'
 const findPlanItemByLessonQuery = /* GraphQL */`
   query FindPlanItemByLesson($filter: ModelWeeklyPlanItemFilterInput) {
     listWeeklyPlanItems(filter: $filter, limit: 1) {
@@ -199,7 +198,6 @@ export default function Dashboard() {
   const [weeklyPlans, setWeeklyPlans] = useState<WeeklyPlan[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
-  useTheme() // keeps dark mode active via ThemeProvider context
 
   const [pendingApproval, setPendingApproval] = useState(false)
   const [isDeclined, setIsDeclined] = useState(false)
@@ -458,23 +456,7 @@ export default function Dashboard() {
   if (pendingApproval) {
     return (
       <div style={{ fontFamily: 'var(--font-body)', background: 'var(--page-bg)', minHeight: '100vh' }}>
-        <nav style={{ background: 'var(--nav-bg)', padding: '0 48px', height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ width: '36px', height: '36px', background: 'var(--plum)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <svg width="20" height="20" viewBox="0 0 40 40" fill="none">
-                <rect x="17" y="6" width="6" height="28" rx="3" fill="white"/>
-                <rect x="6" y="17" width="28" height="6" rx="3" fill="white"/>
-              </svg>
-            </div>
-            <span style={{ fontFamily: 'var(--font-display)', color: 'white', fontSize: '20px' }}>Math with Melinda</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <ThemeToggle />
-            <button onClick={() => signOut()} style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.4)', padding: '8px 4px', cursor: 'pointer', fontSize: '13px' }}>
-              Sign out
-            </button>
-          </div>
-        </nav>
+        <StudentNav />
         <main style={{ maxWidth: '520px', margin: '0 auto', padding: '80px 24px', textAlign: 'center' }}>
           <div style={{ width: '72px', height: '72px', background: '#FEF3C7', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 28px' }}>
             <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#D97706" strokeWidth="2">
@@ -504,23 +486,7 @@ export default function Dashboard() {
   if (isDeclined) {
     return (
       <div style={{ fontFamily: 'var(--font-body)', background: 'var(--page-bg)', minHeight: '100vh' }}>
-        <nav style={{ background: 'var(--nav-bg)', padding: '0 48px', height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ width: '36px', height: '36px', background: 'var(--plum)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <svg width="20" height="20" viewBox="0 0 40 40" fill="none">
-                <rect x="17" y="6" width="6" height="28" rx="3" fill="white"/>
-                <rect x="6" y="17" width="28" height="6" rx="3" fill="white"/>
-              </svg>
-            </div>
-            <span style={{ fontFamily: 'var(--font-display)', color: 'white', fontSize: '20px' }}>Math with Melinda</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <ThemeToggle />
-            <button onClick={() => signOut()} style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.4)', padding: '8px 4px', cursor: 'pointer', fontSize: '13px' }}>
-              Sign out
-            </button>
-          </div>
-        </nav>
+        <StudentNav />
         <main style={{ maxWidth: '520px', margin: '0 auto', padding: '80px 24px', textAlign: 'center' }}>
           <div style={{ width: '72px', height: '72px', background: '#FEE2E2', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 28px' }}>
             <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#b91c1c" strokeWidth="2">
@@ -602,60 +568,14 @@ export default function Dashboard() {
         </div>
       )}
 
-      <nav style={{ background: 'var(--nav-bg)', padding: '0 48px', height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{ width: '36px', height: '36px', background: 'var(--plum)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <svg width="20" height="20" viewBox="0 0 40 40" fill="none">
-              <rect x="17" y="6" width="6" height="28" rx="3" fill="white"/>
-              <rect x="6" y="17" width="28" height="6" rx="3" fill="white"/>
-            </svg>
-          </div>
-          <span style={{ fontFamily: 'var(--font-display)', color: 'white', fontSize: '20px' }}>Math with Melinda</span>
-        </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
-          <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '14px' }}>{user?.signInDetails?.loginId}</span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <button onClick={() => router.push('/student/submissions')} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'white', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '14px' }}>
-                My Work
-              </button>
-              <button onClick={() => router.push('/student/grades')} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'white', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '14px' }}>
-                My Grades
-              </button>
-              <button onClick={() => router.push('/student/syllabus')} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'white', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '14px' }}>
-                Syllabus
-              </button>
-              {(() => {
-                const lastVisited = typeof window !== 'undefined'
-                  ? parseInt(localStorage.getItem('mwm:messagesLastVisited') || '0')
-                  : 0
-                const unreadReplies = myMessages.filter(m =>
-                  m.teacherReply && m.repliedAt && new Date(m.repliedAt).getTime() > lastVisited
-                ).length
-                return (
-                  <button
-                    onClick={() => router.push('/student/messages')}
-                    style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'white', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px', position: 'relative' }}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
-                    Messages
-                    {unreadReplies > 0 && (
-                      <span style={{ background: '#ef4444', color: 'white', fontSize: '10px', fontWeight: 700, borderRadius: '10px', padding: '1px 6px', lineHeight: 1.4 }}>
-                        {unreadReplies}
-                      </span>
-                    )}
-                  </button>
-                )
-              })()}
-              <button onClick={() => router.push('/profile')} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'white', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '14px' }}>
-                My Profile
-              </button>
-              <ThemeToggle />
-              <button onClick={() => signOut()} style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.4)', padding: '8px 4px', cursor: 'pointer', fontSize: '13px' }}>
-                Sign out
-              </button>
-            </div>
-        </div>
-      </nav>
+      {(() => {
+        const lastVisited = typeof window !== 'undefined'
+          ? parseInt(localStorage.getItem('mwm:messagesLastVisited') || '0') : 0
+        const unreadReplies = messagesLoaded
+          ? myMessages.filter(m => m.teacherReply && m.repliedAt && new Date(m.repliedAt).getTime() > lastVisited).length
+          : undefined
+        return <StudentNav unreadCount={unreadReplies} />
+      })()}
 
       {/* Unread replies banner — shown just below nav */}
       {messagesLoaded && (() => {

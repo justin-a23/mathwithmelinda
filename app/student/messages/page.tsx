@@ -1,11 +1,10 @@
 'use client'
 
 import { useAuthenticator } from '@aws-amplify/ui-react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import { generateClient } from 'aws-amplify/api'
-import ThemeToggle from '../../components/ThemeToggle'
-import { useTheme } from '../../ThemeProvider'
+import StudentNav from '../../components/StudentNav'
 
 const client = generateClient()
 
@@ -56,7 +55,12 @@ function fmtDate(s: string): string {
 export default function StudentMessagesPage() {
   const { user, signOut, authStatus } = useAuthenticator()
   const router = useRouter()
-  useTheme()
+  const searchParams = useSearchParams()
+
+  // Grade question context from URL params
+  const isGradeQuestion = searchParams.get('gradeQuestion') === '1'
+  const gradeQuestionSubmissionId = searchParams.get('submissionId') || ''
+  const gradeQuestionLesson = searchParams.get('lessonTitle') || ''
 
   const [messages, setMessages] = useState<Message[]>([])
   const [loading, setLoading] = useState(true)
@@ -78,6 +82,14 @@ export default function StudentMessagesPage() {
     // Mark this visit so dashboard badge resets
     localStorage.setItem('mwm:messagesLastVisited', Date.now().toString())
   }, [studentId])
+
+  // Pre-fill compose when arriving from a grade question link
+  useEffect(() => {
+    if (isGradeQuestion && gradeQuestionSubmissionId) {
+      setCompose(`[ref:sub=${gradeQuestionSubmissionId}]\nQuestion about my grade on: ${gradeQuestionLesson}\n\n`)
+      setTimeout(() => textareaRef.current?.focus(), 100)
+    }
+  }, [isGradeQuestion, gradeQuestionSubmissionId])
 
   // Scroll to bottom when messages load/change
   useEffect(() => {
@@ -165,37 +177,10 @@ export default function StudentMessagesPage() {
     }
   }
 
-  const navBtn: React.CSSProperties = {
-    background: 'transparent', border: '1px solid rgba(255,255,255,0.2)',
-    color: 'white', padding: '8px 16px', borderRadius: '6px',
-    cursor: 'pointer', fontSize: '14px',
-  }
-
   return (
     <div style={{ fontFamily: 'var(--font-body)', background: 'var(--page-bg)', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
 
-      {/* Nav */}
-      <nav style={{ background: 'var(--nav-bg)', padding: '0 48px', height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-        <button onClick={() => router.push('/dashboard')} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{ width: '36px', height: '36px', background: 'var(--plum)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <svg width="20" height="20" viewBox="0 0 40 40" fill="none">
-              <rect x="17" y="6" width="6" height="28" rx="3" fill="white"/>
-              <rect x="6" y="17" width="28" height="6" rx="3" fill="white"/>
-            </svg>
-          </div>
-          <span style={{ fontFamily: 'var(--font-display)', color: 'white', fontSize: '20px' }}>Math with Melinda</span>
-        </button>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <button onClick={() => router.push('/student/submissions')} style={navBtn}>My Work</button>
-          <button onClick={() => router.push('/student/grades')} style={navBtn}>My Grades</button>
-          <button onClick={() => router.push('/student/messages')} style={{ ...navBtn, background: 'rgba(255,255,255,0.15)', fontWeight: 600 }}>Messages</button>
-          <button onClick={() => router.push('/profile')} style={navBtn}>My Profile</button>
-          <ThemeToggle />
-          <button onClick={async () => { await signOut(); router.replace('/login') }} style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.4)', padding: '8px 4px', cursor: 'pointer', fontSize: '13px' }}>
-            Sign out
-          </button>
-        </div>
-      </nav>
+      <StudentNav />
 
       {/* Page body */}
       <main style={{ flex: 1, maxWidth: '680px', width: '100%', margin: '0 auto', padding: '40px 24px', display: 'flex', flexDirection: 'column', gap: '0' }}>
@@ -215,9 +200,19 @@ export default function StudentMessagesPage() {
             </button>
           )}
         </div>
-        <p style={{ fontSize: '13px', color: 'var(--gray-mid)', marginBottom: '28px' }}>
+        <p style={{ fontSize: '13px', color: 'var(--gray-mid)', marginBottom: isGradeQuestion ? '12px' : '28px' }}>
           Ask questions about your lessons. Melinda will reply here.
         </p>
+
+        {isGradeQuestion && gradeQuestionLesson && (
+          <div style={{ background: 'rgba(123,79,166,0.07)', border: '1px solid var(--plum-mid)', borderRadius: '8px', padding: '10px 16px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--plum)" strokeWidth="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+            <span style={{ fontSize: '13px', color: 'var(--plum)', fontWeight: 600 }}>
+              Asking about: <span style={{ fontWeight: 700 }}>{gradeQuestionLesson}</span>
+            </span>
+            <button onClick={() => router.replace('/student/messages')} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--gray-mid)', fontSize: '12px', cursor: 'pointer', padding: '2px 4px' }}>✕</button>
+          </div>
+        )}
 
         {/* Conversation thread */}
         <div style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: '12px', overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: '340px' }}>
@@ -239,12 +234,20 @@ export default function StudentMessagesPage() {
                   {/* Student's message — right side */}
                   <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', alignItems: 'flex-end' }}>
                     <div style={{ maxWidth: '75%', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+                      {/* Strip hidden [ref:sub=...] metadata line before displaying */}
+                      {/^\[ref:sub=[^\]]+\]\n/.test(msg.content) && (
+                        <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)', paddingRight: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                          Grade question
+                        </div>
+                      )}
                       <div style={{
                         background: 'var(--plum)', color: 'white',
                         borderRadius: '18px 18px 4px 18px',
-                        padding: '10px 14px', fontSize: '14px', lineHeight: '1.55'
+                        padding: '10px 14px', fontSize: '14px', lineHeight: '1.55',
+                        whiteSpace: 'pre-wrap',
                       }}>
-                        {msg.content}
+                        {msg.content.replace(/^\[ref:sub=[^\]]+\]\n/, '')}
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <span style={{ fontSize: '11px', color: 'var(--gray-mid)' }}>{fmtDate(msg.sentAt)}</span>

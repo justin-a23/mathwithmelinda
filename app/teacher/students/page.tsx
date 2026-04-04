@@ -1057,16 +1057,26 @@ export default function StudentsPage() {
 
                   {/* Remove confirm */}
                   {isRemoving && (
-                    <div style={{ borderTop: '1px solid #fca5a5', padding: '12px 20px', background: '#FEF2F2', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <span style={{ fontSize: '13px', color: '#b91c1c', flex: 1 }}>Remove {s.firstName} {s.lastName}? This cannot be undone.</span>
-                      <button onClick={() => removeStudent(s.id)} disabled={removing}
-                        style={{ background: '#ef4444', color: 'white', border: 'none', padding: '7px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 500 }}>
-                        {removing ? 'Removing...' : 'Yes, Remove'}
-                      </button>
-                      <button onClick={() => setRemoveConfirmId(null)}
-                        style={{ background: 'transparent', color: '#b91c1c', border: '1px solid #fca5a5', padding: '7px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px' }}>
-                        Cancel
-                      </button>
+                    <div style={{ borderTop: '1px solid #fca5a5', padding: '16px 20px', background: '#FEF2F2' }}>
+                      <div style={{ fontWeight: 700, fontSize: '14px', color: '#b91c1c', marginBottom: '6px' }}>
+                        Permanently remove {s.firstName} {s.lastName}?
+                      </div>
+                      <p style={{ fontSize: '13px', color: '#7f1d1d', margin: '0 0 6px', lineHeight: 1.5 }}>
+                        This deletes their account, all grades, submissions, and messages — everything. <strong>It cannot be undone.</strong>
+                      </p>
+                      <p style={{ fontSize: '12px', color: '#991b1b', margin: '0 0 14px', lineHeight: 1.5, fontStyle: 'italic' }}>
+                        Only do this if the student has left the class and you no longer need any of their records. If you just want to hide them, use <strong>Archive</strong> instead.
+                      </p>
+                      <div style={{ display: 'flex', gap: '10px' }}>
+                        <button onClick={() => setRemoveConfirmId(null)}
+                          style={{ flex: 1, background: 'transparent', color: '#b91c1c', border: '1px solid #fca5a5', padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}>
+                          Cancel — Keep Student
+                        </button>
+                        <button onClick={() => removeStudent(s.id)} disabled={removing}
+                          style={{ background: '#dc2626', color: 'white', border: 'none', padding: '8px 18px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 600, opacity: removing ? 0.7 : 1 }}>
+                          {removing ? 'Removing...' : 'Yes, Delete Everything'}
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>

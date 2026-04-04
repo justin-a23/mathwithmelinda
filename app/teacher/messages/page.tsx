@@ -350,8 +350,11 @@ export default function TeacherMessagesPage() {
                                 {isUnread && (
                                   <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: 'var(--plum)', flexShrink: 0, display: 'inline-block' }} />
                                 )}
+                                {msg.content.startsWith('[ref:sub=') && (
+                                  <span style={{ flexShrink: 0, fontSize: '11px', background: '#fef3c7', color: '#92400e', borderRadius: '10px', padding: '1px 6px', fontWeight: 700 }}>📋</span>
+                                )}
                                 <span style={{ fontSize: '13px', color: 'var(--foreground)', fontWeight: isUnread ? 600 : 400, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: isExpanded ? 'normal' : 'nowrap' }}>
-                                  {msg.content}
+                                  {msg.content.replace(/^\[ref:sub=[^\]]+\]\n?/, '')}
                                 </span>
                               </div>
                               <div style={{ fontSize: '11px', color: 'var(--gray-mid)', marginLeft: isUnread ? '15px' : '0' }}>
@@ -372,7 +375,28 @@ export default function TeacherMessagesPage() {
                             <div style={{ borderTop: '1px solid var(--gray-light)', padding: '16px 18px' }}>
                               <div style={{ background: 'rgba(123,79,166,0.04)', borderRadius: '8px', padding: '12px 14px', marginBottom: '16px' }}>
                                 <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--plum)', marginBottom: '6px', letterSpacing: '1px', textTransform: 'uppercase' }}>Question</div>
-                                <div style={{ fontSize: '14px', color: 'var(--foreground)', lineHeight: '1.6' }}>{msg.content}</div>
+                                {(() => {
+                                  const refMatch = msg.content.match(/^\[ref:sub=([^\]]+)\]\n?/)
+                                  const submissionId = refMatch ? refMatch[1] : null
+                                  const displayContent = submissionId ? msg.content.replace(/^\[ref:sub=[^\]]+\]\n?/, '') : msg.content
+                                  return (
+                                    <>
+                                      {submissionId && (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a', borderRadius: '20px', padding: '2px 10px', fontSize: '11px', fontWeight: 700, letterSpacing: '0.5px' }}>
+                                            📋 Grade question
+                                          </span>
+                                          <a
+                                            href={`/teacher/grades?submissionId=${submissionId}`}
+                                            style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: 'var(--plum)', color: 'white', borderRadius: '6px', padding: '3px 10px', fontSize: '12px', fontWeight: 600, textDecoration: 'none' }}>
+                                            Review Grade →
+                                          </a>
+                                        </div>
+                                      )}
+                                      <div style={{ fontSize: '14px', color: 'var(--foreground)', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>{displayContent}</div>
+                                    </>
+                                  )
+                                })()}
                               </div>
 
                               {msg.teacherReply && (
