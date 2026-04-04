@@ -31,7 +31,6 @@ const listWeeklyPlansWithItems = /* GraphQL */`
             dueTime
             isPublished
             zoomJoinUrl
-            zoomStartTime
             lesson {
               id
               title
@@ -174,7 +173,6 @@ type WeeklyPlanItem = {
   dueTime: string | null
   isPublished: boolean | null
   zoomJoinUrl?: string | null
-  zoomStartTime?: string | null
   lesson?: {
     id: string
     title: string
@@ -221,7 +219,6 @@ export default function Dashboard() {
   const [askSent, setAskSent] = useState(false)
   const [myMessages, setMyMessages] = useState<StudentMessage[]>([])
   const [messagesLoaded, setMessagesLoaded] = useState(false)
-  const [now, setNow] = useState(new Date())
 
   // authStatus is the reliable way to detect sign-out in Amplify UI React v6.
   // After signOut(), user becomes undefined (not null), so === null check never fires.
@@ -230,11 +227,6 @@ export default function Dashboard() {
     if (authStatus === 'unauthenticated') router.replace('/login')
   }, [authStatus, router])
 
-  // Tick every 60 seconds so the Zoom proximity banner stays accurate
-  useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 60_000)
-    return () => clearInterval(t)
-  }, [])
 
   useEffect(() => {
     const userId = user?.userId || user?.username || ''
@@ -614,74 +606,6 @@ export default function Dashboard() {
         )
       })()}
 
-      {/* Zoom proximity banner — shown when a session is within 60 min or live */}
-      {(() => {
-        const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-        const todayName = dayNames[now.getDay()]
-        // Find current week's Monday
-        const d = new Date(now)
-        const dayOfWeek = d.getDay()
-        const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
-        d.setDate(d.getDate() + diff)
-        const mondayStr = d.toISOString().slice(0, 10)
-
-        // Collect all zoom items for today in the current week
-        const zoomItems: Array<{ id: string; zoomJoinUrl: string; zoomStartTime: string | null; lessonTitle: string }> = []
-        for (const plan of weeklyPlans) {
-          if (plan.weekStartDate !== mondayStr) continue
-          for (const item of (plan.items?.items ?? [])) {
-            if (item.dayOfWeek !== todayName) continue
-            if (!item.zoomJoinUrl || !item.isPublished) continue
-            zoomItems.push({
-              id: item.id,
-              zoomJoinUrl: item.zoomJoinUrl,
-              zoomStartTime: item.zoomStartTime || null,
-              lessonTitle: item.lesson?.title || 'Zoom Session',
-            })
-          }
-        }
-
-        // Find the most relevant session (soonest upcoming or most recent live)
-        const relevant = zoomItems
-          .map(z => {
-            const start = z.zoomStartTime ? new Date(z.zoomStartTime) : null
-            const minUntil = start ? Math.round((start.getTime() - now.getTime()) / 60000) : null
-            return { ...z, minUntil }
-          })
-          .filter(z => z.minUntil !== null && z.minUntil > -90 && z.minUntil <= 60)
-          .sort((a, b) => (a.minUntil ?? 999) - (b.minUntil ?? 999))
-
-        if (relevant.length === 0) return null
-        const session = relevant[0]
-        const minUntil = session.minUntil!
-        const isLive = minUntil <= 0
-        const timeStr = session.zoomStartTime
-          ? new Date(session.zoomStartTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-          : ''
-
-        const bannerBg = isLive ? '#0b5cff' : minUntil <= 15 ? '#F97316' : '#2563EB'
-        const label = isLive
-          ? `🎥 Your Zoom session is live now!`
-          : `🎥 Zoom starts at ${timeStr} — in ${minUntil} min`
-
-        return (
-          <a
-            key={session.id}
-            href={session.zoomJoinUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
-              padding: '13px 24px', background: bannerBg, color: 'white',
-              textDecoration: 'none', fontSize: '14px', fontWeight: 600,
-            }}
-          >
-            {label}
-            <span style={{ opacity: 0.85, fontSize: '13px' }}>Join →</span>
-          </a>
-        )
-      })()}
-
       <main style={{ maxWidth: '960px', margin: '0 auto', padding: '48px 24px' }}>
 
         {/* Profile header */}
@@ -876,11 +800,6 @@ export default function Dashboard() {
                             onClick={e => e.stopPropagation()}
                             style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '10px 24px', background: '#0b5cff', color: 'white', textDecoration: 'none', fontSize: '13px', fontWeight: 600, borderTop: '1px solid rgba(0,0,0,0.1)' }}>
                             🎥 Join Zoom Session
-                            {item.zoomStartTime && (
-                              <span style={{ opacity: 0.75, fontWeight: 400, fontSize: '12px' }}>
-                                {new Date(item.zoomStartTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
-                              </span>
-                            )}
                           </a>
                         )}
                       </div>

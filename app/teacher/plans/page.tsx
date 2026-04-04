@@ -17,9 +17,6 @@ type PlanItem = {
   isPublished: boolean | null
   lessonTemplateId: string | null
   lesson?: { id: string; title: string } | null
-  zoomJoinUrl?: string | null
-  zoomMeetingId?: string | null
-  zoomStartTime?: string | null
 }
 
 type WeeklyPlan = {
@@ -54,9 +51,6 @@ const LIST_WEEKLY_PLANS = /* GraphQL */ `
             isPublished
             lessonTemplateId
             lesson { id title }
-            zoomJoinUrl
-            zoomMeetingId
-            zoomStartTime
           }
         }
       }
@@ -66,7 +60,7 @@ const LIST_WEEKLY_PLANS = /* GraphQL */ `
 
 const UPDATE_PLAN_ITEM = /* GraphQL */ `
   mutation UpdateWeeklyPlanItem($input: UpdateWeeklyPlanItemInput!) {
-    updateWeeklyPlanItem(input: $input) { id isPublished zoomJoinUrl zoomMeetingId zoomStartTime }
+    updateWeeklyPlanItem(input: $input) { id isPublished }
   }
 `
 
@@ -168,11 +162,6 @@ export default function ManagePlansPage() {
   const [confirmRemoveItemId, setConfirmRemoveItemId] = useState<string | null>(null)
   const [confirmDeletePlanId, setConfirmDeletePlanId] = useState<string | null>(null)
   const [togglingItemId, setTogglingItemId] = useState<string | null>(null)
-  const [zoomCreatingId, setZoomCreatingId] = useState<string | null>(null)
-  const [zoomError, setZoomError] = useState<Record<string, string>>({})
-  const [zoomSchedulingId, setZoomSchedulingId] = useState<string | null>(null)
-  const [zoomTime, setZoomTime] = useState('15:00') // default 3pm CDT
-  const [zoomDuration, setZoomDuration] = useState(60)
 
   useEffect(() => {
     if (user === null) router.replace('/login')
@@ -317,57 +306,6 @@ export default function ManagePlansPage() {
     }
   }
 
-  function getItemDate(weekStartDate: string, dayOfWeek: string): string {
-    const offsets: Record<string, number> = { Monday: 0, Tuesday: 1, Wednesday: 2, Thursday: 3, Friday: 4 }
-    const d = new Date(weekStartDate + 'T12:00:00')
-    d.setDate(d.getDate() + (offsets[dayOfWeek] ?? 0))
-    return d.toISOString().split('T')[0]
-  }
-
-  function formatZoomTime(isoString: string | null | undefined): string {
-    if (!isoString) return ''
-    try {
-      const d = new Date(isoString)
-      return d.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })
-    } catch { return '' }
-  }
-
-  async function createZoomMeeting(planId: string, item: PlanItem, weekStartDate: string) {
-    setZoomCreatingId(item.id)
-    setZoomSchedulingId(null)
-    setZoomError(prev => { const n = { ...prev }; delete n[item.id]; return n })
-    try {
-      const topic = `Math with Melinda — ${item.lesson?.title || item.dayOfWeek}`
-      const dateStr = getItemDate(weekStartDate, item.dayOfWeek)
-      const startTime = `${dateStr}T${zoomTime}:00`
-      const res = await fetch('/api/zoom/create-meeting', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic, startTime, durationMinutes: zoomDuration }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Failed to create meeting')
-      await (client.graphql({
-        query: UPDATE_PLAN_ITEM,
-        variables: { input: { id: item.id, zoomJoinUrl: data.joinUrl, zoomMeetingId: data.meetingId, zoomStartTime: startTime } },
-      }) as any)
-      setPlans(prev => prev.map(p =>
-        p.id !== planId ? p : {
-          ...p,
-          items: {
-            items: (p.items?.items ?? []).map(i =>
-              i.id !== item.id ? i : { ...i, zoomJoinUrl: data.joinUrl, zoomMeetingId: data.meetingId, zoomStartTime: startTime }
-            ),
-          },
-        }
-      ))
-    } catch (err: any) {
-      setZoomError(prev => ({ ...prev, [item.id]: err.message || 'Failed to create Zoom meeting' }))
-    } finally {
-      setZoomCreatingId(null)
-    }
-  }
-
   const selectStyle: React.CSSProperties = {
     padding: '10px 12px',
     border: '1px solid var(--gray-light)',
@@ -491,7 +429,6 @@ export default function ManagePlansPage() {
                         sortedItems.map((item, idx) => {
                           const isEven = idx % 2 === 0
                           const isConfirmingRemove = confirmRemoveItemId === item.id
-                          const isSchedulingZoom = zoomSchedulingId === item.id
                           const published = !!item.isPublished
 
                           return (
@@ -500,9 +437,12 @@ export default function ManagePlansPage() {
                               style={{
                                 borderTop: '1px solid var(--gray-light)',
                                 background: isEven ? 'var(--page-bg)' : 'var(--background)',
+                                padding: '10px 20px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '16px',
                               }}
                             >
-                            <div style={{ padding: '10px 20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
                               {/* Day name */}
                               <span style={{ fontWeight: 700, minWidth: '90px', fontSize: '14px', color: 'var(--foreground)', flexShrink: 0 }}>
                                 {item.dayOfWeek}
@@ -539,42 +479,6 @@ export default function ManagePlansPage() {
                                 {published ? 'Published' : 'Hidden'}
                               </button>
 
-                              {/* Zoom button */}
-                              {item.zoomJoinUrl ? (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
-                                  <a
-                                    href={item.zoomJoinUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    onClick={e => e.stopPropagation()}
-                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#0b5cff', color: 'white', borderRadius: '6px', padding: '4px 10px', fontSize: '12px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>
-                                    🎥 Join
-                                  </a>
-                                  {item.zoomStartTime && (
-                                    <span style={{ fontSize: '11px', color: 'var(--gray-mid)', whiteSpace: 'nowrap' }}>
-                                      {formatZoomTime(item.zoomStartTime)}
-                                    </span>
-                                  )}
-                                  <button
-                                    title="Copy join link"
-                                    onClick={() => navigator.clipboard.writeText(item.zoomJoinUrl!)}
-                                    style={{ background: 'transparent', border: '1px solid var(--gray-light)', borderRadius: '6px', padding: '4px 8px', cursor: 'pointer', fontSize: '11px', color: 'var(--gray-mid)', whiteSpace: 'nowrap' }}>
-                                    Copy
-                                  </button>
-                                  <button
-                                    title="Change meeting time"
-                                    onClick={() => { setZoomSchedulingId(item.id); setZoomTime('15:00'); setZoomDuration(60) }}
-                                    style={{ background: 'transparent', border: 'none', color: 'var(--gray-mid)', fontSize: '11px', cursor: 'pointer', padding: '0 2px' }}>
-                                    ↺
-                                  </button>
-                                </div>
-                              ) : (
-                                <button
-                                  onClick={() => { setZoomSchedulingId(item.id); setZoomTime('15:00'); setZoomDuration(60) }}
-                                  style={{ background: 'transparent', border: '1px solid var(--gray-light)', borderRadius: '6px', padding: '4px 10px', fontSize: '12px', color: 'var(--gray-mid)', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
-                                  + Zoom
-                                </button>
-                              )}
                               {/* Remove button / confirm */}
                               {isConfirmingRemove ? (
                                 <span style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
@@ -601,53 +505,6 @@ export default function ManagePlansPage() {
                                 </button>
                               )}
                             </div>
-
-                            {/* Zoom scheduling form — shown when + Zoom or ↺ is clicked */}
-                            {isSchedulingZoom && (
-                              <div style={{ padding: '12px 20px 16px', borderTop: '1px solid var(--gray-light)', background: 'var(--page-bg)', display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-                                <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--foreground)', flexShrink: 0 }}>
-                                  📅 Schedule Zoom for {item.dayOfWeek}
-                                </span>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                  <label style={{ fontSize: '12px', color: 'var(--gray-mid)' }}>Time</label>
-                                  <input
-                                    type="time"
-                                    value={zoomTime}
-                                    onChange={e => setZoomTime(e.target.value)}
-                                    style={{ padding: '4px 8px', border: '1px solid var(--gray-light)', borderRadius: '6px', fontSize: '13px', background: 'var(--background)', color: 'var(--foreground)', fontFamily: 'var(--font-body)' }}
-                                  />
-                                </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                  <label style={{ fontSize: '12px', color: 'var(--gray-mid)' }}>Duration</label>
-                                  <select
-                                    value={zoomDuration}
-                                    onChange={e => setZoomDuration(Number(e.target.value))}
-                                    style={{ padding: '4px 8px', border: '1px solid var(--gray-light)', borderRadius: '6px', fontSize: '13px', background: 'var(--background)', color: 'var(--foreground)', fontFamily: 'var(--font-body)' }}
-                                  >
-                                    <option value={30}>30 min</option>
-                                    <option value={45}>45 min</option>
-                                    <option value={60}>60 min</option>
-                                    <option value={90}>90 min</option>
-                                    <option value={120}>2 hr</option>
-                                  </select>
-                                </div>
-                                <button
-                                  onClick={() => createZoomMeeting(plan.id, item, plan.weekStartDate)}
-                                  disabled={zoomCreatingId === item.id}
-                                  style={{ background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '6px', padding: '5px 14px', fontSize: '13px', fontWeight: 600, cursor: zoomCreatingId === item.id ? 'default' : 'pointer', opacity: zoomCreatingId === item.id ? 0.6 : 1, whiteSpace: 'nowrap' }}>
-                                  {zoomCreatingId === item.id ? 'Creating…' : item.zoomMeetingId ? 'Replace Meeting' : 'Create Meeting'}
-                                </button>
-                                <button
-                                  onClick={() => setZoomSchedulingId(null)}
-                                  style={{ background: 'transparent', border: '1px solid var(--gray-light)', borderRadius: '6px', padding: '5px 12px', fontSize: '13px', color: 'var(--gray-mid)', cursor: 'pointer' }}>
-                                  Cancel
-                                </button>
-                                {zoomError[item.id] && (
-                                  <span style={{ fontSize: '12px', color: '#dc2626' }}>{zoomError[item.id]}</span>
-                                )}
-                              </div>
-                            )}
-                          </div>
                           )
                         })
                       )}
