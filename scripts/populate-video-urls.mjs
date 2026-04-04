@@ -88,6 +88,15 @@ function parseLessonPart(key) {
   return match ? match[1].toLowerCase() : null
 }
 
+// Parse the part suffix (a/b) from a DB lesson title.
+// e.g. "Lesson 57b - Solving Systems by Graphing" → 'b'
+// e.g. "Lesson 57 - Solving Systems by Graphing"  → null
+function parseTitlePart(title) {
+  if (!title) return null
+  const match = title.match(/\bLesson \d+([ab])\b/i)
+  return match ? match[1].toLowerCase() : null
+}
+
 // Parse course folder from S3 key
 function parseCourseFolder(key) {
   return key.split('/')[0]
@@ -101,7 +110,7 @@ async function fetchAllTemplates() {
     const result = await gql(`
       query ListTemplates($nextToken: String) {
         listLessonTemplates(limit: 500, nextToken: $nextToken) {
-          items { id lessonNumber course { id title } }
+          items { id lessonNumber title course { id title } }
           nextToken
         }
       }
@@ -139,14 +148,18 @@ async function main() {
     if (!courseTitle || lessonNums.length === 0) continue
     const part = parseLessonPart(key)
     for (const lessonNum of lessonNums) {
-      const mapKey = `${courseTitle}|${lessonNum}`
-      // Only overwrite if not already set, or if this is the 'a' part (prefer part a)
-      if (!s3Map.has(mapKey) || part === 'a') {
-        s3Map.set(mapKey, key)
+      // If this S3 file has an a/b part, store a part-specific key (e.g. "Algebra 1|57|a")
+      if (part) {
+        s3Map.set(`${courseTitle}|${lessonNum}|${part}`, key)
+      }
+      // Also store the generic key — prefer 'a' part so paired/single lessons still match
+      const genericKey = `${courseTitle}|${lessonNum}`
+      if (!s3Map.has(genericKey) || part === 'a') {
+        s3Map.set(genericKey, key)
       }
     }
   }
-  console.log(`Parsed ${s3Map.size} video files with valid course + lesson number`)
+  console.log(`Parsed ${s3Map.size} video map entries (includes part-specific a/b keys)`)
 
   console.log('Fetching LessonTemplates from DB...')
   const templates = await fetchAllTemplates()
@@ -159,17 +172,26 @@ async function main() {
     const courseTitle = template.course?.title
     if (!courseTitle) { notFound++; continue }
 
-    const mapKey = `${courseTitle}|${template.lessonNumber}`
-    const s3Key = s3Map.get(mapKey)
+    // Check if the DB title contains an a/b part indicator (e.g. "Lesson 57b - ...")
+    const titlePart = parseTitlePart(template.title)
+
+    let s3Key
+    if (titlePart) {
+      // Try part-specific key first (e.g. "Algebra 1|57|b"), then fall back to generic
+      s3Key = s3Map.get(`${courseTitle}|${template.lessonNumber}|${titlePart}`)
+        ?? s3Map.get(`${courseTitle}|${template.lessonNumber}`)
+    } else {
+      s3Key = s3Map.get(`${courseTitle}|${template.lessonNumber}`)
+    }
 
     if (!s3Key) {
-      console.warn(`  ✗ No S3 match: ${courseTitle} Lesson ${template.lessonNumber}`)
+      console.warn(`  ✗ No S3 match: ${courseTitle} Lesson ${template.lessonNumber}${titlePart ? titlePart : ''} — ${template.title}`)
       notFound++
       continue
     }
 
     await updateTemplate(template.id, s3Key)
-    console.log(`  ✓ ${courseTitle} Lesson ${template.lessonNumber} → ${s3Key}`)
+    console.log(`  ✓ ${courseTitle} Lesson ${template.lessonNumber}${titlePart ? titlePart : ''} → ${s3Key}`)
     updated++
   }
 

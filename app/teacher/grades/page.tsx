@@ -1229,6 +1229,26 @@ export default function GradingPage() {
                 )}
               </p>
 
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+                <button
+                  onClick={suggestWithAI}
+                  disabled={aiSuggesting}
+                  style={{ display: 'flex', alignItems: 'center', gap: '7px', background: aiSuggesting ? 'var(--gray-light)' : 'var(--plum-light)', color: aiSuggesting ? 'var(--gray-mid)' : 'var(--plum)', border: '1px solid var(--plum-mid)', padding: '8px 16px', borderRadius: '8px', cursor: aiSuggesting ? 'not-allowed' : 'pointer', fontSize: '13px', fontWeight: 600, fontFamily: 'var(--font-body)' }}>
+                  {aiSuggesting ? (
+                    <>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ animation: 'spin 0.8s linear infinite' }}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                      Grading…
+                    </>
+                  ) : (
+                    <>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+                      {Object.keys(questionResults).length > 0 ? 'Re-grade with AI' : 'Grade with AI'}
+                    </>
+                  )}
+                </button>
+                {aiError && <span style={{ fontSize: '12px', color: '#b91c1c' }}>{aiError}</span>}
+              </div>
+
               <QuestionScorecardSection
                 questions={questions}
                 content={selectedSubmission.content}
@@ -1311,7 +1331,7 @@ export default function GradingPage() {
                   ) : (
                     <>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
-                      {Object.keys(questionResults).length > 0 ? 'Re-grade with AI' : 'Grade with AI'}
+                      Re-grade with AI
                     </>
                   )}
                 </button>
