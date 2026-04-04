@@ -266,52 +266,133 @@ function NotesSection({ content }: { content: string | null }) {
   )
 }
 
-function AnswersSection({ questions, content, showWorkImageUrls }: {
+function QuestionScorecardSection({ questions, content, showWorkImageUrls, questionResults, onToggle }: {
   questions: Question[]
   content: string | null
   showWorkImageUrls: Record<string, string[]>
+  questionResults: Record<string, boolean | null>
+  onToggle: (id: string, correct: boolean | null) => void
 }) {
   if (questions.length === 0) return null
   let answers: Record<string, string> = {}
   try {
     const parsed = JSON.parse(content || '{}')
     answers = parsed.answers || {}
-  } catch (e) {
-    answers = {}
-  }
+  } catch { answers = {} }
+
+  const gradable = questions.filter(q => q.questionType !== 'section_header')
+  const evaluated = gradable.filter(q => questionResults[q.id] !== undefined && questionResults[q.id] !== null)
+  const correct = gradable.filter(q => questionResults[q.id] === true).length
+  const wrong = gradable.filter(q => questionResults[q.id] === false).length
+  const pending = gradable.filter(q => questionResults[q.id] === undefined || questionResults[q.id] === null).length
+
   return (
     <div style={{ marginBottom: '24px' }}>
-      <div style={{ fontSize: '11px', fontWeight: 500, color: 'var(--gray-mid)', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '1px' }}>Student answers</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+        <div style={{ fontSize: '11px', fontWeight: 500, color: 'var(--gray-mid)', textTransform: 'uppercase', letterSpacing: '1px' }}>Questions</div>
+        {evaluated.length > 0 && (
+          <div style={{ display: 'flex', gap: '8px', marginLeft: 'auto', fontSize: '12px', fontWeight: 600 }}>
+            <span style={{ color: '#16a34a' }}>✓ {correct}</span>
+            <span style={{ color: '#dc2626' }}>✗ {wrong}</span>
+            {pending > 0 && <span style={{ color: 'var(--gray-mid)' }}>· {pending} pending</span>}
+          </div>
+        )}
+      </div>
+
       {(() => {
         let qNum = 0
         return questions.map((q, idx) => {
-        const isHeader = q.questionType === 'section_header'
-        if (!isHeader) qNum++
-        const displayNum = qNum
-        if (isHeader) {
+          const isHeader = q.questionType === 'section_header'
+          if (!isHeader) qNum++
+          const displayNum = qNum
+
+          if (isHeader) {
+            return (
+              <div key={q.id} style={{ marginTop: idx === 0 ? 0 : '16px', marginBottom: '8px', fontSize: '11px', fontWeight: 700, color: 'var(--plum)', textTransform: 'uppercase', letterSpacing: '0.8px', borderBottom: '1px solid var(--plum-mid)', paddingBottom: '4px' }}>
+                <MathRenderer text={q.questionText} />
+              </div>
+            )
+          }
+
+          const answer = answers[q.id]
+          const bookNumMatch = q.questionText.match(/^(\d+\.)\s([\s\S]*)$/)
+          const qLabel = bookNumMatch ? bookNumMatch[1] : `${displayNum}.`
+          const qBody = bookNumMatch ? bookNumMatch[2] : q.questionText
+          const result = questionResults[q.id]  // true | false | null | undefined
+          const isShowWork = q.questionType === 'show_work'
+          const swImages = showWorkImageUrls[q.id] || []
+
+          const toggleBtnBase: React.CSSProperties = {
+            border: '1px solid', borderRadius: '6px', padding: '5px 14px',
+            cursor: 'pointer', fontSize: '13px', fontWeight: 700,
+            fontFamily: 'var(--font-body)', lineHeight: 1,
+          }
+
           return (
-            <div key={q.id} style={{ marginTop: idx === 0 ? 0 : '20px', marginBottom: '10px', fontSize: '11px', fontWeight: 700, color: 'var(--plum)', textTransform: 'uppercase', letterSpacing: '0.8px', borderBottom: '1px solid var(--plum-mid)', paddingBottom: '4px' }}>
-              <MathRenderer text={q.questionText} />
+            <div key={q.id} style={{
+              marginBottom: '10px', padding: '12px 14px',
+              background: result === true ? '#f0fdf4' : result === false ? '#fef2f2' : 'var(--background)',
+              border: `1px solid ${result === true ? '#bbf7d0' : result === false ? '#fecaca' : 'var(--gray-light)'}`,
+              borderRadius: '8px', transition: 'background 0.15s, border-color 0.15s',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                {/* Number */}
+                <span style={{ fontWeight: 700, color: 'var(--plum)', fontSize: '14px', minWidth: '24px', paddingTop: '1px', flexShrink: 0 }}>{qLabel}</span>
+
+                {/* Content */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: '14px', color: 'var(--foreground)', marginBottom: '8px', lineHeight: 1.5 }}>
+                    <MathRenderer text={qBody} />
+                  </div>
+
+                  {isShowWork ? (
+                    swImages.length > 0 ? (
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        {swImages.map((url, i) => (
+                          <a key={i} href={url} target="_blank" rel="noopener noreferrer">
+                            <img src={url} alt={`Show work ${i + 1}`} style={{ height: '80px', width: 'auto', borderRadius: '4px', border: '1px solid var(--gray-light)', objectFit: 'cover', cursor: 'pointer' }} />
+                          </a>
+                        ))}
+                      </div>
+                    ) : (
+                      <span style={{ fontSize: '12px', color: 'var(--gray-mid)', fontStyle: 'italic' }}>Show work — check uploaded photos below</span>
+                    )
+                  ) : (
+                    <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'baseline' }}>
+                      <div style={{ fontSize: '13px' }}>
+                        <span style={{ color: 'var(--gray-mid)', marginRight: '4px' }}>Student:</span>
+                        <span style={{ fontWeight: 600, color: answer ? 'var(--foreground)' : 'var(--gray-mid)', fontStyle: answer ? 'normal' : 'italic' }}>
+                          {answer ? <MathRenderer text={answer} /> : 'no answer'}
+                        </span>
+                      </div>
+                      {q.correctAnswer && (
+                        <div style={{ fontSize: '13px' }}>
+                          <span style={{ color: 'var(--gray-mid)', marginRight: '4px' }}>Correct:</span>
+                          <span style={{ fontWeight: 600, color: '#15803d' }}><MathRenderer text={q.correctAnswer} /></span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* ✓/✗ toggle */}
+                <div style={{ display: 'flex', gap: '4px', flexShrink: 0, paddingTop: '1px' }}>
+                  <button
+                    onClick={() => onToggle(q.id, result === true ? null : true)}
+                    title="Mark correct"
+                    style={{ ...toggleBtnBase, borderColor: '#16a34a', background: result === true ? '#16a34a' : 'transparent', color: result === true ? 'white' : '#16a34a' }}>
+                    ✓
+                  </button>
+                  <button
+                    onClick={() => onToggle(q.id, result === false ? null : false)}
+                    title="Mark wrong"
+                    style={{ ...toggleBtnBase, borderColor: '#dc2626', background: result === false ? '#dc2626' : 'transparent', color: result === false ? 'white' : '#dc2626' }}>
+                    ✗
+                  </button>
+                </div>
+              </div>
             </div>
           )
-        }
-        const answer = answers[q.id]
-        const bookNumMatch = q.questionText.match(/^(\d+\.)\s([\s\S]*)$/)
-        const qLabel = bookNumMatch ? bookNumMatch[1] : `${displayNum}.`
-        const qBody = bookNumMatch ? bookNumMatch[2] : q.questionText
-        return (
-          <div key={q.id} style={{ marginBottom: '16px', paddingBottom: '16px', borderBottom: idx < questions.length - 1 ? '1px solid var(--gray-light)' : 'none' }}>
-            <div style={{ display: 'flex', gap: '10px', marginBottom: '8px' }}>
-              <span style={{ fontWeight: 700, color: 'var(--plum)', fontSize: '14px', minWidth: '24px', flexShrink: 0 }}>{qLabel}</span>
-              <span style={{ fontSize: '14px', color: 'var(--gray-dark)' }}><MathRenderer text={qBody} /></span>
-            </div>
-            {q.questionType !== 'show_work' && (
-              <div style={{ paddingLeft: '34px', background: answer ? 'var(--plum-light)' : 'var(--gray-light)', borderRadius: '6px', padding: '8px 12px', fontSize: '14px', color: answer ? 'var(--foreground)' : 'var(--gray-mid)', fontStyle: answer ? 'normal' : 'italic' }}>
-                {answer ? <MathRenderer text={answer} /> : 'No answer provided'}
-              </div>
-            )}
-          </div>
-        )
         })
       })()}
     </div>
@@ -356,6 +437,7 @@ export default function GradingPage() {
   const [aiError, setAiError] = useState('')
   const [teachingVoice, setTeachingVoice] = useState('')
   const [lessonTeachingNotes, setLessonTeachingNotes] = useState('')
+  const [questionResults, setQuestionResults] = useState<Record<string, boolean | null>>({})
   const [expandedStudents, setExpandedStudents] = useState<Set<string>>(new Set())
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date())
   const [refreshing, setRefreshing] = useState(false)
@@ -458,6 +540,22 @@ export default function GradingPage() {
     } catch { /* silent */ }
   }
 
+  function computeGradeFromResults(qs: Question[], results: Record<string, boolean | null>): string {
+    const gradable = qs.filter(q => q.questionType !== 'section_header')
+    if (gradable.length === 0) return ''
+    const correct = gradable.filter(q => results[q.id] === true).length
+    return String(Math.round((correct / gradable.length) * 100))
+  }
+
+  function onToggleQuestion(id: string, correct: boolean | null) {
+    setQuestionResults(prev => {
+      const next = { ...prev, [id]: correct }
+      const computed = computeGradeFromResults(questions, next)
+      if (computed) setGrade(computed)
+      return next
+    })
+  }
+
   async function suggestWithAI() {
     if (!selectedSubmission) return
     const parsed = (() => { try { return JSON.parse(selectedSubmission.content || '{}') } catch { return {} } })()
@@ -488,8 +586,20 @@ export default function GradingPage() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'AI suggestion failed')
-      if (data.grade) setGrade(data.grade)
       if (data.comment) setComment(data.comment)
+      // Apply per-question results from AI
+      if (data.questionResults && Array.isArray(data.questionResults)) {
+        const newResults: Record<string, boolean | null> = {}
+        for (const r of data.questionResults as { id: string; correct: boolean | null }[]) {
+          newResults[r.id] = r.correct
+        }
+        setQuestionResults(newResults)
+        // Auto-compute grade from results (override AI's grade with calculated grade)
+        const computed = computeGradeFromResults(questions, newResults)
+        setGrade(computed || data.grade || '')
+      } else if (data.grade) {
+        setGrade(data.grade)
+      }
     } catch (err: any) {
       setAiError(err.message || 'AI suggestion failed. Please try again.')
     } finally {
@@ -522,6 +632,7 @@ export default function GradingPage() {
     setShowWorkImageUrls({})
     setLessonTeachingNotes('')
     setAiError('')
+    setQuestionResults({})
 
     if (!submission.content) return
     try {
@@ -1105,7 +1216,13 @@ export default function GradingPage() {
                 )}
               </p>
 
-              <AnswersSection questions={questions} content={selectedSubmission.content} showWorkImageUrls={showWorkImageUrls} />
+              <QuestionScorecardSection
+                questions={questions}
+                content={selectedSubmission.content}
+                showWorkImageUrls={showWorkImageUrls}
+                questionResults={questionResults}
+                onToggle={onToggleQuestion}
+              />
 
               {imageUrls.length > 0 && (
                 <div style={{ marginBottom: '24px' }}>
@@ -1175,12 +1292,12 @@ export default function GradingPage() {
                   {aiSuggesting ? (
                     <>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ animation: 'spin 0.8s linear infinite' }}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
-                      Analyzing…
+                      Grading…
                     </>
                   ) : (
                     <>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
-                      Suggest with AI
+                      {Object.keys(questionResults).length > 0 ? 'Re-grade with AI' : 'Grade with AI'}
                     </>
                   )}
                 </button>
@@ -1192,7 +1309,16 @@ export default function GradingPage() {
 
               <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '16px', marginBottom: '20px' }}>
                 <div>
-                  <label style={{ fontSize: '12px', fontWeight: 500, color: 'var(--gray-dark)', display: 'block', marginBottom: '6px' }}>Grade</label>
+                  <label style={{ fontSize: '12px', fontWeight: 500, color: 'var(--gray-dark)', display: 'block', marginBottom: '6px' }}>
+                    Grade
+                    {(() => {
+                      const gradable = questions.filter(q => q.questionType !== 'section_header')
+                      const correct = gradable.filter(q => questionResults[q.id] === true).length
+                      const marked = gradable.filter(q => questionResults[q.id] !== undefined && questionResults[q.id] !== null).length
+                      if (marked === 0) return null
+                      return <span style={{ fontWeight: 400, color: 'var(--gray-mid)', marginLeft: '6px' }}>({correct}/{gradable.length})</span>
+                    })()}
+                  </label>
                   <input type="text" value={grade} onChange={e => setGrade(e.target.value)} placeholder="e.g. 95"
                     style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--gray-light)', borderRadius: '6px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)' }} />
                   <button
