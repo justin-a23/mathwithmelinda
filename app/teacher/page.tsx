@@ -38,6 +38,25 @@ const listRecentSubmissionsQuery = /* GraphQL */`
   }
 `
 
+function getSessionStatus(zoomStartTime: string | null): { label: string; color: string; bg: string; border: string } {
+  if (!zoomStartTime) return { label: '', color: 'var(--gray-mid)', bg: 'var(--gray-light)', border: 'var(--gray-light)' }
+  const start = new Date(zoomStartTime)
+  const now = new Date()
+  const minUntil = Math.round((start.getTime() - now.getTime()) / 60000)
+  if (minUntil > 60) return { label: '', color: 'var(--gray-mid)', bg: 'var(--gray-light)', border: 'var(--gray-light)' }
+  if (minUntil > 15) return { label: `In ${minUntil} min`, color: '#92400E', bg: '#FFFBEB', border: '#FDE68A' }
+  if (minUntil > 0) return { label: `Starting in ${minUntil} min`, color: '#9A3412', bg: '#FFF7ED', border: '#FDBA74' }
+  if (minUntil > -90) return { label: 'Live now', color: '#166534', bg: '#F0FDF4', border: '#86EFAC' }
+  return { label: 'Ended', color: 'var(--gray-mid)', bg: 'var(--gray-light)', border: 'var(--gray-light)' }
+}
+
+function formatSessionTime(isoString: string | null): string {
+  if (!isoString) return ''
+  try {
+    return new Date(isoString).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })
+  } catch { return '' }
+}
+
 function getMonday(date: Date): Date {
   const d = new Date(date)
   const day = d.getDay()
@@ -123,7 +142,31 @@ const listWeeklyPlansQuery = /* GraphQL */`
       items {
         id
         weekStart
+        weekStartDate
         courseId
+      }
+    }
+  }
+`
+
+const listZoomSessionsQuery = /* GraphQL */`
+  query ListZoomSessions {
+    listWeeklyPlanItems(
+      filter: { zoomJoinUrl: { attributeExists: true } }
+      limit: 200
+    ) {
+      items {
+        id
+        dayOfWeek
+        zoomJoinUrl
+        zoomMeetingId
+        zoomStartTime
+        lesson { id title }
+        weeklyPlan {
+          id
+          weekStartDate
+          course { id title }
+        }
       }
     }
   }
@@ -134,6 +177,20 @@ type Alert = {
   level: 'urgent' | 'warning' | 'info'
   message: string
   href?: string
+}
+
+type ZoomSession = {
+  id: string
+  dayOfWeek: string
+  zoomJoinUrl: string
+  zoomMeetingId: string | null
+  zoomStartTime: string | null
+  lesson?: { id: string; title: string } | null
+  weeklyPlan?: {
+    id: string
+    weekStartDate: string | null
+    course?: { id: string; title: string } | null
+  } | null
 }
 
 export default function TeacherDashboard() {
@@ -148,6 +205,7 @@ export default function TeacherDashboard() {
   const [statsLoading, setStatsLoading] = useState(true)
   const [pendingStudents, setPendingStudents] = useState<{ id: string; firstName: string; lastName: string; email: string; gradeLevel: string | null }[]>([])
   const [alerts, setAlerts] = useState<Alert[]>([])
+  const [todaySessions, setTodaySessions] = useState<ZoomSession[]>([])
 
   useEffect(() => {
     fetchAll()
@@ -164,6 +222,7 @@ export default function TeacherDashboard() {
     fetchWeekStats()
     fetchPendingStudents()
     fetchAlerts()
+    fetchTodaySessions()
   }
 
   async function fetchPendingStudents() {
@@ -171,6 +230,26 @@ export default function TeacherDashboard() {
       const result = await (client.graphql({ query: listPendingStudentsQuery }) as any)
       setPendingStudents(result.data.listStudentProfiles.items)
     } catch { /* silent */ }
+  }
+
+  async function fetchTodaySessions() {
+    try {
+      const result = await (client.graphql({ query: listZoomSessionsQuery }) as any)
+      const items: ZoomSession[] = result.data.listWeeklyPlanItems.items
+      const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+      const todayName = dayNames[new Date().getDay()]
+      const mondayStr = getMonday(new Date()).toISOString().slice(0, 10)
+      const sessions = items
+        .filter(item => item.dayOfWeek === todayName && item.weeklyPlan?.weekStartDate === mondayStr)
+        .sort((a, b) => {
+          if (!a.zoomStartTime) return 1
+          if (!b.zoomStartTime) return -1
+          return a.zoomStartTime.localeCompare(b.zoomStartTime)
+        })
+      setTodaySessions(sessions)
+    } catch (err) {
+      console.error('Error fetching zoom sessions:', err)
+    }
   }
 
   async function fetchAlerts() {
@@ -413,6 +492,73 @@ export default function TeacherDashboard() {
                 </div>
               )
             })}
+          </div>
+        )}
+
+        {/* ── TODAY'S ZOOM SESSIONS ── */}
+        {todaySessions.length > 0 && (
+          <div style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', padding: '20px 24px', marginBottom: '24px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+              <span style={{ fontSize: '18px' }}>🎥</span>
+              <h2 style={{ fontSize: '13px', fontWeight: 500, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--plum)', margin: 0 }}>
+                Today's Sessions
+              </h2>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {todaySessions.map(session => {
+                const timeStr = formatSessionTime(session.zoomStartTime)
+                const status = getSessionStatus(session.zoomStartTime)
+                const isLive = status.label === 'Live now'
+                return (
+                  <div
+                    key={session.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '16px',
+                      padding: '12px 16px',
+                      borderRadius: '8px',
+                      border: `1px solid ${isLive ? '#86EFAC' : 'var(--gray-light)'}`,
+                      background: isLive ? '#F0FDF4' : 'var(--page-bg)',
+                    }}
+                  >
+                    {/* Time */}
+                    <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--foreground)', minWidth: '90px', flexShrink: 0 }}>
+                      {timeStr}
+                    </span>
+
+                    {/* Course + Lesson */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      {session.weeklyPlan?.course && (
+                        <span style={{ fontSize: '12px', color: 'var(--plum)', fontWeight: 600, display: 'block' }}>
+                          {session.weeklyPlan.course.title}
+                        </span>
+                      )}
+                      <span style={{ fontSize: '14px', color: 'var(--foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
+                        {session.lesson?.title || 'Zoom Session'}
+                      </span>
+                    </div>
+
+                    {/* Status badge */}
+                    {status.label && (
+                      <span style={{ fontSize: '12px', fontWeight: 700, padding: '3px 10px', borderRadius: '20px', background: status.bg, color: status.color, border: `1px solid ${status.border}`, whiteSpace: 'nowrap', flexShrink: 0 }}>
+                        {status.label}
+                      </span>
+                    )}
+
+                    {/* Join button */}
+                    <a
+                      href={session.zoomJoinUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#0b5cff', color: 'white', borderRadius: '6px', padding: '6px 14px', fontSize: '13px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0 }}
+                    >
+                      Start Session →
+                    </a>
+                  </div>
+                )
+              })}
+            </div>
           </div>
         )}
 
