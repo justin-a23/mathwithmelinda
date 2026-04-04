@@ -89,22 +89,32 @@ export async function POST(req: NextRequest) {
       ? `\nWARNING: This assignment has ${expectedUploadCount} show-work problem(s) that require a photo upload. NO photo was uploaded. Treat all show-work questions as unanswered (0 credit).`
       : ''
 
-    const systemPrompt = `You are helping a homeschool math teacher named Melinda grade student work and write feedback comments.
+    const systemPrompt = `You are helping a homeschool math teacher named Melinda grade student work.
 
 Teacher's style instructions: ${voiceInstruction}${curriculumSection}
 
 GRADING RULES — follow these exactly:
-1. Grade on a 0–100 scale.
-2. Each question carries equal weight unless otherwise noted.
-3. A blank or missing answer = wrong (0 credit for that question).
-4. If a correct answer is provided in [correct: ...], compare it exactly to the student's answer. Minor arithmetic errors should result in point deductions.
-5. If show-work problems exist and NO photo was uploaded, all show-work questions count as 0.
-6. Do NOT assume answers are correct when you cannot verify them. When in doubt, deduct points.
-7. If curriculum method notes are provided, evaluate whether the student used the correct method — not just whether the final answer is right.
-8. Never give 100% unless every single answer is clearly correct and all required uploads are present.${missingUploadNote}
+1. Grade on a 0–100 scale. Each non-header question carries equal weight.
+2. A blank or missing answer = wrong. Set correct: false for that question.
+3. If a correct answer is provided in [correct: ...], compare it to the student's answer. Even minor arithmetic errors = wrong.
+4. For show_work questions: set correct: null (teacher reviews the uploaded image manually). Unless NO photo was uploaded — then set correct: false.
+5. Do NOT assume answers are correct when you cannot verify them.
+6. If curriculum method notes are provided, evaluate whether the student used the correct method.
+7. Never give 100% unless every single digital answer is verified correct.${missingUploadNote}
 
-Respond ONLY with valid JSON in this exact format — no other text:
-{"grade": "85", "comment": "Your feedback here."}`
+Evaluate each question individually and return a JSON object in EXACTLY this format — no other text, no markdown:
+{
+  "grade": "73",
+  "comment": "Feedback for student (2-3 sentences max).",
+  "questionResults": [
+    {"id": "QUESTION_ID_HERE", "correct": true},
+    {"id": "QUESTION_ID_HERE", "correct": false},
+    {"id": "QUESTION_ID_HERE", "correct": null}
+  ]
+}
+
+Use true = correct, false = wrong, null = needs manual review (show_work or uncertain).
+Only include gradable questions (not section headers). The grade should match the ratio of correct answers.`
 
     const userParts: string[] = [
       `Student: ${studentName || 'Unknown'}`,
@@ -113,7 +123,8 @@ Respond ONLY with valid JSON in this exact format — no other text:
     if (digitalSummary) userParts.push(digitalSummary)
     if (showWorkNote) userParts.push(showWorkNote)
     if (hasFiles) userParts.push('Review the uploaded image(s) for the show-work problems.')
-    userParts.push('Provide a grade (0–100) and a brief comment for the student.')
+    userParts.push('Evaluate each question individually. Return the JSON with grade, comment, and questionResults array as described.')
+    userParts.push(`Question IDs for reference:\n${questionList.map(q => `  id: ${q.id} (type: ${q.questionType})`).join('\n')}`)
 
     const userPrompt = userParts.join('\n\n')
 
@@ -141,15 +152,21 @@ Respond ONLY with valid JSON in this exact format — no other text:
 
     const message = await anthropic.messages.create({
       model: 'claude-opus-4-5',
-      max_tokens: 512,
+      max_tokens: 1024,
       system: systemPrompt,
       messages: [{ role: 'user', content }],
     })
 
     const text = (message.content[0] as { type: string; text: string }).text
-    const parsed = JSON.parse(text)
+    // Strip markdown code fences if present
+    const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+    const parsed = JSON.parse(cleaned)
 
-    return NextResponse.json({ grade: parsed.grade || '', comment: parsed.comment || '' })
+    return NextResponse.json({
+      grade: parsed.grade || '',
+      comment: parsed.comment || '',
+      questionResults: parsed.questionResults || [],
+    })
   } catch (err: any) {
     console.error('Grade suggestion error:', err)
     return NextResponse.json({ error: err.message || 'Failed to generate suggestion' }, { status: 500 })
