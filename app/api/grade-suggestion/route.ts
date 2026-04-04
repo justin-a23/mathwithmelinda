@@ -84,7 +84,8 @@ export async function POST(req: NextRequest) {
           const correctHint = q.correctAnswer ? ` [correct: ${q.correctAnswer}]` : ''
           return `  [id:${q.id}] ${label} ${text}${correctHint}`
         })
-        showWorkSummary = `SHOW-WORK QUESTIONS (student wrote answers on paper — see the uploaded worksheet image${showWorkCount > 1 ? 's' : ''}):\n${lines.join('\n')}\nLook at the uploaded image carefully. Find each question and mark it correct or wrong.`
+        const photoCount = (imageKeys as string[]).length
+        showWorkSummary = `SHOW-WORK QUESTIONS (student wrote answers on paper — see the ${photoCount} uploaded photo${photoCount > 1 ? 's' : ''}):\n${lines.join('\n')}\nExamine all uploaded photos carefully. The student may have spread their work across multiple sheets. Find each question number and mark it correct or wrong.`
       } else {
         showWorkSummary = `SHOW-WORK QUESTIONS: This assignment had ${showWorkCount} show-work problem(s) but the student did NOT upload a photo. Mark all show-work questions as wrong (false).`
       }
@@ -105,9 +106,9 @@ Teacher's feedback style: ${voiceInstruction}${curriculumSection}
 
 GRADING RULES:
 1. Grade on a 0–100 scale. Every non-header question has equal weight.
-2. DIGITAL questions: compare the student's answer to the [correct:] value if one is given. Blank answer = wrong.
-3. SHOW-WORK questions: examine the uploaded image carefully. Find the question number on the worksheet and determine if the student's work and answer are correct. Mark true or false.
-4. If no [correct:] hint is given and you can't verify an answer from the image, mark it false (don't guess correct).
+2. DIGITAL questions: if a [correct:] value is given, compare the student's answer exactly. If no [correct:] is given, use your own math knowledge to evaluate whether their answer is right. Blank answer = wrong.
+3. SHOW-WORK questions: examine every uploaded image carefully. Find each question number on the worksheet and evaluate the student's written work. Use your math knowledge to determine if their method and answer are correct. Mark true or false — do not skip any show-work question.
+4. A blank digital answer or a missing problem on the worksheet = wrong (false).
 5. Never give 100% unless every question is clearly correct.
 
 Return a JSON object — EXACTLY this format, no markdown, no extra text:
@@ -128,14 +129,17 @@ Include every gradable question in questionResults. Use the exact id values from
     ]
     if (digitalSummary) userParts.push(digitalSummary)
     if (showWorkSummary) userParts.push(showWorkSummary)
-    if (hasFiles) userParts.push('The uploaded image shows the student\'s handwritten show-work sheet. Use it to grade the show-work questions listed above.')
+    if (hasFiles) {
+      const photoCount = (imageKeys as string[]).length
+      userParts.push(`The ${photoCount > 1 ? `${photoCount} uploaded photos show` : 'uploaded photo shows'} the student's handwritten show-work sheet${photoCount > 1 ? 's' : ''}. Use ${photoCount > 1 ? 'all of them' : 'it'} to grade the show-work questions listed above.`)
+    }
 
     const userPrompt = userParts.join('\n\n')
 
     // ── Build file blocks (images + PDFs) ─────────────────────────────────
     const fileBlocks: Anthropic.MessageParam['content'] = []
     if (hasFiles) {
-      const keys = (imageKeys as string[]).slice(0, 3)
+      const keys = (imageKeys as string[]).slice(0, 8)
       const blocks = await Promise.all(keys.map(async (key) => {
         const isPdf = key.toLowerCase().endsWith('.pdf')
         if (isPdf) {
@@ -156,7 +160,7 @@ Include every gradable question in questionResults. Use the exact id values from
 
     const message = await anthropic.messages.create({
       model: 'claude-opus-4-5',
-      max_tokens: 1024,
+      max_tokens: 1500,
       system: systemPrompt,
       messages: [{ role: 'user', content }],
     })
