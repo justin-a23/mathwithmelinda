@@ -354,6 +354,9 @@ export const getWeeklyPlanItem = /* GraphQL */ `query GetWeeklyPlanItem($id: ID!
       nextToken
       __typename
     }
+    zoomJoinUrl
+    zoomMeetingId
+    zoomStartTime
     createdAt
     updatedAt
     lessonWeeklyPlanItemsId
@@ -377,6 +380,9 @@ export const listWeeklyPlanItems = /* GraphQL */ `query ListWeeklyPlanItems(
       dueTime
       isPublished
       lessonTemplateId
+      zoomJoinUrl
+      zoomMeetingId
+      zoomStartTime
       createdAt
       updatedAt
       lessonWeeklyPlanItemsId
@@ -664,6 +670,7 @@ export const getLessonTemplate = /* GraphQL */ `query GetLessonTemplate($id: ID!
     lessonNumber
     title
     instructions
+    teachingNotes
     worksheetUrl
     videoUrl
     assignmentType
@@ -703,6 +710,7 @@ export const listLessonTemplates = /* GraphQL */ `query ListLessonTemplates(
       lessonNumber
       title
       instructions
+      teachingNotes
       worksheetUrl
       videoUrl
       assignmentType
@@ -733,6 +741,7 @@ export const getAssignmentQuestion = /* GraphQL */ `query GetAssignmentQuestion(
       lessonNumber
       title
       instructions
+      teachingNotes
       worksheetUrl
       videoUrl
       assignmentType
@@ -790,6 +799,7 @@ export const getTeacherProfile = /* GraphQL */ `query GetTeacherProfile($id: ID!
     displayName
     bio
     profilePictureKey
+    teachingVoice
     createdAt
     updatedAt
     __typename
@@ -812,6 +822,7 @@ export const listTeacherProfiles = /* GraphQL */ `query ListTeacherProfiles(
       displayName
       bio
       profilePictureKey
+      teachingVoice
       createdAt
       updatedAt
       __typename
@@ -963,6 +974,7 @@ export const getStudentProfile = /* GraphQL */ `query GetStudentProfile($id: ID!
     planType
     profilePictureKey
     status
+    statusReason
     parentEmail
     parentName
     parentEmail2
@@ -998,6 +1010,7 @@ export const listStudentProfiles = /* GraphQL */ `query ListStudentProfiles(
       planType
       profilePictureKey
       status
+      statusReason
       parentEmail
       parentName
       parentEmail2
@@ -1085,6 +1098,7 @@ export const getParentStudentLink = /* GraphQL */ `query GetParentStudentLink($i
       planType
       profilePictureKey
       status
+      statusReason
       parentEmail
       parentName
       parentEmail2
@@ -1131,4 +1145,150 @@ export const listParentStudentLinks = /* GraphQL */ `query ListParentStudentLink
 ` as GeneratedQuery<
   APITypes.ListParentStudentLinksQueryVariables,
   APITypes.ListParentStudentLinksQuery
+>;
+export const getMessage = /* GraphQL */ `query GetMessage($id: ID!) {
+  getMessage(id: $id) {
+    id
+    studentId
+    studentName
+    content
+    sentAt
+    isRead
+    teacherReply
+    repliedAt
+    isArchivedByTeacher
+    createdAt
+    updatedAt
+    __typename
+  }
+}
+` as GeneratedQuery<
+  APITypes.GetMessageQueryVariables,
+  APITypes.GetMessageQuery
+>;
+export const listMessages = /* GraphQL */ `query ListMessages(
+  $filter: ModelMessageFilterInput
+  $limit: Int
+  $nextToken: String
+) {
+  listMessages(filter: $filter, limit: $limit, nextToken: $nextToken) {
+    items {
+      id
+      studentId
+      studentName
+      content
+      sentAt
+      isRead
+      teacherReply
+      repliedAt
+      isArchivedByTeacher
+      createdAt
+      updatedAt
+      __typename
+    }
+    nextToken
+    __typename
+  }
+}
+` as GeneratedQuery<
+  APITypes.ListMessagesQueryVariables,
+  APITypes.ListMessagesQuery
+>;
+export const getSyllabus = /* GraphQL */ `query GetSyllabus($id: ID!) {
+  getSyllabus(id: $id) {
+    id
+    semesterId
+    courseId
+    pdfKey
+    publishedPdfKey
+    publishedAt
+    createdAt
+    updatedAt
+    __typename
+  }
+}
+` as GeneratedQuery<
+  APITypes.GetSyllabusQueryVariables,
+  APITypes.GetSyllabusQuery
+>;
+export const listSyllabi = /* GraphQL */ `query ListSyllabi(
+  $filter: ModelSyllabusFilterInput
+  $limit: Int
+  $nextToken: String
+) {
+  listSyllabi(filter: $filter, limit: $limit, nextToken: $nextToken) {
+    items {
+      id
+      semesterId
+      courseId
+      pdfKey
+      publishedPdfKey
+      publishedAt
+      createdAt
+      updatedAt
+      __typename
+    }
+    nextToken
+    __typename
+  }
+}
+` as GeneratedQuery<
+  APITypes.ListSyllabiQueryVariables,
+  APITypes.ListSyllabiQuery
+>;
+export const getZoomMeeting = /* GraphQL */ `query GetZoomMeeting($id: ID!) {
+  getZoomMeeting(id: $id) {
+    id
+    topic
+    zoomMeetingId
+    joinUrl
+    startUrl
+    startTime
+    durationMinutes
+    inviteeType
+    courseId
+    courseTitle
+    studentIds
+    parentId
+    notes
+    createdAt
+    updatedAt
+    __typename
+  }
+}
+` as GeneratedQuery<
+  APITypes.GetZoomMeetingQueryVariables,
+  APITypes.GetZoomMeetingQuery
+>;
+export const listZoomMeetings = /* GraphQL */ `query ListZoomMeetings(
+  $filter: ModelZoomMeetingFilterInput
+  $limit: Int
+  $nextToken: String
+) {
+  listZoomMeetings(filter: $filter, limit: $limit, nextToken: $nextToken) {
+    items {
+      id
+      topic
+      zoomMeetingId
+      joinUrl
+      startUrl
+      startTime
+      durationMinutes
+      inviteeType
+      courseId
+      courseTitle
+      studentIds
+      parentId
+      notes
+      createdAt
+      updatedAt
+      __typename
+    }
+    nextToken
+    __typename
+  }
+}
+` as GeneratedQuery<
+  APITypes.ListZoomMeetingsQueryVariables,
+  APITypes.ListZoomMeetingsQuery
 >;

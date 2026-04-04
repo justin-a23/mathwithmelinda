@@ -71,6 +71,7 @@ type WeeklyPlanItem @model {
   assignments: [Assignment] @hasMany
   zoomJoinUrl: String
   zoomMeetingId: String
+  zoomStartTime: String
 }
 
 type Assignment @model {
@@ -235,4 +236,20 @@ type Syllabus @model {
   pdfKey: String
   publishedPdfKey: String
   publishedAt: String
+}
+
+type ZoomMeeting @model {
+  id: ID!
+  topic: String!
+  zoomMeetingId: String
+  joinUrl: String!
+  startUrl: String
+  startTime: String!
+  durationMinutes: Int!
+  inviteeType: String!
+  courseId: String
+  courseTitle: String
+  studentIds: String
+  parentId: String
+  notes: String
 }

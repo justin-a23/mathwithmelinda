@@ -60,6 +60,14 @@ const CREATE_MESSAGE = /* GraphQL */ `
   }
 `
 
+const LIST_ZOOM_MEETINGS = /* GraphQL */`
+  query ListZoomMeetings {
+    listZoomMeetings(limit: 100) {
+      items { id topic joinUrl startTime durationMinutes inviteeType courseId studentIds parentId }
+    }
+  }
+`
+
 type StudentMessage = {
   id: string
   studentId: string
@@ -219,6 +227,8 @@ export default function Dashboard() {
   const [askSent, setAskSent] = useState(false)
   const [myMessages, setMyMessages] = useState<StudentMessage[]>([])
   const [messagesLoaded, setMessagesLoaded] = useState(false)
+  const [upcomingMeetings, setUpcomingMeetings] = useState<Array<{ id: string; topic: string; joinUrl: string; startTime: string; durationMinutes: number }>>([])
+
 
   // authStatus is the reliable way to detect sign-out in Amplify UI React v6.
   // After signOut(), user becomes undefined (not null), so === null check never fires.
@@ -364,6 +374,33 @@ export default function Dashboard() {
           setMyMessages(msgItems)
         } catch { /* non-critical */ }
         setMessagesLoaded(true)
+
+        // Fetch upcoming Zoom meetings for this student
+        try {
+          const zoomRes = await (client.graphql({ query: LIST_ZOOM_MEETINGS }) as any)
+          const allMeetings: any[] = zoomRes.data.listZoomMeetings.items
+          const now = new Date()
+          const myMeetings = allMeetings.filter(m => {
+            const end = new Date(new Date(m.startTime).getTime() + m.durationMinutes * 60000)
+            if (end < now) return false // already ended
+            if (m.inviteeType === 'students') {
+              try {
+                const ids: string[] = JSON.parse(m.studentIds || '[]')
+                return ids.includes(studentId) || ids.includes(loginId)
+              } catch { return false }
+            }
+            if (m.inviteeType === 'parent-student') {
+              try {
+                const ids: string[] = JSON.parse(m.studentIds || '[]')
+                return ids.includes(studentId) || ids.includes(loginId)
+              } catch { return false }
+            }
+            if (m.inviteeType === 'course' && studentCourseId && m.courseId === studentCourseId) return true
+            return false
+          })
+          myMeetings.sort((a, b) => a.startTime.localeCompare(b.startTime))
+          setUpcomingMeetings(myMeetings)
+        } catch { /* non-critical */ }
         // Badge: count replies the student hasn't seen yet (tracked in localStorage)
         try {
           const lastVisited = parseInt(localStorage.getItem('mwm:messagesLastVisited') || '0')
@@ -809,6 +846,51 @@ export default function Dashboard() {
               </div>
             )
           })
+        )}
+
+        {/* Upcoming Zoom meetings */}
+        {upcomingMeetings.length > 0 && (
+          <div style={{ marginTop: '48px' }}>
+            <h2 style={{ fontSize: '13px', fontWeight: 500, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--plum)', marginBottom: '14px' }}>
+              Upcoming Meetings
+            </h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {upcomingMeetings.map(m => {
+                const start = new Date(m.startTime)
+                const end = new Date(start.getTime() + m.durationMinutes * 60000)
+                const now = new Date()
+                const isLive = now >= start && now < end
+                const minUntil = Math.round((start.getTime() - now.getTime()) / 60000)
+                const timeStr = start.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+                return (
+                  <div key={m.id} style={{ background: 'var(--background)', border: `1px solid ${isLive ? '#86EFAC' : 'var(--gray-light)'}`, borderRadius: 'var(--radius)', padding: '14px 18px', display: 'flex', alignItems: 'center', gap: '14px' }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 600, fontSize: '15px', color: 'var(--foreground)', marginBottom: '2px' }}>{m.topic}</div>
+                      <div style={{ fontSize: '13px', color: 'var(--gray-mid)' }}>{timeStr}</div>
+                    </div>
+                    {isLive && (
+                      <span style={{ fontSize: '12px', fontWeight: 700, background: '#F0FDF4', color: '#166534', border: '1px solid #86EFAC', borderRadius: '20px', padding: '3px 10px', flexShrink: 0 }}>
+                        Live now
+                      </span>
+                    )}
+                    {!isLive && minUntil <= 60 && (
+                      <span style={{ fontSize: '12px', fontWeight: 600, background: '#FFFBEB', color: '#92400E', border: '1px solid #FDE68A', borderRadius: '20px', padding: '3px 10px', flexShrink: 0 }}>
+                        In {minUntil} min
+                      </span>
+                    )}
+                    <a
+                      href={m.joinUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: isLive ? '#16a34a' : '#0b5cff', color: 'white', borderRadius: '6px', padding: '7px 16px', fontSize: '13px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0 }}
+                    >
+                      🎥 Join
+                    </a>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
         )}
 
         {/* Messages preview — latest message only, links to full page */}
