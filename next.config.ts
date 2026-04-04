@@ -8,6 +8,7 @@ const nextConfig: NextConfig = {
     ZOOM_ACCOUNT_ID: process.env.ZOOM_ACCOUNT_ID,
     ZOOM_CLIENT_ID: process.env.ZOOM_CLIENT_ID,
     ZOOM_CLIENT_SECRET: process.env.ZOOM_CLIENT_SECRET,
+    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
   },
 };
 

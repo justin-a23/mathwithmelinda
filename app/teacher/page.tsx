@@ -151,6 +151,9 @@ export default function TeacherDashboard() {
   const [statsLoading, setStatsLoading] = useState(true)
   const [pendingStudents, setPendingStudents] = useState<{ id: string; firstName: string; lastName: string; email: string; gradeLevel: string | null }[]>([])
   const [alerts, setAlerts] = useState<Alert[]>([])
+  const [briefing, setBriefing] = useState<string>('')
+  const [briefingLoading, setBriefingLoading] = useState(true)
+  const [todayMeetings, setTodayMeetings] = useState<{ topic: string; startTime: string; startUrl: string | null; joinUrl: string }[]>([])
 
   useEffect(() => {
     fetchAll()
@@ -167,6 +170,7 @@ export default function TeacherDashboard() {
     fetchWeekStats()
     fetchPendingStudents()
     fetchAlerts()
+    fetchMeetingsAndBriefing()
   }
 
   async function fetchPendingStudents() {
@@ -174,6 +178,93 @@ export default function TeacherDashboard() {
       const result = await (client.graphql({ query: listPendingStudentsQuery }) as any)
       setPendingStudents(result.data.listStudentProfiles.items)
     } catch { /* silent */ }
+  }
+
+  async function fetchMeetingsAndBriefing() {
+    setBriefingLoading(true)
+    try {
+      const now = new Date()
+      const todayStr = now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })
+      const monday = getMonday(now)
+      const weekStartMs = monday.getTime()
+      const nextMonday = new Date(monday); nextMonday.setDate(monday.getDate() + 7)
+      const nextMondayStr = nextMonday.toISOString().slice(0, 10)
+
+      // Fetch everything needed for the briefing in parallel
+      const [meetingsRes, subsRes, studentsRes, plansRes, pendingRes] = await Promise.all([
+        client.graphql({ query: `query { listZoomMeetings(limit: 100) { items { id topic startTime durationMinutes startUrl joinUrl } } }` }) as any,
+        client.graphql({ query: listAllSubmissionsForAlertsQuery }) as any,
+        client.graphql({ query: listActiveStudentsQuery }) as any,
+        client.graphql({ query: listWeeklyPlansQuery }) as any,
+        client.graphql({ query: listPendingStudentsQuery }) as any,
+      ])
+
+      // Today's meetings
+      const dayStart = new Date(now); dayStart.setHours(0,0,0,0)
+      const dayEnd = new Date(now); dayEnd.setHours(23,59,59,999)
+      const meetsToday = (meetingsRes.data.listZoomMeetings.items as any[])
+        .filter(m => { const s = new Date(m.startTime); return s >= dayStart && s <= dayEnd })
+        .sort((a: any, b: any) => a.startTime.localeCompare(b.startTime))
+      setTodayMeetings(meetsToday)
+
+      const meetingLines = meetsToday.length === 0
+        ? 'No Zoom meetings today.'
+        : meetsToday.map((m: any) => {
+            const t = new Date(m.startTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+            const minUntil = Math.round((new Date(m.startTime).getTime() - now.getTime()) / 60000)
+            const endTime = new Date(new Date(m.startTime).getTime() + m.durationMinutes * 60000)
+            const status = now > endTime ? 'already ended' : minUntil <= 0 ? 'happening NOW' : `in ${minUntil} minutes`
+            return `- "${m.topic}" at ${t} (${status})`
+          }).join('\n')
+
+      // Ungraded submissions
+      const allSubs = subsRes.data.listSubmissions.items
+      const ungradedThisWeek = allSubs.filter((s: any) => !s.isArchived && !s.grade && s.submittedAt && new Date(s.submittedAt).getTime() >= weekStartMs)
+      const staleUngraded = allSubs.filter((s: any) => !s.isArchived && !s.grade && s.submittedAt && new Date(s.submittedAt) < new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000))
+
+      // Students who haven't submitted this week
+      const submittedThisWeek = new Set(allSubs.filter((s: any) => !s.isArchived && s.submittedAt && new Date(s.submittedAt).getTime() >= weekStartMs).map((s: any) => s.studentId))
+      const activeStudents: any[] = studentsRes.data.listStudentProfiles.items
+      const notSubmitted = activeStudents.filter(s => !submittedThisWeek.has(s.userId) && !submittedThisWeek.has(s.email))
+
+      // Next week planned?
+      const weeklyPlans: any[] = plansRes.data.listWeeklyPlans.items
+      const nextWeekPlanned = weeklyPlans.some((p: any) => p.weekStart === nextMondayStr || p.weekStartDate === nextMondayStr)
+      const dayOfWeek = now.getDay()
+      const isEndOfWeek = dayOfWeek === 4 || dayOfWeek === 5 || dayOfWeek === 0 || dayOfWeek === 6
+
+      // Pending students
+      const pendingCount = pendingRes.data.listStudentProfiles.items.length
+      const pendingNames = pendingRes.data.listStudentProfiles.items.slice(0, 3).map((s: any) => `${s.firstName} ${s.lastName}`).join(', ')
+
+      const context = `Current date/time: ${todayStr}
+
+TODAY'S ZOOM MEETINGS:
+${meetingLines}
+
+GRADING:
+- Ungraded submissions this week: ${ungradedThisWeek.length}
+- Submissions ungraded for 5+ days: ${staleUngraded.length}
+- Active students who haven't submitted anything this week: ${notSubmitted.length}${notSubmitted.length > 0 ? ` (${notSubmitted.slice(0,3).map((s:any)=>s.firstName).join(', ')})` : ''}
+
+PLANNING:
+- Next week's assignments planned: ${nextWeekPlanned ? 'Yes' : 'No'}${!nextWeekPlanned && isEndOfWeek ? ' (it is end of week — this needs attention)' : ''}
+
+PENDING STUDENT APPROVALS:
+- ${pendingCount > 0 ? `${pendingCount} student(s) waiting for approval: ${pendingNames}` : 'None'}`
+
+      const res = await fetch('/api/briefing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ context }),
+      })
+      const data = await res.json()
+      if (data.briefing) setBriefing(data.briefing)
+    } catch (err) {
+      console.error('Briefing fetch error:', err)
+    } finally {
+      setBriefingLoading(false)
+    }
   }
 
   async function fetchAlerts() {
@@ -356,6 +447,54 @@ export default function TeacherDashboard() {
       <TeacherNav />
 
       <main style={{ maxWidth: '1100px', margin: '0 auto', padding: '40px 24px' }}>
+
+        {/* ── AI BRIEFING + TODAY'S MEETINGS ── */}
+        <div style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', padding: '22px 28px', marginBottom: '24px' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px' }}>
+            <div style={{ width: '36px', height: '36px', background: 'var(--plum-light)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: '2px' }}>
+              <span style={{ fontSize: '18px' }}>✨</span>
+            </div>
+            <div style={{ flex: 1 }}>
+              {briefingLoading ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--plum)', opacity: 0.4, animation: 'pulse 1.2s ease-in-out infinite' }} />
+                  <span style={{ fontSize: '14px', color: 'var(--gray-mid)', fontStyle: 'italic' }}>Getting your briefing…</span>
+                </div>
+              ) : briefing ? (
+                <p style={{ fontSize: '15px', color: 'var(--foreground)', lineHeight: '1.65', margin: 0 }}>{briefing}</p>
+              ) : null}
+            </div>
+          </div>
+
+          {/* Today's meetings — shown below briefing if any */}
+          {todayMeetings.length > 0 && (
+            <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--gray-light)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {todayMeetings.map(m => {
+                const start = new Date(m.startTime)
+                const end = new Date(start.getTime() + 60 * 60000)
+                const now2 = new Date()
+                const isLive = now2 >= start && now2 < end
+                const minUntil = Math.round((start.getTime() - now2.getTime()) / 60000)
+                const timeStr = start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+                return (
+                  <div key={m.startTime + m.topic} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 14px', borderRadius: '8px', background: isLive ? '#F0FDF4' : 'var(--page-bg)', border: `1px solid ${isLive ? '#86EFAC' : 'var(--gray-light)'}` }}>
+                    <span style={{ fontSize: '14px' }}>🎥</span>
+                    <div style={{ flex: 1 }}>
+                      <span style={{ fontWeight: 600, fontSize: '14px', color: 'var(--foreground)' }}>{m.topic}</span>
+                      <span style={{ fontSize: '13px', color: 'var(--gray-mid)', marginLeft: '8px' }}>{timeStr}</span>
+                    </div>
+                    {isLive && <span style={{ fontSize: '12px', fontWeight: 700, background: '#dcfce7', color: '#166534', borderRadius: '20px', padding: '2px 10px' }}>🔴 Live</span>}
+                    {!isLive && minUntil > 0 && minUntil <= 120 && <span style={{ fontSize: '12px', fontWeight: 600, background: '#FEF3C7', color: '#92400E', borderRadius: '20px', padding: '2px 10px' }}>In {minUntil} min</span>}
+                    <a href={m.startUrl || m.joinUrl} target="_blank" rel="noopener noreferrer"
+                      style={{ background: isLive ? '#16a34a' : '#0b5cff', color: 'white', borderRadius: '6px', padding: '5px 14px', fontSize: '12px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>
+                      {isLive ? 'Join Now' : 'Start'}
+                    </a>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
 
         {/* ── PENDING STUDENTS BANNER ── */}
         {pendingStudents.length > 0 && (
