@@ -266,10 +266,10 @@ function NotesSection({ content }: { content: string | null }) {
   )
 }
 
-function QuestionScorecardSection({ questions, content, showWorkImageUrls, questionResults, onToggle }: {
+function QuestionScorecardSection({ questions, content, worksheetImageUrls, questionResults, onToggle }: {
   questions: Question[]
   content: string | null
-  showWorkImageUrls: Record<string, string[]>
+  worksheetImageUrls: string[]   // The ONE uploaded show-work sheet (all show-work questions on it)
   questionResults: Record<string, boolean | null>
   onToggle: (id: string, correct: boolean | null) => void
 }) {
@@ -285,6 +285,7 @@ function QuestionScorecardSection({ questions, content, showWorkImageUrls, quest
   const correct = gradable.filter(q => questionResults[q.id] === true).length
   const wrong = gradable.filter(q => questionResults[q.id] === false).length
   const pending = gradable.filter(q => questionResults[q.id] === undefined || questionResults[q.id] === null).length
+  const hasShowWork = gradable.some(q => q.questionType === 'show_work')
 
   return (
     <div style={{ marginBottom: '24px' }}>
@@ -298,6 +299,27 @@ function QuestionScorecardSection({ questions, content, showWorkImageUrls, quest
           </div>
         )}
       </div>
+
+      {/* Uploaded worksheet — shown once when there are show-work questions */}
+      {hasShowWork && worksheetImageUrls.length > 0 && (
+        <div style={{ marginBottom: '16px', padding: '12px 14px', background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: '8px' }}>
+          <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--gray-mid)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '10px' }}>
+            📷 Uploaded worksheet
+          </div>
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            {worksheetImageUrls.map((url, i) => (
+              <a key={i} href={url} target="_blank" rel="noopener noreferrer">
+                <img src={url} alt={`Worksheet ${i + 1}`} style={{ height: '140px', width: 'auto', borderRadius: '6px', border: '1px solid var(--gray-light)', objectFit: 'cover', cursor: 'zoom-in', display: 'block' }} />
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+      {hasShowWork && worksheetImageUrls.length === 0 && (
+        <div style={{ marginBottom: '16px', padding: '10px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', fontSize: '13px', color: '#dc2626' }}>
+          ⚠ No worksheet photo uploaded — show-work questions marked as not completed.
+        </div>
+      )}
 
       {(() => {
         let qNum = 0
@@ -320,7 +342,6 @@ function QuestionScorecardSection({ questions, content, showWorkImageUrls, quest
           const qBody = bookNumMatch ? bookNumMatch[2] : q.questionText
           const result = questionResults[q.id]  // true | false | null | undefined
           const isShowWork = q.questionType === 'show_work'
-          const swImages = showWorkImageUrls[q.id] || []
 
           const toggleBtnBase: React.CSSProperties = {
             border: '1px solid', borderRadius: '6px', padding: '5px 14px',
@@ -346,17 +367,9 @@ function QuestionScorecardSection({ questions, content, showWorkImageUrls, quest
                   </div>
 
                   {isShowWork ? (
-                    swImages.length > 0 ? (
-                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                        {swImages.map((url, i) => (
-                          <a key={i} href={url} target="_blank" rel="noopener noreferrer">
-                            <img src={url} alt={`Show work ${i + 1}`} style={{ height: '80px', width: 'auto', borderRadius: '4px', border: '1px solid var(--gray-light)', objectFit: 'cover', cursor: 'pointer' }} />
-                          </a>
-                        ))}
-                      </div>
-                    ) : (
-                      <span style={{ fontSize: '12px', color: 'var(--gray-mid)', fontStyle: 'italic' }}>Show work — check uploaded photos below</span>
-                    )
+                    <span style={{ fontSize: '12px', color: 'var(--gray-mid)', fontStyle: 'italic' }}>
+                      {worksheetImageUrls.length > 0 ? 'See worksheet photo above' : 'No worksheet uploaded'}
+                    </span>
                   ) : (
                     <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'baseline' }}>
                       <div style={{ fontSize: '13px' }}>
@@ -1219,12 +1232,13 @@ export default function GradingPage() {
               <QuestionScorecardSection
                 questions={questions}
                 content={selectedSubmission.content}
-                showWorkImageUrls={showWorkImageUrls}
+                worksheetImageUrls={imageUrls}
                 questionResults={questionResults}
                 onToggle={onToggleQuestion}
               />
 
-              {imageUrls.length > 0 && (
+              {/* Show uploaded files for older submissions that have no questions (backwards compat) */}
+              {questions.length === 0 && imageUrls.length > 0 && (
                 <div style={{ marginBottom: '24px' }}>
                   <div style={{ fontSize: '11px', fontWeight: 500, color: 'var(--gray-mid)', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '1px' }}>Submitted files ({imageUrls.length})</div>
                   {imageUrls.map((url, i) => {
