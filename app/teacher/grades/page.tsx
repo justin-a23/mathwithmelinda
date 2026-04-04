@@ -451,6 +451,7 @@ export default function GradingPage() {
   const [teachingVoice, setTeachingVoice] = useState('')
   const [lessonTeachingNotes, setLessonTeachingNotes] = useState('')
   const [questionResults, setQuestionResults] = useState<Record<string, boolean | null>>({})
+  const [manualOverrides, setManualOverrides] = useState<Record<string, boolean>>({})
   const [expandedStudents, setExpandedStudents] = useState<Set<string>>(new Set())
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date())
   const [refreshing, setRefreshing] = useState(false)
@@ -567,6 +568,12 @@ export default function GradingPage() {
       if (computed) setGrade(computed)
       return next
     })
+    // Track that Melinda manually set this question so re-grade preserves it
+    if (correct !== null) {
+      setManualOverrides(prev => ({ ...prev, [id]: correct }))
+    } else {
+      setManualOverrides(prev => { const n = { ...prev }; delete n[id]; return n })
+    }
   }
 
   async function suggestWithAI() {
@@ -584,6 +591,7 @@ export default function GradingPage() {
       const studentName = studentNameMap[selectedSubmission.studentId] || selectedSubmission.studentId
       const lessonTitle = getSubmissionTitle(selectedSubmission)
       const digitalAnswers: Record<string, string> = parsed.answers || {}
+      const isRegrade = Object.keys(questionResults).length > 0
       const res = await fetch('/api/grade-suggestion', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -595,20 +603,23 @@ export default function GradingPage() {
           lessonTitle,
           teachingVoice,
           teachingNotes: lessonTeachingNotes,
+          // On re-grade, pass Melinda's manual overrides so AI respects them
+          lockedResults: isRegrade ? manualOverrides : {},
         }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'AI suggestion failed')
       if (data.comment) setComment(data.comment)
-      // Apply per-question results from AI
+      // Apply per-question results from AI, preserving any manual overrides
       if (data.questionResults && Array.isArray(data.questionResults)) {
-        const newResults: Record<string, boolean | null> = {}
+        const aiResults: Record<string, boolean | null> = {}
         for (const r of data.questionResults as { id: string; correct: boolean | null }[]) {
-          newResults[r.id] = r.correct
+          aiResults[r.id] = r.correct
         }
-        setQuestionResults(newResults)
-        // Auto-compute grade from results (override AI's grade with calculated grade)
-        const computed = computeGradeFromResults(questions, newResults)
+        // Merge: AI fills in everything, manual overrides take final priority
+        const merged: Record<string, boolean | null> = { ...aiResults, ...manualOverrides }
+        setQuestionResults(merged)
+        const computed = computeGradeFromResults(questions, merged)
         setGrade(computed || data.grade || '')
       } else if (data.grade) {
         setGrade(data.grade)
@@ -646,6 +657,7 @@ export default function GradingPage() {
     setLessonTeachingNotes('')
     setAiError('')
     setQuestionResults({})
+    setManualOverrides({})
 
     if (!submission.content) return
     try {
