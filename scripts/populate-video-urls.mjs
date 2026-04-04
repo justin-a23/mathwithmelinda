@@ -66,14 +66,23 @@ async function listAllS3Objects() {
   return objects
 }
 
-// Parse lesson number from S3 key like "algebra1/Algebra 1 - Lesson 143 - Title.mp4"
-// Also handles "100a", "100b" style — strips the letter and returns the base number
-function parseLessonNumber(key) {
-  const match = key.match(/- Lesson (\d+(?:\.\d+)?)[ab]? -/i)
-  return match ? parseFloat(match[1]) : null
+// Parse all lesson numbers from an S3 key.
+// Handles:
+//   "- Lesson 143 -"          → [143]
+//   "- Lesson 100a -"         → [100]
+//   "- Lessons 14 & 15 -"     → [14, 15]
+//   "- Lessons 14&15 -"       → [14, 15]
+function parseLessonNumbers(key) {
+  // Paired: "Lessons N & M" or "Lessons N&M"
+  const paired = key.match(/- Lessons (\d+)\s*&\s*(\d+) -/i)
+  if (paired) return [parseFloat(paired[1]), parseFloat(paired[2])]
+  // Single: "Lesson N" with optional a/b suffix
+  const single = key.match(/- Lesson (\d+(?:\.\d+)?)[ab]? -/i)
+  if (single) return [parseFloat(single[1])]
+  return []
 }
 
-// Parse the part suffix (a/b) if present
+// Parse the part suffix (a/b) if present (single-lesson files only)
 function parseLessonPart(key) {
   const match = key.match(/- Lesson \d+([ab]) -/i)
   return match ? match[1].toLowerCase() : null
@@ -119,19 +128,22 @@ async function main() {
   console.log(`Found ${keys.length} files in S3`)
 
   // Build a map: "courseTitle|lessonNumber" → S3 key
-  // For split lessons (100a, 100b), prefer the 'a' part; fall back to 'b'
+  // Paired lessons (e.g. "Lessons 14 & 15") map BOTH numbers to the same key.
+  // For split lessons (100a, 100b), prefer the 'a' part; fall back to 'b'.
   const s3Map = new Map()
   for (const key of keys) {
     if (!key.endsWith('.mp4')) continue
     const folder = parseCourseFolder(key)
     const courseTitle = FOLDER_TO_COURSE[folder]
-    const lessonNum = parseLessonNumber(key)
-    if (!courseTitle || lessonNum === null) continue
-    const mapKey = `${courseTitle}|${lessonNum}`
+    const lessonNums = parseLessonNumbers(key)
+    if (!courseTitle || lessonNums.length === 0) continue
     const part = parseLessonPart(key)
-    // Only overwrite if not already set, or if this is the 'a' part (prefer part a)
-    if (!s3Map.has(mapKey) || part === 'a') {
-      s3Map.set(mapKey, key)
+    for (const lessonNum of lessonNums) {
+      const mapKey = `${courseTitle}|${lessonNum}`
+      // Only overwrite if not already set, or if this is the 'a' part (prefer part a)
+      if (!s3Map.has(mapKey) || part === 'a') {
+        s3Map.set(mapKey, key)
+      }
     }
   }
   console.log(`Parsed ${s3Map.size} video files with valid course + lesson number`)
