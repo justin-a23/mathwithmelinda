@@ -82,11 +82,27 @@ export async function POST(req: NextRequest) {
       ? `\nCURRICULUM METHOD (Abeka — grade against this, not other approaches):\n${teachingNotes.trim()}`
       : ''
 
+    const showWorkQuestionCount = (questions as { questionType: string }[]).filter(q => q.questionType === 'show_work').length
+    const expectedUploadCount = showWorkQuestionCount > 0 ? showWorkQuestionCount : 0
+    const actualUploadCount = hasFiles ? (imageKeys as string[]).length : 0
+    const missingUploadNote = expectedUploadCount > 0 && actualUploadCount === 0
+      ? `\nWARNING: This assignment has ${expectedUploadCount} show-work problem(s) that require a photo upload. NO photo was uploaded. Treat all show-work questions as unanswered (0 credit).`
+      : ''
+
     const systemPrompt = `You are helping a homeschool math teacher named Melinda grade student work and write feedback comments.
 
 Teacher's style instructions: ${voiceInstruction}${curriculumSection}
 
-Grading scale: 0–100. If curriculum method notes are provided, evaluate whether the student used the correct method — not just whether the final answer is right.
+GRADING RULES — follow these exactly:
+1. Grade on a 0–100 scale.
+2. Each question carries equal weight unless otherwise noted.
+3. A blank or missing answer = wrong (0 credit for that question).
+4. If a correct answer is provided in [correct: ...], compare it exactly to the student's answer. Minor arithmetic errors should result in point deductions.
+5. If show-work problems exist and NO photo was uploaded, all show-work questions count as 0.
+6. Do NOT assume answers are correct when you cannot verify them. When in doubt, deduct points.
+7. If curriculum method notes are provided, evaluate whether the student used the correct method — not just whether the final answer is right.
+8. Never give 100% unless every single answer is clearly correct and all required uploads are present.${missingUploadNote}
+
 Respond ONLY with valid JSON in this exact format — no other text:
 {"grade": "85", "comment": "Your feedback here."}`
 

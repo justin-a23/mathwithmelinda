@@ -116,6 +116,7 @@ const getLessonTemplateQuestions = /* GraphQL */`
           order
           questionText
           questionType
+          correctAnswer
         }
       }
     }
@@ -177,7 +178,7 @@ type Submission = {
   } | null
 }
 
-type Question = { id: string; order: number; questionText: string; questionType: string }
+type Question = { id: string; order: number; questionText: string; questionType: string; correctAnswer?: string | null }
 
 function getSubmissionCourseId(s: Submission): string {
   if (s.assignment?.course?.id) return s.assignment.course.id
@@ -477,7 +478,7 @@ export default function GradingPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           imageKeys: parsed.files || [],
-          questions: questions.map(q => ({ id: q.id, questionText: q.questionText, questionType: q.questionType })),
+          questions: questions.map(q => ({ id: q.id, questionText: q.questionText, questionType: q.questionType, correctAnswer: q.correctAnswer ?? null })),
           answers: digitalAnswers,
           studentName,
           lessonTitle,

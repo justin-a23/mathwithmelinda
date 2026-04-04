@@ -983,6 +983,29 @@ function LessonPageInner() {
                               ))}
                             </div>
                           )}
+                          {q.questionType === 'multiple_choice_multi' && q.choices && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                              <div style={{ fontSize: '11px', color: 'var(--gray-mid)', marginBottom: '4px' }}>Select all that apply</div>
+                              {q.choices.split('\n').filter(Boolean).map((choice, ci) => {
+                                const selected: string[] = answers[q.id] ? answers[q.id].split('||') : []
+                                const isChecked = selected.includes(choice)
+                                return (
+                                  <label key={ci} style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontSize: '14px', color: 'var(--foreground)' }}>
+                                    <input
+                                      type="checkbox"
+                                      value={choice}
+                                      checked={isChecked}
+                                      onChange={() => {
+                                        const next = isChecked ? selected.filter(s => s !== choice) : [...selected, choice]
+                                        setAnswers(prev => ({ ...prev, [q.id]: next.join('||') }))
+                                      }}
+                                    />
+                                    <MathRenderer text={choice} />
+                                  </label>
+                                )
+                              })}
+                            </div>
+                          )}
                           {q.questionType === 'show_work' && (
                             <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'var(--plum-light)', border: '1px solid var(--plum-mid)', borderRadius: '6px', padding: '5px 10px', marginTop: '4px' }}>
                               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--plum)" strokeWidth="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
