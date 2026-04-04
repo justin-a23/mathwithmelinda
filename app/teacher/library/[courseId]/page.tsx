@@ -1096,7 +1096,27 @@ export default function LessonLibraryPage() {
                                                       <p style={{ fontSize: '11px', color: 'var(--gray-mid)', margin: '4px 0 0' }}>One choice per line. Letters (A, B, C…) are added automatically when displayed to students.</p>
                                                     </div>
                                                   )}
-                                                  {(editingQuestionForm.questionType === 'number' || editingQuestionForm.questionType === 'short_text' || editingQuestionForm.questionType === 'multiple_choice' || editingQuestionForm.questionType === 'multiple_choice_multi') && (
+                                                  {editingQuestionForm.questionType === 'multiple_choice_multi' && (
+                                                    <div style={{ marginBottom: '10px' }}>
+                                                      <label style={labelStyle}>Correct answer(s) (optional — for auto-grading)</label>
+                                                      <textarea
+                                                        value={editingQuestionForm.correctAnswer}
+                                                        onChange={e => setEditingQuestionForm(f => ({ ...f, correctAnswer: e.target.value }))}
+                                                        rows={2}
+                                                        placeholder={(() => {
+                                                          const lines = editingQuestionForm.choices.split('\n').filter(Boolean)
+                                                          if (lines.length >= 2) return `e.g. ${lines[0]} | ${lines[lines.length - 1]}`
+                                                          if (lines.length === 1) return `e.g. ${lines[0]}`
+                                                          return 'e.g. Red | Green'
+                                                        })()}
+                                                        style={{ ...inputStyle, resize: 'vertical' }}
+                                                      />
+                                                      <p style={{ fontSize: '11px', color: 'var(--gray-mid)', margin: '4px 0 0' }}>
+                                                        Type each correct choice separated by <code style={{ background: 'var(--gray-light)', padding: '1px 5px', borderRadius: '3px', fontSize: '12px' }}>|</code> — copy the text exactly as written in your choices above.
+                                                      </p>
+                                                    </div>
+                                                  )}
+                                                  {(editingQuestionForm.questionType === 'number' || editingQuestionForm.questionType === 'short_text' || editingQuestionForm.questionType === 'multiple_choice') && (
                                                     <div style={{ marginBottom: '10px' }}>
                                                       <label style={labelStyle}>Correct answer (optional — for auto-grading)</label>
                                                       <MathToolbar
@@ -1226,7 +1246,27 @@ export default function LessonLibraryPage() {
                                       <p style={{ fontSize: '11px', color: 'var(--gray-mid)', margin: '4px 0 0' }}>One choice per line. Letters (A, B, C…) are added automatically when displayed to students.</p>
                                     </div>
                                   )}
-                                  {(newQuestion.questionType === 'number' || newQuestion.questionType === 'short_text' || newQuestion.questionType === 'multiple_choice' || newQuestion.questionType === 'multiple_choice_multi') && (
+                                  {newQuestion.questionType === 'multiple_choice_multi' && (
+                                    <div style={{ marginBottom: '12px' }}>
+                                      <label style={labelStyle}>Correct answer(s) (optional — for auto-grading)</label>
+                                      <textarea
+                                        value={newQuestion.correctAnswer}
+                                        onChange={e => setNewQuestion(q => ({ ...q, correctAnswer: e.target.value }))}
+                                        rows={2}
+                                        placeholder={(() => {
+                                          const lines = newQuestion.choices.split('\n').filter(Boolean)
+                                          if (lines.length >= 2) return `e.g. ${lines[0]} | ${lines[lines.length - 1]}`
+                                          if (lines.length === 1) return `e.g. ${lines[0]}`
+                                          return 'e.g. Red | Green'
+                                        })()}
+                                        style={{ ...inputStyle, resize: 'vertical' }}
+                                      />
+                                      <p style={{ fontSize: '11px', color: 'var(--gray-mid)', margin: '4px 0 0' }}>
+                                        Type each correct choice separated by <code style={{ background: 'var(--gray-light)', padding: '1px 5px', borderRadius: '3px', fontSize: '12px' }}>|</code> — copy the text exactly as written in your choices above.
+                                      </p>
+                                    </div>
+                                  )}
+                                  {(newQuestion.questionType === 'number' || newQuestion.questionType === 'short_text' || newQuestion.questionType === 'multiple_choice') && (
                                     <div style={{ marginBottom: '12px' }}>
                                       <label style={labelStyle}>Correct answer (optional — for auto-grading)</label>
                                       <MathToolbar
