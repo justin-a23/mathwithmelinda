@@ -2,7 +2,7 @@
 
 import { useAuthenticator } from '@aws-amplify/ui-react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, Suspense } from 'react'
 import { generateClient } from 'aws-amplify/api'
 import { useTheme } from '../../ThemeProvider'
 import MathRenderer from '../../components/MathRenderer'
@@ -412,7 +412,7 @@ function QuestionScorecardSection({ questions, content, worksheetImageUrls, ques
   )
 }
 
-export default function GradingPage() {
+function GradingPageInner() {
   const { user } = useAuthenticator()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -1524,5 +1524,13 @@ export default function GradingPage() {
         )}
       </div>
     </div>
+  )
+}
+
+export default function GradingPage() {
+  return (
+    <Suspense fallback={null}>
+      <GradingPageInner />
+    </Suspense>
   )
 }
