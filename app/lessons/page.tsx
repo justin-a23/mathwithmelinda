@@ -158,6 +158,8 @@ function LessonPageInner() {
   const [existingSubmissionId, setExistingSubmissionId] = useState<string | null>(null)
   const [isReturned, setIsReturned] = useState(false)
   const [returnedReason, setReturnedReason] = useState('')
+  const [submitWarnings, setSubmitWarnings] = useState<string[]>([])
+  const [showSubmitConfirm, setShowSubmitConfirm] = useState(false)
 
   // Video tracking refs — no state, no UI, invisible to student
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -518,24 +520,51 @@ function LessonPageInner() {
   }
 
 
-  async function handleSubmit() {
+  function handleSubmit() {
     const assignmentType = lessonTemplate?.assignmentType || 'upload'
     const needsUpload = assignmentType === 'upload' || assignmentType === 'both'
     const needsAnswers = assignmentType === 'questions' || assignmentType === 'both'
     const stillUploading = files.some(f => f.status === 'uploading')
 
-    if (needsUpload && !needsAnswers && files.length === 0 && !notes.trim()) {
-      setError('Please add at least one photo before submitting.')
-      return
-    }
-    if (!needsUpload && !needsAnswers && files.length === 0 && !notes.trim()) {
-      setError('Please add at least one photo or some notes before submitting.')
-      return
-    }
     if (stillUploading) {
       setError('Please wait for all files to finish uploading.')
       return
     }
+    setError('')
+
+    // Build warnings (soft — never block)
+    const allQuestions = (lessonTemplate?.questions?.items ?? []).filter(q => q.questionType !== 'section_header')
+    const hasShowWorkQs = allQuestions.some(q => q.questionType === 'show_work')
+    const digitalQs = allQuestions.filter(q => q.questionType !== 'show_work')
+    const answeredCount = digitalQs.filter(q => answers[q.id] && answers[q.id].trim() !== '').length
+    const doneFiles = files.filter(f => f.status === 'done')
+
+    const warnings: string[] = []
+
+    // No upload when show_work or upload-required
+    if ((hasShowWorkQs || needsUpload) && doneFiles.length === 0) {
+      warnings.push("📎 You haven't uploaded your show-work worksheet yet.")
+    }
+
+    // Answered none of the digital questions
+    if (needsAnswers && digitalQs.length > 0 && answeredCount === 0) {
+      warnings.push("✏️ You haven't answered any of the digital questions.")
+    } else if (needsAnswers && digitalQs.length > 0 && answeredCount < digitalQs.length) {
+      // Answered some but not all
+      warnings.push(`✏️ You've answered ${answeredCount} of ${digitalQs.length} questions — ${digitalQs.length - answeredCount} still blank.`)
+    }
+
+    if (warnings.length > 0) {
+      setSubmitWarnings(warnings)
+      setShowSubmitConfirm(true)
+      return
+    }
+
+    doSubmit()
+  }
+
+  async function doSubmit() {
+    setShowSubmitConfirm(false)
     setError('')
     setSubmitting(true)
     try {
@@ -1065,10 +1094,43 @@ function LessonPageInner() {
 
                   {error && <p style={{ color: 'red', fontSize: '14px', marginBottom: '16px' }}>{error}</p>}
 
-                  <button onClick={handleSubmit} disabled={submitting}
-                    style={{ background: submitting ? 'var(--gray-light)' : 'var(--plum)', color: submitting ? 'var(--gray-mid)' : 'white', padding: '12px 32px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '15px', fontWeight: 500, width: '100%' }}>
-                    {submitting ? 'Submitting...' : 'Submit Assignment'}
-                  </button>
+                  {/* Pre-submit confirmation — shows when warnings exist */}
+                  {showSubmitConfirm && (
+                    <div style={{ marginBottom: '16px', background: '#fffbeb', border: '2px solid #f59e0b', borderRadius: '12px', padding: '20px' }}>
+                      <div style={{ fontWeight: 700, fontSize: '15px', color: '#92400e', marginBottom: '12px' }}>
+                        Wait — just checking! 👀
+                      </div>
+                      <ul style={{ margin: '0 0 16px', padding: '0 0 0 4px', listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {submitWarnings.map((w, i) => (
+                          <li key={i} style={{ fontSize: '14px', color: '#78350f', background: '#fef3c7', borderRadius: '8px', padding: '10px 14px', lineHeight: 1.5 }}>
+                            {w}
+                          </li>
+                        ))}
+                      </ul>
+                      <p style={{ fontSize: '13px', color: '#92400e', margin: '0 0 16px', fontStyle: 'italic' }}>
+                        Are you sure you want to submit? You can go back and fix this first.
+                      </p>
+                      <div style={{ display: 'flex', gap: '10px' }}>
+                        <button
+                          onClick={() => setShowSubmitConfirm(false)}
+                          style={{ flex: 1, padding: '11px', borderRadius: '8px', border: '2px solid var(--plum)', background: 'white', color: 'var(--plum)', fontWeight: 700, fontSize: '14px', cursor: 'pointer', fontFamily: 'var(--font-body)' }}>
+                          ← Go Back and Fix It
+                        </button>
+                        <button
+                          onClick={() => doSubmit()}
+                          style={{ flex: 1, padding: '11px', borderRadius: '8px', border: 'none', background: '#9ca3af', color: 'white', fontWeight: 600, fontSize: '14px', cursor: 'pointer', fontFamily: 'var(--font-body)' }}>
+                          Submit Anyway
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {!showSubmitConfirm && (
+                    <button onClick={handleSubmit} disabled={submitting}
+                      style={{ background: submitting ? 'var(--gray-light)' : 'var(--plum)', color: submitting ? 'var(--gray-mid)' : 'white', padding: '12px 32px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '15px', fontWeight: 500, width: '100%' }}>
+                      {submitting ? 'Submitting...' : 'Submit Assignment'}
+                    </button>
+                  )}
                 </div>
               )
             })()}
