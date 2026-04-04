@@ -142,10 +142,10 @@ type UploadedFile = {
   warning?: string      // quality warning (landscape, low-res, etc.)
 }
 
-function checkImageQuality(file: File): Promise<string | null> {
+function checkImageQuality(file: File): Promise<string | undefined> {
   return new Promise((resolve) => {
     const previewable = file.type === 'image/jpeg' || file.type === 'image/png' || file.type === 'image/webp' || file.type === 'image/gif'
-    if (!previewable) { resolve(null); return }
+    if (!previewable) { resolve(undefined); return }
     const url = URL.createObjectURL(file)
     const img = new window.Image()
     img.onload = () => {
@@ -156,10 +156,10 @@ function checkImageQuality(file: File): Promise<string | null> {
       } else if (w > h * 1.15) {
         resolve('Photo is sideways (landscape) — rotate your phone upright before taking the photo.')
       } else {
-        resolve(null)
+        resolve(undefined)
       }
     }
-    img.onerror = () => { URL.revokeObjectURL(url); resolve(null) }
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(undefined) }
     img.src = url
   })
 }
