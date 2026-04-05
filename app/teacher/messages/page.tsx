@@ -17,6 +17,14 @@ const LIST_MESSAGES = /* GraphQL */ `
   }
 `
 
+const LIST_STUDENTS = /* GraphQL */ `
+  query ListStudents {
+    listStudentProfiles(limit: 500, filter: { status: { eq: "active" } }) {
+      items { id userId firstName lastName preferredName email }
+    }
+  }
+`
+
 const UPDATE_MESSAGE = /* GraphQL */ `
   mutation UpdateMessage($input: UpdateMessageInput!) {
     updateMessage(input: $input) { id }
@@ -82,13 +90,83 @@ export default function TeacherMessagesPage() {
   const [sending, setSending] = useState<Record<string, boolean>>({})
   const [archiving, setArchiving] = useState<Record<string, boolean>>({})
 
+  // Announcement state
+  const [showAnnouncement, setShowAnnouncement] = useState(false)
+  const [announcementText, setAnnouncementText] = useState('')
+  const [announcementSubject, setAnnouncementSubject] = useState('')
+  const [announcementSending, setAnnouncementSending] = useState(false)
+  const [announcementSent, setAnnouncementSent] = useState(false)
+  const [students, setStudents] = useState<{ userId: string; name: string; email: string }[]>([])
+  const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(new Set())
+
   useEffect(() => {
     if (user === null) router.replace('/login')
   }, [user, router])
 
   useEffect(() => {
     loadMessages()
+    loadStudents()
   }, [])
+
+  async function loadStudents() {
+    try {
+      const res = await (client.graphql({ query: LIST_STUDENTS }) as any)
+      const items = res.data.listStudentProfiles.items
+      const list = items
+        .filter((s: any) => s.email)
+        .map((s: any) => ({
+          userId: s.userId,
+          name: s.preferredName || `${s.firstName} ${s.lastName}`.trim(),
+          email: s.email,
+        }))
+      setStudents(list)
+      setSelectedStudentIds(new Set(list.map((s: any) => s.userId)))
+    } catch (err) {
+      console.error('Error loading students:', err)
+    }
+  }
+
+  async function sendAnnouncement() {
+    if (!announcementText.trim() || !announcementSubject.trim() || selectedStudentIds.size === 0) return
+    setAnnouncementSending(true)
+    try {
+      const targets = students.filter(s => selectedStudentIds.has(s.userId))
+      await Promise.all(targets.map(s =>
+        fetch('/api/send-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to: s.email,
+            subject: announcementSubject.trim(),
+            html: `
+              <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+                <div style="background: #7B4FA6; color: white; padding: 12px 20px; border-radius: 8px 8px 0 0;">
+                  <div style="font-size: 12px; text-transform: uppercase; letter-spacing: 1px; opacity: 0.8;">Announcement from Melinda</div>
+                  <div style="font-size: 18px; font-weight: 700; margin-top: 4px;">${announcementSubject.trim()}</div>
+                </div>
+                <div style="background: #f9f9f9; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px; padding: 20px;">
+                  <p style="font-size: 15px; color: #333; line-height: 1.7; white-space: pre-wrap; margin: 0;">${announcementText.trim().replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>
+                </div>
+                <p style="font-size: 12px; color: #999; margin-top: 16px;">This is a class announcement — replies are not monitored. To contact Melinda, use the <a href="https://mathwithmelinda.com/student/messages" style="color: #7B4FA6;">Messages</a> page.</p>
+              </div>
+            `,
+            text: `Announcement from Melinda: ${announcementSubject.trim()}\n\n${announcementText.trim()}\n\n---\nThis is a class announcement. To reply, visit https://mathwithmelinda.com/student/messages`,
+          }),
+        }).catch(() => {})
+      ))
+      setAnnouncementSent(true)
+      setAnnouncementText('')
+      setAnnouncementSubject('')
+      setTimeout(() => {
+        setAnnouncementSent(false)
+        setShowAnnouncement(false)
+      }, 2500)
+    } catch (err) {
+      console.error('Error sending announcement:', err)
+    } finally {
+      setAnnouncementSending(false)
+    }
+  }
 
   async function loadMessages() {
     setLoading(true)
@@ -228,13 +306,109 @@ export default function TeacherMessagesPage() {
               <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '28px', color: 'var(--foreground)', marginBottom: '4px' }}>Student Messages</h1>
               <p style={{ color: 'var(--gray-mid)', margin: 0, fontSize: '14px' }}>Questions from students — reply inline to send a response.</p>
             </div>
-            {totalUnread > 0 && (
-              <span style={{ background: '#ef4444', color: 'white', fontSize: '12px', fontWeight: 700, padding: '4px 10px', borderRadius: '20px', marginBottom: '4px' }}>
-                {totalUnread} unread
-              </span>
-            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
+              {totalUnread > 0 && (
+                <span style={{ background: '#ef4444', color: 'white', fontSize: '12px', fontWeight: 700, padding: '4px 10px', borderRadius: '20px' }}>
+                  {totalUnread} unread
+                </span>
+              )}
+              <button
+                onClick={() => { setShowAnnouncement(a => !a); setAnnouncementSent(false) }}
+                style={{ background: showAnnouncement ? 'var(--plum)' : 'transparent', color: showAnnouncement ? 'white' : 'var(--plum)', border: '1px solid var(--plum)', borderRadius: '8px', padding: '8px 16px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                📢 Announce
+              </button>
+            </div>
           </div>
         </div>
+
+        {/* Announcement panel */}
+        {showAnnouncement && (
+          <div style={{ background: 'var(--background)', border: '1px solid var(--plum)', borderRadius: '12px', padding: '24px', marginBottom: '28px' }}>
+            <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '20px', color: 'var(--foreground)', margin: '0 0 4px' }}>Send Announcement</h2>
+            <p style={{ color: 'var(--gray-mid)', fontSize: '13px', margin: '0 0 20px' }}>Email-only blast — students cannot reply to this. For two-way conversation, use the message threads below.</p>
+
+            <div style={{ marginBottom: '14px' }}>
+              <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--gray-mid)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>Subject</label>
+              <input
+                type="text"
+                value={announcementSubject}
+                onChange={e => setAnnouncementSubject(e.target.value)}
+                placeholder="e.g. Reminder: assignments due Tuesday by 5pm"
+                style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--gray-light)', borderRadius: '8px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)', boxSizing: 'border-box' }}
+              />
+            </div>
+
+            <div style={{ marginBottom: '14px' }}>
+              <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--gray-mid)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>Message</label>
+              <textarea
+                value={announcementText}
+                onChange={e => setAnnouncementText(e.target.value)}
+                placeholder="Type your announcement here…"
+                rows={4}
+                style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--gray-light)', borderRadius: '8px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)', resize: 'vertical', boxSizing: 'border-box' }}
+              />
+            </div>
+
+            <div style={{ marginBottom: '20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--gray-mid)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Recipients ({selectedStudentIds.size} of {students.length})
+                </label>
+                <button
+                  onClick={() => setSelectedStudentIds(
+                    selectedStudentIds.size === students.length
+                      ? new Set()
+                      : new Set(students.map(s => s.userId))
+                  )}
+                  style={{ background: 'none', border: 'none', color: 'var(--plum)', fontSize: '12px', fontWeight: 600, cursor: 'pointer', padding: 0 }}
+                >
+                  {selectedStudentIds.size === students.length ? 'Deselect all' : 'Select all'}
+                </button>
+              </div>
+              <div style={{ border: '1px solid var(--gray-light)', borderRadius: '8px', maxHeight: '180px', overflowY: 'auto', background: 'var(--background)' }}>
+                {students.map(s => (
+                  <label key={s.userId} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 14px', cursor: 'pointer', borderBottom: '1px solid var(--gray-light)', background: selectedStudentIds.has(s.userId) ? 'rgba(123,79,166,0.06)' : 'transparent' }}>
+                    <input
+                      type="checkbox"
+                      checked={selectedStudentIds.has(s.userId)}
+                      onChange={() => {
+                        const next = new Set(selectedStudentIds)
+                        next.has(s.userId) ? next.delete(s.userId) : next.add(s.userId)
+                        setSelectedStudentIds(next)
+                      }}
+                      style={{ accentColor: 'var(--plum)', width: '15px', height: '15px', flexShrink: 0 }}
+                    />
+                    <span style={{ fontSize: '14px', color: 'var(--foreground)' }}>{s.name}</span>
+                    <span style={{ fontSize: '12px', color: 'var(--gray-mid)', marginLeft: 'auto' }}>{s.email}</span>
+                  </label>
+                ))}
+                {students.length === 0 && (
+                  <div style={{ padding: '16px', fontSize: '13px', color: 'var(--gray-mid)', textAlign: 'center' }}>No active students with email addresses</div>
+                )}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+              <button
+                onClick={sendAnnouncement}
+                disabled={announcementSending || !announcementText.trim() || !announcementSubject.trim() || selectedStudentIds.size === 0}
+                style={{ background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '8px', padding: '10px 24px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', opacity: (announcementSending || !announcementText.trim() || !announcementSubject.trim() || selectedStudentIds.size === 0) ? 0.6 : 1 }}
+              >
+                {announcementSending ? 'Sending…' : `Send to ${selectedStudentIds.size} student${selectedStudentIds.size !== 1 ? 's' : ''}`}
+              </button>
+              <button
+                onClick={() => setShowAnnouncement(false)}
+                style={{ background: 'transparent', color: 'var(--gray-mid)', border: '1px solid var(--gray-light)', borderRadius: '8px', padding: '10px 20px', fontSize: '14px', cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+              {announcementSent && (
+                <span style={{ color: '#16a34a', fontSize: '14px', fontWeight: 600 }}>✓ Announcement sent!</span>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Tabs */}
         <div style={{ display: 'flex', gap: '4px', marginBottom: '24px', borderBottom: '1px solid var(--gray-light)', paddingBottom: '0' }}>

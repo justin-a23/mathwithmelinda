@@ -30,7 +30,7 @@ type WeeklyPlan = {
 const LIST_STUDENT_PROFILES = /* GraphQL */ `
   query ListStudentProfiles {
     listStudentProfiles(limit: 500) {
-      items { id userId firstName lastName preferredName }
+      items { id userId firstName lastName preferredName email }
     }
   }
 `
@@ -156,6 +156,7 @@ export default function ManagePlansPage() {
 
   const [plans, setPlans] = useState<WeeklyPlan[]>([])
   const [studentMap, setStudentMap] = useState<Record<string, string>>({})
+  const [studentEmailMap, setStudentEmailMap] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [selectedCourseId, setSelectedCourseId] = useState('all')
   const [expandedPlanIds, setExpandedPlanIds] = useState<Set<string>>(new Set())
@@ -180,11 +181,14 @@ export default function ManagePlansPage() {
         setPlans(items)
 
         const map: Record<string, string> = {}
+        const emailMap: Record<string, string> = {}
         for (const s of studentsResult.data.listStudentProfiles.items) {
           const name = s.preferredName || `${s.firstName} ${s.lastName}`.trim() || s.userId
           map[s.userId] = name
+          if (s.email) emailMap[s.userId] = s.email
         }
         setStudentMap(map)
+        setStudentEmailMap(emailMap)
       } catch (err) {
         console.error('Error loading plans:', err)
       } finally {
@@ -236,6 +240,55 @@ export default function ManagePlansPage() {
         query: UPDATE_PLAN_ITEM,
         variables: { input: { id: item.id, isPublished: newVal } }
       }) as any)
+
+      // Email assigned students when publishing a lesson — fire and forget
+      if (newVal === true) {
+        const plan = plans.find(p => p.items?.items.some(i => i.id === item.id))
+        if (plan) {
+          const lessonTitle = item.lesson?.title || 'a lesson'
+          const courseTitle = plan.course?.title || ''
+          const weekDate = new Date(plan.weekStartDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric' })
+          const dayLabel = item.dayOfWeek ? `Due: ${item.dayOfWeek}${item.dueTime ? ` by ${formatDueTime(item.dueTime)}` : ''}` : ''
+
+          let studentIds: string[] = []
+          if (plan.assignedStudentIds) {
+            try { studentIds = JSON.parse(plan.assignedStudentIds) } catch { /* ignore */ }
+          }
+          const targets = studentIds.length > 0
+            ? studentIds.filter(id => studentEmailMap[id])
+            : Object.entries(studentEmailMap).map(([id]) => id)
+
+          for (const userId of targets) {
+            const email = studentEmailMap[userId]
+            const name = studentMap[userId] || 'there'
+            if (!email) continue
+            fetch('/api/send-email', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                to: email,
+                subject: `New lesson assigned: ${lessonTitle}`,
+                html: `
+                  <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+                    <h2 style="color: #7B4FA6;">New lesson assigned!</h2>
+                    <p style="font-size: 15px; color: #333;">Hi ${name},</p>
+                    <p style="font-size: 15px; color: #333;">Melinda has assigned a new lesson for the week of <strong>${weekDate}</strong>.</p>
+                    <div style="background: #f5f3ff; border-left: 4px solid #7B4FA6; border-radius: 8px; padding: 16px 20px; margin: 20px 0;">
+                      <div style="font-size: 17px; font-weight: 700; color: #1a1a2e; margin-bottom: 6px;">${lessonTitle}</div>
+                      ${courseTitle ? `<div style="font-size: 13px; color: #777;">${courseTitle}</div>` : ''}
+                      ${dayLabel ? `<div style="font-size: 14px; color: #555; margin-top: 6px;">📅 ${dayLabel}</div>` : ''}
+                    </div>
+                    <a href="https://mathwithmelinda.com/dashboard" style="display: inline-block; background: #7B4FA6; color: white; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: 600;">
+                      Go to Dashboard
+                    </a>
+                  </div>
+                `,
+                text: `Hi ${name},\n\nMelinda assigned a new lesson: ${lessonTitle}\nWeek of: ${weekDate}\n${dayLabel}\n\nGo to https://mathwithmelinda.com/dashboard`,
+              }),
+            }).catch(() => {})
+          }
+        }
+      }
     } catch (err) {
       console.error('Error toggling publish:', err)
       // Revert on failure

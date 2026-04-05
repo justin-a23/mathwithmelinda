@@ -745,6 +745,35 @@ function GradingPageInner() {
         setSaved(false)
       }, 1500)
       setSubmissions(prev => prev.map(s => s.id === selectedSubmission.id ? { ...s, grade, teacherComment: comment, content: updatedContent } : s))
+
+      // Email student — fire and forget
+      const lessonTitle = getSubmissionTitle(selectedSubmission)
+      const studentEmail = selectedSubmission.studentId
+      const studentName = studentNameMap[selectedSubmission.studentId] || 'there'
+      fetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: studentEmail,
+          subject: `Your work has been graded: ${lessonTitle}`,
+          html: `
+            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #7B4FA6;">Your work has been graded!</h2>
+              <p style="font-size: 15px; color: #333;">Hi ${studentName},</p>
+              <p style="font-size: 15px; color: #333;">Melinda has graded your submission for <strong>${lessonTitle}</strong>.</p>
+              <div style="background: #f5f3ff; border-left: 4px solid #7B4FA6; border-radius: 8px; padding: 16px 20px; margin: 20px 0;">
+                <div style="font-size: 14px; color: #555; margin-bottom: 8px;">Grade</div>
+                <div style="font-size: 28px; font-weight: 700; color: #7B4FA6;">${grade}</div>
+                ${comment ? `<div style="font-size: 14px; color: #444; margin-top: 12px; line-height: 1.6;"><strong>Melinda's comment:</strong><br/>${comment.replace(/\n/g, '<br/>')}</div>` : ''}
+              </div>
+              <a href="https://mathwithmelinda.com/dashboard" style="display: inline-block; background: #7B4FA6; color: white; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: 600;">
+                View in Dashboard
+              </a>
+            </div>
+          `,
+          text: `Hi ${studentName},\n\nMelinda graded your submission for ${lessonTitle}.\n\nGrade: ${grade}${comment ? `\n\nComment: ${comment}` : ''}\n\nView at https://mathwithmelinda.com/dashboard`,
+        }),
+      }).catch(() => {})
     } catch (err) {
       console.error(err)
     } finally {
@@ -770,6 +799,35 @@ function GradingPageInner() {
       setSelectedSubmission(prev => prev ? { ...prev, ...update } : prev)
       setReturned(true)
       setShowReturnForm(false)
+
+      // Email student — fire and forget
+      const lessonTitle = getSubmissionTitle(selectedSubmission)
+      const studentEmail = selectedSubmission.studentId
+      const studentName = studentNameMap[selectedSubmission.studentId] || 'there'
+      fetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: studentEmail,
+          subject: `Please redo your work: ${lessonTitle}`,
+          html: `
+            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #d97706;">Action needed: Please redo your work</h2>
+              <p style="font-size: 15px; color: #333;">Hi ${studentName},</p>
+              <p style="font-size: 15px; color: #333;">Melinda has reviewed your submission for <strong>${lessonTitle}</strong> and is sending it back for revision.</p>
+              <div style="background: #fffbeb; border-left: 4px solid #d97706; border-radius: 8px; padding: 16px 20px; margin: 20px 0;">
+                <div style="font-size: 13px; font-weight: 700; color: #92400e; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">Melinda's feedback</div>
+                <div style="font-size: 15px; color: #444; line-height: 1.6;">${returnReason.trim().replace(/\n/g, '<br/>')}</div>
+                ${returnDueDate ? `<div style="font-size: 13px; color: #92400e; margin-top: 10px; font-weight: 600;">New due date: ${new Date(returnDueDate).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</div>` : ''}
+              </div>
+              <a href="https://mathwithmelinda.com/dashboard" style="display: inline-block; background: #d97706; color: white; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: 600;">
+                Go to Dashboard
+              </a>
+            </div>
+          `,
+          text: `Hi ${studentName},\n\nMelinda is sending back your submission for ${lessonTitle} for revision.\n\nFeedback: ${returnReason.trim()}${returnDueDate ? `\n\nNew due date: ${returnDueDate}` : ''}\n\nGo to https://mathwithmelinda.com/dashboard`,
+        }),
+      }).catch(() => {})
     } catch (err) { console.error(err) }
     finally { setReturning(false) }
   }
