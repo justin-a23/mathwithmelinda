@@ -68,6 +68,14 @@ const LIST_ZOOM_MEETINGS = /* GraphQL */`
   }
 `
 
+const LIST_ANNOUNCEMENTS = /* GraphQL */`
+  query ListAnnouncements {
+    listAnnouncements(limit: 50) {
+      items { id subject message sentAt recipientIds }
+    }
+  }
+`
+
 type StudentMessage = {
   id: string
   studentId: string
@@ -228,6 +236,8 @@ export default function Dashboard() {
   const [myMessages, setMyMessages] = useState<StudentMessage[]>([])
   const [messagesLoaded, setMessagesLoaded] = useState(false)
   const [upcomingMeetings, setUpcomingMeetings] = useState<Array<{ id: string; topic: string; joinUrl: string; startTime: string; durationMinutes: number }>>([])
+  const [activeAnnouncements, setActiveAnnouncements] = useState<Array<{ id: string; subject: string; message: string; sentAt: string }>>([])
+  const [dismissedAnnouncements, setDismissedAnnouncements] = useState<Set<string>>(new Set())
 
 
   // authStatus is the reliable way to detect sign-out in Amplify UI React v6.
@@ -396,6 +406,28 @@ export default function Dashboard() {
           myMeetings.sort((a, b) => a.startTime.localeCompare(b.startTime))
           setUpcomingMeetings(myMeetings)
         } catch { /* non-critical */ }
+
+        // Fetch announcements for this student
+        try {
+          const annRes = await (client.graphql({ query: LIST_ANNOUNCEMENTS }) as any)
+          const allAnn: any[] = annRes.data.listAnnouncements.items
+          const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
+          const dismissed: Set<string> = new Set(
+            JSON.parse(localStorage.getItem('mwm:dismissedAnnouncements') || '[]')
+          )
+          setDismissedAnnouncements(dismissed)
+          const mine = allAnn.filter(a => {
+            if (new Date(a.sentAt).getTime() < sevenDaysAgo) return false
+            if (dismissed.has(a.id)) return false
+            try {
+              const ids: string[] = JSON.parse(a.recipientIds || '[]')
+              return ids.includes(userId) || ids.includes(loginId) || ids.includes(studentId)
+            } catch { return false }
+          })
+          mine.sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime())
+          setActiveAnnouncements(mine)
+        } catch { /* non-critical */ }
+
         // Badge: count replies the student hasn't seen yet (tracked in localStorage)
         try {
           const lastVisited = parseInt(localStorage.getItem('mwm:messagesLastVisited') || '0')
@@ -637,6 +669,33 @@ export default function Dashboard() {
           </div>
         )
       })()}
+
+      {/* Announcement banners */}
+      {activeAnnouncements.map(a => (
+        <div key={a.id} style={{ background: '#F2C94C', color: '#1a1a2e', padding: '14px 24px', display: 'flex', alignItems: 'flex-start', gap: '12px', borderBottom: '1px solid rgba(0,0,0,0.08)' }}>
+          <span style={{ fontSize: '20px', flexShrink: 0, marginTop: '1px' }}>📢</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 700, fontSize: '14px', marginBottom: '3px' }}>{a.subject}</div>
+            <div style={{ fontSize: '13px', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>{a.message}</div>
+            <div style={{ fontSize: '11px', opacity: 0.6, marginTop: '4px' }}>
+              {new Date(a.sentAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              const next = new Set(dismissedAnnouncements)
+              next.add(a.id)
+              setDismissedAnnouncements(next)
+              setActiveAnnouncements(prev => prev.filter(x => x.id !== a.id))
+              try { localStorage.setItem('mwm:dismissedAnnouncements', JSON.stringify(Array.from(next))) } catch { /* ignore */ }
+            }}
+            style={{ background: 'rgba(0,0,0,0.12)', border: 'none', borderRadius: '50%', width: '24px', height: '24px', cursor: 'pointer', fontSize: '14px', color: '#1a1a2e', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}
+            title="Dismiss"
+          >
+            ✕
+          </button>
+        </div>
+      ))}
 
       {/* Zoom meeting proximity banner — shown when a meeting is within 2 hours or live */}
       {upcomingMeetings.length > 0 && (() => {

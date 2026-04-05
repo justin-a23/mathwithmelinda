@@ -33,6 +33,26 @@ const LIST_ENROLLMENTS = /* GraphQL */ `
   }
 `
 
+const LIST_ANNOUNCEMENTS = /* GraphQL */ `
+  query ListAnnouncements {
+    listAnnouncements(limit: 200) {
+      items { id subject message sentAt recipientCount courseTitle recipientIds }
+    }
+  }
+`
+
+const CREATE_ANNOUNCEMENT = /* GraphQL */ `
+  mutation CreateAnnouncement($input: CreateAnnouncementInput!) {
+    createAnnouncement(input: $input) { id subject message sentAt recipientCount courseTitle recipientIds }
+  }
+`
+
+const DELETE_ANNOUNCEMENT = /* GraphQL */ `
+  mutation DeleteAnnouncement($input: DeleteAnnouncementInput!) {
+    deleteAnnouncement(input: $input) { id }
+  }
+`
+
 const UPDATE_MESSAGE = /* GraphQL */ `
   mutation UpdateMessage($input: UpdateMessageInput!) {
     updateMessage(input: $input) { id }
@@ -92,7 +112,7 @@ export default function TeacherMessagesPage() {
 
   const [messages, setMessages] = useState<Message[]>([])
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<'active' | 'archived'>('active')
+  const [tab, setTab] = useState<'active' | 'archived' | 'announcements'>('active')
   const [expandedMessageId, setExpandedMessageId] = useState<string | null>(null)
   const [replyText, setReplyText] = useState<Record<string, string>>({})
   const [sending, setSending] = useState<Record<string, boolean>>({})
@@ -109,6 +129,7 @@ export default function TeacherMessagesPage() {
   const [courseFilter, setCourseFilter] = useState<string>('all')
   const [courses, setCourses] = useState<{ id: string; title: string }[]>([])
   const [studentCourseMap, setStudentCourseMap] = useState<Record<string, string>>({}) // userId → courseId
+  const [announcements, setAnnouncements] = useState<{ id: string; subject: string; message: string; sentAt: string; recipientCount: number | null; courseTitle: string | null; recipientIds: string }[]>([])
 
   useEffect(() => {
     if (user === null) router.replace('/login')
@@ -117,6 +138,7 @@ export default function TeacherMessagesPage() {
   useEffect(() => {
     loadMessages()
     loadStudents()
+    loadAnnouncements()
   }, [])
 
   async function loadStudents() {
@@ -153,6 +175,27 @@ export default function TeacherMessagesPage() {
     }
   }
 
+  async function loadAnnouncements() {
+    try {
+      const res = await (client.graphql({ query: LIST_ANNOUNCEMENTS }) as any)
+      const items = res.data.listAnnouncements.items
+      items.sort((a: any, b: any) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime())
+      setAnnouncements(items)
+    } catch (err) {
+      console.error('Error loading announcements:', err)
+    }
+  }
+
+  async function deleteAnnouncement(id: string) {
+    if (!window.confirm('Delete this announcement record?')) return
+    try {
+      await (client.graphql({ query: DELETE_ANNOUNCEMENT, variables: { input: { id } } }) as any)
+      setAnnouncements(prev => prev.filter(a => a.id !== id))
+    } catch (err) {
+      console.error('Error deleting announcement:', err)
+    }
+  }
+
   async function sendAnnouncement() {
     if (!announcementText.trim() || !announcementSubject.trim() || selectedStudentIds.size === 0) return
     setAnnouncementSending(true)
@@ -181,6 +224,24 @@ export default function TeacherMessagesPage() {
           }),
         }).catch(() => {})
       ))
+      // Save to DB for history
+      const selectedCourse = courses.find(c => c.id === courseFilter)
+      const newRecord: any = await (client.graphql({
+        query: CREATE_ANNOUNCEMENT,
+        variables: {
+          input: {
+            subject: announcementSubject.trim(),
+            message: announcementText.trim(),
+            sentAt: new Date().toISOString(),
+            recipientIds: JSON.stringify(Array.from(selectedStudentIds)),
+            recipientCount: targets.length,
+            courseId: courseFilter !== 'all' ? courseFilter : null,
+            courseTitle: selectedCourse?.title || null,
+          }
+        }
+      }) as any)
+      setAnnouncements(prev => [newRecord.data.createAnnouncement, ...prev])
+
       setAnnouncementSent(true)
       setAnnouncementText('')
       setAnnouncementSubject('')
@@ -471,7 +532,7 @@ export default function TeacherMessagesPage() {
 
         {/* Tabs */}
         <div style={{ display: 'flex', gap: '4px', marginBottom: '24px', borderBottom: '1px solid var(--gray-light)', paddingBottom: '0' }}>
-          {(['active', 'archived'] as const).map(t => (
+          {(['active', 'archived', 'announcements'] as const).map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -488,7 +549,7 @@ export default function TeacherMessagesPage() {
                 transition: 'color 0.15s',
               }}
             >
-              {t === 'active' ? 'Active' : 'Archived'}
+              {t === 'active' ? 'Active' : t === 'archived' ? 'Archived' : '📢 Sent'}
               <span style={{
                 marginLeft: '6px',
                 background: tab === t ? 'var(--plum-light)' : 'var(--gray-light)',
@@ -498,13 +559,56 @@ export default function TeacherMessagesPage() {
                 padding: '1px 7px',
                 borderRadius: '20px',
               }}>
-                {t === 'active' ? activeGroups.length : archivedGroups.length}
+                {t === 'active' ? activeGroups.length : t === 'archived' ? archivedGroups.length : announcements.length}
               </span>
             </button>
           ))}
         </div>
 
-        {loading ? (
+        {/* Announcements history tab */}
+        {tab === 'announcements' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {announcements.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '80px 0', color: 'var(--gray-mid)' }}>
+                <div style={{ fontSize: '36px', marginBottom: '12px' }}>📢</div>
+                <p style={{ fontSize: '16px', margin: 0 }}>No announcements sent yet</p>
+              </div>
+            ) : announcements.map(a => {
+              const d = new Date(a.sentAt)
+              const dateStr = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
+              const timeStr = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+              return (
+                <div key={a.id} style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: '10px', padding: '18px 20px' }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', marginBottom: '10px' }}>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: '15px', color: 'var(--foreground)', marginBottom: '4px' }}>{a.subject}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '12px', color: 'var(--gray-mid)' }}>{dateStr} at {timeStr}</span>
+                        <span style={{ fontSize: '12px', color: 'var(--gray-mid)' }}>·</span>
+                        <span style={{ fontSize: '12px', color: 'var(--gray-mid)' }}>
+                          {a.courseTitle ? `${a.courseTitle} · ` : ''}{a.recipientCount ?? '?'} student{a.recipientCount !== 1 ? 's' : ''}
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => deleteAnnouncement(a.id)}
+                      style={{ background: 'transparent', border: 'none', color: 'var(--gray-light)', fontSize: '12px', cursor: 'pointer', flexShrink: 0, padding: '2px 4px' }}
+                      onMouseEnter={e => (e.currentTarget.style.color = '#dc2626')}
+                      onMouseLeave={e => (e.currentTarget.style.color = 'var(--gray-light)')}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                  <div style={{ fontSize: '14px', color: 'var(--foreground)', lineHeight: '1.6', whiteSpace: 'pre-wrap', background: 'var(--page-bg)', borderRadius: '8px', padding: '12px 14px' }}>
+                    {a.message}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {tab !== 'announcements' && loading ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--gray-mid)', padding: '48px 0', justifyContent: 'center' }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: 'spin 0.8s linear infinite' }}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
             Loading messages…
