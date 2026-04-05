@@ -136,6 +136,29 @@ function StudentMessagesPageInner() {
       const newMsg: Message = result.data.createMessage
       setMessages(prev => [...prev, newMsg])
       setCompose('')
+
+      // Notify Melinda by email — fire and forget
+      const studentDisplayName = profileName || studentId
+      fetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: 'melinda@mathwithmelinda.com',
+          subject: `New message from ${studentDisplayName}`,
+          html: `
+            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #7B4FA6;">New message from ${studentDisplayName}</h2>
+              <div style="background: #f5f5f5; border-radius: 8px; padding: 16px; margin: 16px 0; white-space: pre-wrap; font-size: 15px; line-height: 1.6;">
+                ${content.replace(/^\[ref:sub=[^\]]+\]\n/, '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}
+              </div>
+              <a href="https://mathwithmelinda.com/teacher/messages" style="display: inline-block; background: #7B4FA6; color: white; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: 600;">
+                Reply in Messages
+              </a>
+            </div>
+          `,
+          text: `New message from ${studentDisplayName}:\n\n${content.replace(/^\[ref:sub=[^\]]+\]\n/, '')}\n\nReply at https://mathwithmelinda.com/teacher/messages`,
+        }),
+      }).catch(() => {}) // silently ignore email errors — message was still sent
     } catch (err) {
       console.error('Error sending message:', err)
     } finally {
