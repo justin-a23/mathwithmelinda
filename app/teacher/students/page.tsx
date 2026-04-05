@@ -239,6 +239,7 @@ export default function StudentsPage() {
   const [coopParentFirstName, setCoopParentFirstName] = useState('')
   const [coopParentLastName, setCoopParentLastName] = useState('')
   const [coopParentEmail, setCoopParentEmail] = useState('')
+  const [coopSemesterId, setCoopSemesterId] = useState('')
   const [coopCreating, setCoopCreating] = useState(false)
   const [coopResult, setCoopResult] = useState<{ studentLink: string; parentLink: string; studentName: string; studentEmail: string; parentEmail: string; emailSentToStudent: boolean; emailSentToParent: boolean } | null>(null)
   const [copiedCoopLink, setCopiedCoopLink] = useState<string | null>(null)
@@ -575,6 +576,7 @@ export default function StudentsPage() {
             email: coopEmail.trim().toLowerCase(),
             courseId: coopCourseId || null,
             courseTitle: course?.title || null,
+            semesterId: coopSemesterId || null,
             planType: 'coop',
             parentFirstName: coopParentFirstName.trim() || null,
             parentLastName: coopParentLastName.trim() || null,
@@ -709,6 +711,7 @@ export default function StudentsPage() {
       setCoopLastName('')
       setCoopEmail('')
       setCoopCourseId('')
+      setCoopSemesterId('')
       setCoopParentFirstName('')
       setCoopParentLastName('')
       setCoopParentEmail('')
@@ -1449,26 +1452,61 @@ export default function StudentsPage() {
 
           {showCoopForm && !coopResult && (
             <div style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', padding: '28px', maxWidth: '640px' }}>
+
+              {/* Student info */}
+              <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--plum)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '14px' }}>Student Info</div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--gray-mid)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>Student First Name</label>
+                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--gray-mid)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>First Name <span style={{ color: '#c0392b' }}>*</span></label>
                   <input value={coopFirstName} onChange={e => setCoopFirstName(e.target.value)} style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--gray-light)', borderRadius: '6px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)', boxSizing: 'border-box' }} />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--gray-mid)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>Student Last Name</label>
+                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--gray-mid)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>Last Name <span style={{ color: '#c0392b' }}>*</span></label>
                   <input value={coopLastName} onChange={e => setCoopLastName(e.target.value)} style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--gray-light)', borderRadius: '6px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)', boxSizing: 'border-box' }} />
                 </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--gray-mid)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>Student Email</label>
-                  <input type="email" value={coopEmail} onChange={e => setCoopEmail(e.target.value)} style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--gray-light)', borderRadius: '6px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)', boxSizing: 'border-box' }} />
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--gray-mid)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>Email Address <span style={{ color: '#c0392b' }}>*</span></label>
+                  <input type="email" value={coopEmail} onChange={e => setCoopEmail(e.target.value)} placeholder="student@example.com" style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--gray-light)', borderRadius: '6px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)', boxSizing: 'border-box' }} />
                 </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--gray-mid)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>Course</label>
-                  <select value={coopCourseId} onChange={e => setCoopCourseId(e.target.value)} style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--gray-light)', borderRadius: '6px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)', boxSizing: 'border-box' }}>
-                    <option value="">Select course…</option>
-                    {courses.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
-                  </select>
+              </div>
+
+              {/* Enrollment */}
+              <div style={{ borderTop: '1px solid var(--gray-light)', paddingTop: '20px', marginBottom: '20px' }}>
+                <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--plum)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '14px' }}>Enrollment</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--gray-mid)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>Course</label>
+                    <select value={coopCourseId} onChange={e => { setCoopCourseId(e.target.value); setCoopSemesterId('') }} style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--gray-light)', borderRadius: '6px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)', boxSizing: 'border-box' }}>
+                      <option value="">Select course…</option>
+                      {courses.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--gray-mid)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>
+                      Semester {!coopCourseId && <span style={{ fontWeight: 400, textTransform: 'none', color: 'var(--gray-mid)' }}>(pick course first)</span>}
+                    </label>
+                    <select
+                      value={coopSemesterId}
+                      onChange={e => setCoopSemesterId(e.target.value)}
+                      disabled={!coopCourseId}
+                      style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--gray-light)', borderRadius: '6px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: coopSemesterId ? 'var(--foreground)' : 'var(--gray-mid)', boxSizing: 'border-box', opacity: !coopCourseId ? 0.5 : 1 }}
+                    >
+                      <option value="">Select semester…</option>
+                      {semesters
+                        .filter(s => s.courseId === coopCourseId)
+                        .map(s => (
+                          <option key={s.id} value={s.id}>
+                            {s.name}{s.isActive ? ' ✓ Active' : ''}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
                 </div>
+                {coopCourseId && semesters.filter(s => s.courseId === coopCourseId).length === 0 && (
+                  <p style={{ fontSize: '12px', color: '#b45309', marginTop: '8px', margin: '8px 0 0' }}>
+                    ⚠️ No semesters found for this course — <a href="/teacher/semesters" style={{ color: 'var(--plum)' }}>create one first</a>
+                  </p>
+                )}
               </div>
 
               <div style={{ borderTop: '1px solid var(--gray-light)', paddingTop: '20px', marginBottom: '20px' }}>
