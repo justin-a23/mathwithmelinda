@@ -34,6 +34,7 @@ type StudentProfile = {
   firstName: string
   lastName: string
   preferredName: string | null
+  email: string | null
 }
 
 type Course = {
@@ -80,7 +81,7 @@ const DELETE_ZOOM_MEETING = /* GraphQL */`
 const LIST_STUDENTS = /* GraphQL */`
   query ListStudents {
     listStudentProfiles(limit: 500, filter: { status: { eq: "active" } }) {
-      items { id userId firstName lastName preferredName }
+      items { id userId firstName lastName preferredName email }
     }
   }
 `
@@ -277,6 +278,81 @@ export default function ZoomMeetingsPage() {
 
       const newMeeting: ZoomMeeting = result.data.createZoomMeeting
       setMeetings(prev => [...prev, newMeeting].sort((a, b) => a.startTime.localeCompare(b.startTime)))
+
+      // Send invite emails — fire and forget
+      const formattedTime = formatMeetingTime(startTime)
+      const durationLabel = duration < 60 ? `${duration} min` : duration === 60 ? '1 hour' : `${duration / 60} hours`
+      const emailBody = (name: string) => ({
+        html: `
+          <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #7B4FA6;">You've been invited to a Zoom meeting</h2>
+            <p style="font-size: 15px; color: #333;">Hi ${name},</p>
+            <p style="font-size: 15px; color: #333;">Melinda has scheduled a Zoom meeting for you:</p>
+            <div style="background: #f5f3ff; border-left: 4px solid #7B4FA6; border-radius: 8px; padding: 16px 20px; margin: 20px 0;">
+              <div style="font-size: 17px; font-weight: 700; color: #1a1a2e; margin-bottom: 8px;">${topic.trim()}</div>
+              <div style="font-size: 14px; color: #555; margin-bottom: 4px;">📅 ${formattedTime}</div>
+              <div style="font-size: 14px; color: #555;">⏱ ${durationLabel}</div>
+              ${notes.trim() ? `<div style="font-size: 13px; color: #777; margin-top: 8px; font-style: italic;">${notes.trim()}</div>` : ''}
+            </div>
+            <a href="${data.joinUrl}" style="display: inline-block; background: #0b5cff; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 15px;">
+              Join Zoom Meeting
+            </a>
+            <p style="font-size: 12px; color: #999; margin-top: 20px;">Or copy this link: ${data.joinUrl}</p>
+          </div>
+        `,
+        text: `Hi ${name},\n\nMelinda has scheduled a Zoom meeting: ${topic.trim()}\n\nTime: ${formattedTime}\nDuration: ${durationLabel}\n\nJoin: ${data.joinUrl}`,
+      })
+
+      const emailPromises: Promise<any>[] = []
+
+      if (inviteeType === 'students') {
+        const invitedStudents = students.filter(s => selectedStudentIds.includes(s.userId) && s.email)
+        for (const s of invitedStudents) {
+          const name = s.preferredName || s.firstName
+          const body = emailBody(name)
+          emailPromises.push(fetch('/api/send-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ to: s.email, subject: `Zoom meeting scheduled: ${topic.trim()}`, ...body }),
+          }))
+        }
+      } else if (inviteeType === 'course') {
+        // Email all students (course-wide email not tied to enrollment here — send to all active students)
+        for (const s of students.filter(s => s.email)) {
+          const name = s.preferredName || s.firstName
+          const body = emailBody(name)
+          emailPromises.push(fetch('/api/send-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ to: s.email, subject: `Zoom meeting scheduled: ${topic.trim()}`, ...body }),
+          }))
+        }
+      } else if (inviteeType === 'parent' || inviteeType === 'parent-student') {
+        const parent = parents.find(p => p.userId === selectedParentId)
+        if (parent?.email) {
+          const name = parent.firstName
+          const body = emailBody(name)
+          emailPromises.push(fetch('/api/send-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ to: parent.email, subject: `Zoom meeting scheduled: ${topic.trim()}`, ...body }),
+          }))
+        }
+        if (inviteeType === 'parent-student') {
+          const invitedStudents = students.filter(s => selectedStudentIds.includes(s.userId) && s.email)
+          for (const s of invitedStudents) {
+            const name = s.preferredName || s.firstName
+            const body = emailBody(name)
+            emailPromises.push(fetch('/api/send-email', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ to: s.email, subject: `Zoom meeting scheduled: ${topic.trim()}`, ...body }),
+            }))
+          }
+        }
+      }
+
+      Promise.all(emailPromises).catch(() => {}) // silently ignore email errors
 
       // Reset form
       setShowForm(false)
