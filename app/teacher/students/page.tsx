@@ -1209,9 +1209,9 @@ export default function StudentsPage() {
                             {sem.name}{sem.isActive ? ' ●' : ''}
                           </span>
                         ))}
-                        {invite && (
-                          <span style={{ background: invite.used ? '#D1FAE5' : '#FEF3C7', color: invite.used ? '#065F46' : '#92400E', fontSize: '11px', padding: '2px 8px', borderRadius: '20px', fontWeight: 500 }}>
-                            {invite.used ? 'Parent linked' : 'Invite pending'}
+                        {studentParentInvites.length > 0 && (
+                          <span style={{ background: studentParentInvites.some(i => i.used) ? '#D1FAE5' : '#FEF3C7', color: studentParentInvites.some(i => i.used) ? '#065F46' : '#92400E', fontSize: '11px', padding: '2px 8px', borderRadius: '20px', fontWeight: 500 }}>
+                            {studentParentInvites.filter(i => i.used).length > 0 ? `${studentParentInvites.filter(i => i.used).length} parent linked` : 'Parent invite pending'}
                           </span>
                         )}
                       </div>
