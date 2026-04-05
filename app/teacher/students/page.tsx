@@ -240,7 +240,7 @@ export default function StudentsPage() {
   const [coopParentLastName, setCoopParentLastName] = useState('')
   const [coopParentEmail, setCoopParentEmail] = useState('')
   const [coopCreating, setCoopCreating] = useState(false)
-  const [coopResult, setCoopResult] = useState<{ studentLink: string; parentLink: string; studentName: string } | null>(null)
+  const [coopResult, setCoopResult] = useState<{ studentLink: string; parentLink: string; studentName: string; studentEmail: string; parentEmail: string; emailSentToStudent: boolean; emailSentToParent: boolean } | null>(null)
   const [copiedCoopLink, setCopiedCoopLink] = useState<string | null>(null)
 
   useEffect(() => {
@@ -604,10 +604,104 @@ export default function StudentsPage() {
       }
 
       const studentLink = `${window.location.origin}/join/${studentToken}`
+      const studentFullName = `${coopFirstName.trim()} ${coopLastName.trim()}`
+      const courseTitle = course?.title || ''
+
+      // Fire student email
+      let emailSentToStudent = false
+      try {
+        await fetch('/api/send-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to: coopEmail.trim().toLowerCase(),
+            subject: `You've been invited to Math with Melinda! 🎓`,
+            html: `
+              <div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:32px 24px;background:#fff">
+                <div style="background:#1E1E2E;padding:16px 24px;border-radius:8px;margin-bottom:28px;display:flex;align-items:center;gap:12px">
+                  <div style="width:32px;height:32px;background:#7B4FA6;border-radius:6px;display:inline-flex;align-items:center;justify-content:center">
+                    <span style="color:white;font-size:16px;font-weight:700">+</span>
+                  </div>
+                  <span style="color:white;font-size:18px;font-weight:600">Math with Melinda</span>
+                </div>
+                <h1 style="font-size:24px;color:#1E1E2E;margin:0 0 8px">Hi ${coopFirstName.trim()}! 👋</h1>
+                <p style="color:#555;font-size:15px;line-height:1.6;margin:0 0 20px">
+                  Melinda has enrolled you as a <strong>Co-op Student</strong>${courseTitle ? ` in <strong>${courseTitle}</strong>` : ''}.
+                  Your personal account link is ready — click below to get started.
+                </p>
+                <a href="${studentLink}" style="display:inline-block;background:#7B4FA6;color:white;padding:13px 28px;border-radius:8px;font-size:15px;font-weight:600;text-decoration:none;margin-bottom:24px">
+                  Create My Account →
+                </a>
+                <p style="color:#888;font-size:13px;line-height:1.6;margin:0 0 8px">Or copy this link into your browser:</p>
+                <p style="color:#7B4FA6;font-size:13px;word-break:break-all;margin:0 0 28px">${studentLink}</p>
+                <div style="border:1px solid #e5e7eb;border-radius:8px;padding:16px 20px;margin-bottom:24px">
+                  <p style="font-size:12px;font-weight:700;color:#7B4FA6;text-transform:uppercase;letter-spacing:0.5px;margin:0 0 10px">What you'll have access to</p>
+                  <ul style="margin:0;padding-left:18px;color:#444;font-size:14px;line-height:2">
+                    <li>Video lessons for your course</li>
+                    <li>Weekly assignments from Melinda</li>
+                    <li>Grades and teacher feedback</li>
+                    <li>Direct messaging with Melinda</li>
+                  </ul>
+                </div>
+                <p style="color:#aaa;font-size:12px;margin:0">Questions? Reply to this email or message Melinda directly through the platform.</p>
+              </div>`,
+            text: `Hi ${coopFirstName.trim()}!\n\nMelinda has enrolled you as a Co-op Student${courseTitle ? ` in ${courseTitle}` : ''}.\n\nClick this link to create your account:\n${studentLink}\n\nSee you in class!`,
+          }),
+        })
+        emailSentToStudent = true
+      } catch { /* non-fatal */ }
+
+      // Fire parent email
+      let emailSentToParent = false
+      if (coopParentEmail.trim() && parentLink) {
+        try {
+          const parentFirstName = coopParentFirstName.trim() || 'there'
+          await fetch('/api/send-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              to: coopParentEmail.trim().toLowerCase(),
+              subject: `${studentFullName} has been enrolled in Math with Melinda`,
+              html: `
+                <div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:32px 24px;background:#fff">
+                  <div style="background:#1E1E2E;padding:16px 24px;border-radius:8px;margin-bottom:28px">
+                    <span style="color:white;font-size:18px;font-weight:600">Math with Melinda</span>
+                  </div>
+                  <h1 style="font-size:24px;color:#1E1E2E;margin:0 0 8px">Hi ${parentFirstName}!</h1>
+                  <p style="color:#555;font-size:15px;line-height:1.6;margin:0 0 20px">
+                    <strong>${studentFullName}</strong> has been enrolled in Math with Melinda as a Co-op Student${courseTitle ? ` in <strong>${courseTitle}</strong>` : ''}.
+                    Set up your parent account to track their grades, assignments, and teacher feedback.
+                  </p>
+                  <a href="${parentLink}" style="display:inline-block;background:#0369a1;color:white;padding:13px 28px;border-radius:8px;font-size:15px;font-weight:600;text-decoration:none;margin-bottom:24px">
+                    Set Up My Parent Account →
+                  </a>
+                  <p style="color:#888;font-size:13px;line-height:1.6;margin:0 0 8px">Or copy this link into your browser:</p>
+                  <p style="color:#0369a1;font-size:13px;word-break:break-all;margin:0 0 28px">${parentLink}</p>
+                  <div style="border:1px solid #e5e7eb;border-radius:8px;padding:16px 20px;margin-bottom:24px">
+                    <p style="font-size:12px;font-weight:700;color:#0369a1;text-transform:uppercase;letter-spacing:0.5px;margin:0 0 10px">Your parent portal includes</p>
+                    <ul style="margin:0;padding-left:18px;color:#444;font-size:14px;line-height:2">
+                      <li>View grades and teacher feedback</li>
+                      <li>See submitted assignments</li>
+                      <li>Track progress and performance</li>
+                    </ul>
+                  </div>
+                  <p style="color:#aaa;font-size:12px;margin:0">Questions? Contact Melinda at melinda@mathwithmelinda.com</p>
+                </div>`,
+              text: `Hi ${parentFirstName}!\n\n${studentFullName} has been enrolled in Math with Melinda${courseTitle ? ` in ${courseTitle}` : ''}.\n\nSet up your parent account here:\n${parentLink}`,
+            }),
+          })
+          emailSentToParent = true
+        } catch { /* non-fatal */ }
+      }
+
       setCoopResult({
         studentLink,
         parentLink,
-        studentName: `${coopFirstName.trim()} ${coopLastName.trim()}`,
+        studentName: studentFullName,
+        studentEmail: coopEmail.trim().toLowerCase(),
+        parentEmail: coopParentEmail.trim().toLowerCase(),
+        emailSentToStudent,
+        emailSentToParent,
       })
 
       // Reset form fields
@@ -1412,11 +1506,25 @@ export default function StudentsPage() {
 
           {coopResult && (
             <div style={{ background: 'var(--background)', border: '1px solid #86EFAC', borderRadius: 'var(--radius)', padding: '28px', maxWidth: '640px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
                 <div style={{ width: '32px', height: '32px', background: '#D1FAE5', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#065F46" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
                 </div>
-                <div style={{ fontFamily: 'var(--font-display)', fontSize: '18px', color: 'var(--foreground)' }}>Invite links ready for {coopResult.studentName}</div>
+                <div style={{ fontFamily: 'var(--font-display)', fontSize: '18px', color: 'var(--foreground)' }}>{coopResult.studentName} is set up!</div>
+              </div>
+
+              {/* Email confirmation banners */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '20px', paddingLeft: '42px' }}>
+                {coopResult.emailSentToStudent && (
+                  <div style={{ fontSize: '13px', color: '#065F46', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>✉️</span> Invite email sent to <strong>{coopResult.studentEmail}</strong>
+                  </div>
+                )}
+                {coopResult.emailSentToParent && coopResult.parentEmail && (
+                  <div style={{ fontSize: '13px', color: '#1e40af', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>✉️</span> Parent email sent to <strong>{coopResult.parentEmail}</strong>
+                  </div>
+                )}
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>

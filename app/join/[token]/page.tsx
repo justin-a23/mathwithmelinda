@@ -63,7 +63,7 @@ export default function JoinPage() {
     if (authStatus === 'authenticated') {
       router.push(`/profile/setup?token=${token}`)
     } else {
-      router.push(`/login?redirect=/profile/setup?token=${token}`)
+      router.push(`/signup?redirect=${encodeURIComponent(`/profile/setup?token=${token}`)}`)
     }
   }
 
@@ -152,7 +152,7 @@ export default function JoinPage() {
             </button>
             <p style={{ fontSize: '12px', color: 'var(--gray-mid)' }}>
               Already have an account?{' '}
-              <button onClick={() => router.push(`/login?redirect=/profile/setup?token=${token}`)} style={{ background: 'none', border: 'none', color: '#7B4FA6', cursor: 'pointer', fontSize: '12px', fontWeight: 600, padding: 0 }}>
+              <button onClick={() => router.push(`/login?redirect=${encodeURIComponent(`/profile/setup?token=${token}`)}`)} style={{ background: 'none', border: 'none', color: '#7B4FA6', cursor: 'pointer', fontSize: '12px', fontWeight: 600, padding: 0 }}>
                 Sign in instead
               </button>
             </p>
