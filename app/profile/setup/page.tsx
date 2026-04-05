@@ -1,8 +1,8 @@
 'use client'
 
-import { useAuthenticator } from '@aws-amplify/ui-react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState, Suspense } from 'react'
+import { getCurrentUser } from 'aws-amplify/auth'
 import { generateClient } from 'aws-amplify/api'
 import ThemeToggle from '../../components/ThemeToggle'
 
@@ -62,11 +62,13 @@ type InviteData = {
 
 const GRADE_LEVELS = ['5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th']
 
+type CurrentUser = { userId: string; signInDetails?: { loginId?: string } }
+
 function ProfileSetupInner() {
-  const { user } = useAuthenticator()
   const router = useRouter()
   const searchParams = useSearchParams()
 
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null)
   const [checking, setChecking] = useState(true)
   const [courses, setCourses] = useState<Course[]>([])
   const [invite, setInvite] = useState<InviteData | null>(null)
@@ -82,11 +84,14 @@ function ProfileSetupInner() {
   const [submitted, setSubmitted] = useState(false)
 
   useEffect(() => {
-    if (user === null) { router.replace('/login'); return }
-    if (!user) return
-    checkExistingProfile()
-    fetchCourses()
-  }, [user, router])
+    getCurrentUser()
+      .then(u => {
+        setCurrentUser(u as CurrentUser)
+        checkExistingProfile(u as CurrentUser)
+        fetchCourses()
+      })
+      .catch(() => router.replace('/login'))
+  }, [])
 
   async function fetchCourses() {
     try {
@@ -96,11 +101,11 @@ function ProfileSetupInner() {
     } catch { /* non-fatal */ }
   }
 
-  async function checkExistingProfile() {
+  async function checkExistingProfile(u: CurrentUser) {
     try {
       const result = await client.graphql({
         query: LIST_STUDENT_PROFILES,
-        variables: { filter: { userId: { eq: user.userId } } }
+        variables: { filter: { userId: { eq: u.userId } } }
       }) as any
       const items = result.data.listStudentProfiles.items
       if (items && items.length > 0) {
@@ -156,18 +161,19 @@ function ProfileSetupInner() {
       setError('Please enter your first and last name.')
       return
     }
+    if (!currentUser) return
     setSubmitting(true)
     setError('')
 
     try {
-      const email = user.signInDetails?.loginId || user.userId
+      const email = currentUser.signInDetails?.loginId || currentUser.userId
       const isInvited = !!invite
 
       await client.graphql({
         query: CREATE_STUDENT_PROFILE,
         variables: {
           input: {
-            userId: user.userId,
+            userId: currentUser.userId,
             email,
             firstName: firstName.trim(),
             lastName: lastName.trim(),
@@ -255,7 +261,7 @@ function ProfileSetupInner() {
             onClick={async () => {
               const result = await client.graphql({
                 query: LIST_STUDENT_PROFILES,
-                variables: { filter: { userId: { eq: user.userId } } }
+                variables: { filter: { userId: { eq: currentUser?.userId } } }
               }) as any
               const items = result.data.listStudentProfiles.items
               if (items?.[0]?.status !== 'pending') {
@@ -307,7 +313,7 @@ function ProfileSetupInner() {
               Melinda has set up your account. Just confirm your details and you&apos;re in.
             </p>
             <p style={{ color: 'var(--gray-mid)', fontSize: '13px', marginBottom: '40px' }}>
-              Signed in as <strong>{user?.signInDetails?.loginId || user?.userId}</strong>
+              Signed in as <strong>{currentUser?.signInDetails?.loginId || currentUser?.userId}</strong>
             </p>
           </>
         ) : (
@@ -319,7 +325,7 @@ function ProfileSetupInner() {
               Enter your name to request access. Melinda will set up your course once approved.
             </p>
             <p style={{ color: 'var(--gray-mid)', fontSize: '13px', marginBottom: '40px' }}>
-              Signed in as <strong>{user?.signInDetails?.loginId || user?.userId}</strong>
+              Signed in as <strong>{currentUser?.signInDetails?.loginId || currentUser?.userId}</strong>
             </p>
           </>
         )}
