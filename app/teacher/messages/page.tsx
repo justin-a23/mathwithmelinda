@@ -25,6 +25,14 @@ const LIST_STUDENTS = /* GraphQL */ `
   }
 `
 
+const LIST_ENROLLMENTS = /* GraphQL */ `
+  query ListEnrollments {
+    listEnrollments(limit: 1000) {
+      items { id studentId course { id title } }
+    }
+  }
+`
+
 const UPDATE_MESSAGE = /* GraphQL */ `
   mutation UpdateMessage($input: UpdateMessageInput!) {
     updateMessage(input: $input) { id }
@@ -98,6 +106,9 @@ export default function TeacherMessagesPage() {
   const [announcementSent, setAnnouncementSent] = useState(false)
   const [students, setStudents] = useState<{ userId: string; name: string; email: string }[]>([])
   const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(new Set())
+  const [courseFilter, setCourseFilter] = useState<string>('all')
+  const [courses, setCourses] = useState<{ id: string; title: string }[]>([])
+  const [studentCourseMap, setStudentCourseMap] = useState<Record<string, string>>({}) // userId → courseId
 
   useEffect(() => {
     if (user === null) router.replace('/login')
@@ -110,8 +121,11 @@ export default function TeacherMessagesPage() {
 
   async function loadStudents() {
     try {
-      const res = await (client.graphql({ query: LIST_STUDENTS }) as any)
-      const items = res.data.listStudentProfiles.items
+      const [studentsRes, enrollmentsRes] = await Promise.all([
+        client.graphql({ query: LIST_STUDENTS }) as any,
+        client.graphql({ query: LIST_ENROLLMENTS }) as any,
+      ])
+      const items = studentsRes.data.listStudentProfiles.items
       const list = items
         .filter((s: any) => s.email)
         .map((s: any) => ({
@@ -121,6 +135,19 @@ export default function TeacherMessagesPage() {
         }))
       setStudents(list)
       setSelectedStudentIds(new Set(list.map((s: any) => s.userId)))
+
+      // Build studentId → courseId map from enrollments
+      const enrollments: any[] = enrollmentsRes.data.listEnrollments.items
+      const courseMap: Record<string, string> = {}
+      const courseSet = new Map<string, string>() // courseId → title
+      for (const e of enrollments) {
+        if (e.studentId && e.course?.id) {
+          courseMap[e.studentId] = e.course.id
+          courseSet.set(e.course.id, e.course.title)
+        }
+      }
+      setStudentCourseMap(courseMap)
+      setCourses(Array.from(courseSet.entries()).map(([id, title]) => ({ id, title })).sort((a, b) => a.title.localeCompare(b.title)))
     } catch (err) {
       console.error('Error loading students:', err)
     }
@@ -351,38 +378,70 @@ export default function TeacherMessagesPage() {
             </div>
 
             <div style={{ marginBottom: '20px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
                 <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--gray-mid)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  Recipients ({selectedStudentIds.size} of {students.length})
+                  Recipients ({selectedStudentIds.size} selected)
                 </label>
-                <button
-                  onClick={() => setSelectedStudentIds(
-                    selectedStudentIds.size === students.length
-                      ? new Set()
-                      : new Set(students.map(s => s.userId))
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  {/* Course filter */}
+                  {courses.length > 0 && (
+                    <select
+                      value={courseFilter}
+                      onChange={e => {
+                        const val = e.target.value
+                        setCourseFilter(val)
+                        if (val === 'all') {
+                          setSelectedStudentIds(new Set(students.map(s => s.userId)))
+                        } else {
+                          const inCourse = new Set(
+                            students.filter(s => studentCourseMap[s.userId] === val).map(s => s.userId)
+                          )
+                          setSelectedStudentIds(inCourse)
+                        }
+                      }}
+                      style={{ padding: '4px 8px', border: '1px solid var(--gray-light)', borderRadius: '6px', fontSize: '12px', background: 'var(--background)', color: 'var(--foreground)', cursor: 'pointer' }}
+                    >
+                      <option value="all">All courses</option>
+                      {courses.map(c => (
+                        <option key={c.id} value={c.id}>{c.title}</option>
+                      ))}
+                    </select>
                   )}
-                  style={{ background: 'none', border: 'none', color: 'var(--plum)', fontSize: '12px', fontWeight: 600, cursor: 'pointer', padding: 0 }}
-                >
-                  {selectedStudentIds.size === students.length ? 'Deselect all' : 'Select all'}
-                </button>
+                  <button
+                    onClick={() => setSelectedStudentIds(
+                      selectedStudentIds.size === students.length
+                        ? new Set()
+                        : new Set(students.map(s => s.userId))
+                    )}
+                    style={{ background: 'none', border: 'none', color: 'var(--plum)', fontSize: '12px', fontWeight: 600, cursor: 'pointer', padding: 0, whiteSpace: 'nowrap' }}
+                  >
+                    {selectedStudentIds.size === students.length ? 'Deselect all' : 'Select all'}
+                  </button>
+                </div>
               </div>
               <div style={{ border: '1px solid var(--gray-light)', borderRadius: '8px', maxHeight: '180px', overflowY: 'auto', background: 'var(--background)' }}>
-                {students.map(s => (
-                  <label key={s.userId} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 14px', cursor: 'pointer', borderBottom: '1px solid var(--gray-light)', background: selectedStudentIds.has(s.userId) ? 'rgba(123,79,166,0.06)' : 'transparent' }}>
-                    <input
-                      type="checkbox"
-                      checked={selectedStudentIds.has(s.userId)}
-                      onChange={() => {
-                        const next = new Set(selectedStudentIds)
-                        next.has(s.userId) ? next.delete(s.userId) : next.add(s.userId)
-                        setSelectedStudentIds(next)
-                      }}
-                      style={{ accentColor: 'var(--plum)', width: '15px', height: '15px', flexShrink: 0 }}
-                    />
-                    <span style={{ fontSize: '14px', color: 'var(--foreground)' }}>{s.name}</span>
-                    <span style={{ fontSize: '12px', color: 'var(--gray-mid)', marginLeft: 'auto' }}>{s.email}</span>
-                  </label>
-                ))}
+                {students.map(s => {
+                  const studentCourseName = courses.find(c => c.id === studentCourseMap[s.userId])?.title
+                  return (
+                    <label key={s.userId} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 14px', cursor: 'pointer', borderBottom: '1px solid var(--gray-light)', background: selectedStudentIds.has(s.userId) ? 'rgba(123,79,166,0.06)' : 'transparent' }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedStudentIds.has(s.userId)}
+                        onChange={() => {
+                          const next = new Set(selectedStudentIds)
+                          next.has(s.userId) ? next.delete(s.userId) : next.add(s.userId)
+                          setSelectedStudentIds(next)
+                        }}
+                        style={{ accentColor: 'var(--plum)', width: '15px', height: '15px', flexShrink: 0 }}
+                      />
+                      <span style={{ fontSize: '14px', color: 'var(--foreground)' }}>{s.name}</span>
+                      {studentCourseName && (
+                        <span style={{ fontSize: '11px', color: 'var(--plum)', background: 'rgba(123,79,166,0.08)', borderRadius: '10px', padding: '1px 7px', flexShrink: 0 }}>{studentCourseName}</span>
+                      )}
+                      <span style={{ fontSize: '12px', color: 'var(--gray-mid)', marginLeft: 'auto' }}>{s.email}</span>
+                    </label>
+                  )
+                })}
                 {students.length === 0 && (
                   <div style={{ padding: '16px', fontSize: '13px', color: 'var(--gray-mid)', textAlign: 'center' }}>No active students with email addresses</div>
                 )}
