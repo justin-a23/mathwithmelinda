@@ -126,6 +126,34 @@ export default function TeacherMessagesPage() {
       setMessages(prev => prev.map(m => m.id === msgId ? { ...m, teacherReply: reply, repliedAt, isRead: true } : m))
       setReplyText(prev => ({ ...prev, [msgId]: '' }))
       setExpandedMessageId(null)
+
+      // Email the student — fire and forget
+      const msg = messages.find(m => m.id === msgId)
+      if (msg?.studentId) {
+        const studentEmail = msg.studentId // studentId is loginId (email) for password-auth users
+        const studentName = msg.studentName || 'there'
+        fetch('/api/send-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to: studentEmail,
+            subject: 'Melinda replied to your message',
+            html: `
+              <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2 style="color: #7B4FA6;">Hi ${studentName},</h2>
+                <p style="font-size: 15px; color: #333;">Melinda replied to your message:</p>
+                <div style="background: #f0fdf4; border-left: 4px solid #22c55e; border-radius: 8px; padding: 16px; margin: 16px 0; font-size: 15px; line-height: 1.6; color: #15803d;">
+                  ${reply.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br/>')}
+                </div>
+                <a href="https://mathwithmelinda.com/student/messages" style="display: inline-block; background: #7B4FA6; color: white; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: 600;">
+                  View in Messages
+                </a>
+              </div>
+            `,
+            text: `Hi ${studentName},\n\nMelinda replied to your message:\n\n"${reply}"\n\nView it at https://mathwithmelinda.com/student/messages`,
+          }),
+        }).catch(() => {}) // silently ignore — reply was still sent
+      }
     } catch (err) {
       console.error('Error sending reply:', err)
     } finally {
