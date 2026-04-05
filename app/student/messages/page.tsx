@@ -12,7 +12,7 @@ const LIST_MESSAGES = /* GraphQL */ `
   query ListMessages($filter: ModelMessageFilterInput) {
     listMessages(filter: $filter, limit: 500) {
       items {
-        id studentId studentName content sentAt isRead teacherReply repliedAt
+        id studentId studentName content sentAt isRead teacherReply repliedAt isDeletedByStudent
       }
     }
   }
@@ -26,9 +26,9 @@ const CREATE_MESSAGE = /* GraphQL */ `
   }
 `
 
-const DELETE_MESSAGE = /* GraphQL */ `
-  mutation DeleteMessage($input: DeleteMessageInput!) {
-    deleteMessage(input: $input) { id }
+const UPDATE_MESSAGE = /* GraphQL */ `
+  mutation UpdateMessage($input: UpdateMessageInput!) {
+    updateMessage(input: $input) { id }
   }
 `
 
@@ -41,6 +41,7 @@ type Message = {
   isRead: boolean | null
   teacherReply: string | null
   repliedAt: string | null
+  isDeletedByStudent: boolean | null
 }
 
 function fmtDate(s: string): string {
@@ -79,8 +80,13 @@ function StudentMessagesPageInner() {
   useEffect(() => {
     if (!studentId) return
     fetchMessages()
-    // Mark this visit so dashboard badge resets
     localStorage.setItem('mwm:messagesLastVisited', Date.now().toString())
+
+    // Poll every 30 seconds for new replies
+    const interval = setInterval(() => {
+      fetchMessages()
+    }, 30000)
+    return () => clearInterval(interval)
   }, [studentId])
 
   // Pre-fill compose when arriving from a grade question link
@@ -104,6 +110,7 @@ function StudentMessagesPageInner() {
         variables: { filter: { studentId: { eq: studentId } } }
       })
       const items: Message[] = result.data.listMessages.items
+        .filter((m: Message) => !m.isDeletedByStudent)
       items.sort((a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime())
       setMessages(items)
       // Also pull name from profile if available
@@ -170,11 +177,11 @@ function StudentMessagesPageInner() {
     const msg = messages.find(m => m.id === id)
     const hasReply = !!msg?.teacherReply
     const prompt = hasReply
-      ? 'Delete this message and Melinda\'s reply? This cannot be undone.'
-      : 'Delete this message? This cannot be undone.'
+      ? 'Remove this message and Melinda\'s reply from your view?'
+      : 'Remove this message from your view?'
     if (!window.confirm(prompt)) return
     try {
-      await client.graphql({ query: DELETE_MESSAGE, variables: { input: { id } } })
+      await client.graphql({ query: UPDATE_MESSAGE, variables: { input: { id, isDeletedByStudent: true } } })
       setMessages(prev => prev.filter(m => m.id !== id))
     } catch (err) {
       console.error('Error deleting message:', err)
@@ -182,10 +189,10 @@ function StudentMessagesPageInner() {
   }
 
   async function clearAllMessages() {
-    if (!window.confirm(`Delete all ${messages.length} message${messages.length !== 1 ? 's' : ''} and any replies? This cannot be undone.`)) return
+    if (!window.confirm(`Remove all ${messages.length} message${messages.length !== 1 ? 's' : ''} from your view?`)) return
     try {
       await Promise.all(messages.map(m =>
-        client.graphql({ query: DELETE_MESSAGE, variables: { input: { id: m.id } } })
+        client.graphql({ query: UPDATE_MESSAGE, variables: { input: { id: m.id, isDeletedByStudent: true } } })
       ))
       setMessages([])
     } catch (err) {
