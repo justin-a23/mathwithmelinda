@@ -46,6 +46,12 @@ const MARK_INVITE_USED = /* GraphQL */`
   }
 `
 
+const CREATE_ENROLLMENT = /* GraphQL */`
+  mutation CreateEnrollment($input: CreateEnrollmentInput!) {
+    createEnrollment(input: $input) { id studentId }
+  }
+`
+
 type Course = { id: string; title: string; gradeLevel: string | null; isArchived: boolean | null }
 type InviteData = {
   id: string
@@ -82,6 +88,14 @@ function ProfileSetupInner() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [submitted, setSubmitted] = useState(false)
+
+  // Extract token at mount time synchronously before any async work
+  const [inviteToken] = useState<string | null>(() => {
+    // Try URL param first (via searchParams), then localStorage
+    const fromUrl = searchParams.get('token')
+    if (fromUrl) return fromUrl
+    try { return localStorage.getItem('mwm:joinToken') } catch { return null }
+  })
 
   useEffect(() => {
     getCurrentUser()
@@ -123,14 +137,8 @@ function ProfileSetupInner() {
     }
 
     // No existing profile — look up invite token
-    const tokenFromUrl = searchParams.get('token')
-    let token = tokenFromUrl
-    if (!token) {
-      try { token = localStorage.getItem('mwm:joinToken') } catch { /* ignore */ }
-    }
-
-    if (token) {
-      await loadInvite(token)
+    if (inviteToken) {
+      await loadInvite(inviteToken)
     }
 
     setChecking(false)
@@ -185,12 +193,32 @@ function ProfileSetupInner() {
         }
       }) as any
 
-      // Mark invite as used
+      // Mark invite as used + auto-enroll in semester
       if (invite) {
         await client.graphql({
           query: MARK_INVITE_USED,
           variables: { input: { id: invite.id, used: true } }
         }) as any
+
+        // Auto-enroll in semester if one was set on the invite
+        if (invite.semesterId) {
+          try {
+            await client.graphql({
+              query: CREATE_ENROLLMENT,
+              variables: {
+                input: {
+                  studentId: currentUser.userId,
+                  courseEnrollmentsId: invite.courseId || null,
+                  semesterEnrollmentsId: invite.semesterId,
+                  planType: invite.planType,
+                }
+              }
+            }) as any
+          } catch (enrollErr) {
+            console.error('Enrollment creation failed (non-fatal):', enrollErr)
+          }
+        }
+
         // Clear token from localStorage
         try { localStorage.removeItem('mwm:joinToken') } catch { /* ignore */ }
       }

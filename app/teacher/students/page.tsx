@@ -130,6 +130,22 @@ const deleteParentInvite = /* GraphQL */`
   }
 `
 
+const listStudentInvitesQuery = /* GraphQL */`
+  query ListStudentInvites {
+    listStudentInvites(limit: 500) {
+      items {
+        id token firstName lastName email courseId courseTitle semesterId planType used createdAt
+      }
+    }
+  }
+`
+
+const deleteStudentInvite = /* GraphQL */`
+  mutation DeleteStudentInvite($input: DeleteStudentInviteInput!) {
+    deleteStudentInvite(input: $input) { id }
+  }
+`
+
 type Student = {
   id: string
   userId: string
@@ -167,6 +183,20 @@ type Invite = {
   token: string
   studentEmail: string
   studentName: string
+  used: boolean | null
+  createdAt: string
+}
+
+type StudentInviteRecord = {
+  id: string
+  token: string
+  firstName: string
+  lastName: string
+  email: string
+  courseId: string | null
+  courseTitle: string | null
+  semesterId: string | null
+  planType: string
   used: boolean | null
   createdAt: string
 }
@@ -224,6 +254,12 @@ export default function StudentsPage() {
   const [approveSemesterId, setApproveSemesterId] = useState('')
   const [approving, setApproving] = useState(false)
 
+  // Student invites (sent, pending/used)
+  const [studentInvites, setStudentInvites] = useState<StudentInviteRecord[]>([])
+  const [copiedStudentInviteId, setCopiedStudentInviteId] = useState<string | null>(null)
+  const [deletingInviteId, setDeletingInviteId] = useState<string | null>(null)
+  const [resendingInviteId, setResendingInviteId] = useState<string | null>(null)
+
   // Parent invite form
   const [studentName, setStudentName] = useState('')
   const [studentEmail, setStudentEmail] = useState('')
@@ -249,7 +285,7 @@ export default function StudentsPage() {
   }, [user, router])
 
   useEffect(() => {
-    Promise.all([fetchStudents(), fetchCourses(), fetchSemesters(), fetchEnrollments(), fetchInvites()])
+    Promise.all([fetchStudents(), fetchCourses(), fetchSemesters(), fetchEnrollments(), fetchInvites(), fetchStudentInvites()])
       .finally(() => setLoading(false))
   }, [])
 
@@ -331,6 +367,44 @@ export default function StudentsPage() {
     const result = await client.graphql({ query: listParentInvitesQuery }) as any
     const items = result.data.listParentInvites.items as Invite[]
     setInvites(items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()))
+  }
+
+  async function fetchStudentInvites() {
+    const result = await client.graphql({ query: listStudentInvitesQuery }) as any
+    const items = result.data.listStudentInvites.items as StudentInviteRecord[]
+    setStudentInvites(items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()))
+  }
+
+  async function deleteStudentInviteRecord(id: string) {
+    setDeletingInviteId(id)
+    try {
+      await client.graphql({ query: deleteStudentInvite, variables: { input: { id } } }) as any
+      setStudentInvites(prev => prev.filter(i => i.id !== id))
+    } catch (err) { console.error(err) }
+    finally { setDeletingInviteId(null) }
+  }
+
+  async function resendStudentInviteEmail(inv: StudentInviteRecord) {
+    setResendingInviteId(inv.id)
+    const link = `${window.location.origin}/join/${inv.token}`
+    try {
+      await fetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: inv.email,
+          subject: `Reminder: Your Math with Melinda invite is waiting 🎓`,
+          html: `<div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:32px 24px">
+            <h2 style="color:#1E1E2E">Hi ${inv.firstName}!</h2>
+            <p style="color:#555;font-size:15px;line-height:1.6">Just a reminder — Melinda has set up your account for Math with Melinda${inv.courseTitle ? ` in <strong>${inv.courseTitle}</strong>` : ''}. Click the link below to get started.</p>
+            <a href="${link}" style="display:inline-block;background:#7B4FA6;color:white;padding:13px 28px;border-radius:8px;font-size:15px;font-weight:600;text-decoration:none;margin:16px 0">Create My Account →</a>
+            <p style="color:#aaa;font-size:13px;word-break:break-all">${link}</p>
+          </div>`,
+          text: `Hi ${inv.firstName}!\n\nYour invite to Math with Melinda is waiting:\n${link}`,
+        }),
+      })
+    } catch { /* non-fatal */ }
+    finally { setResendingInviteId(null) }
   }
 
   function startEdit(s: Student) {
@@ -705,6 +779,10 @@ export default function StudentsPage() {
         emailSentToStudent,
         emailSentToParent,
       })
+
+      // Refresh invite lists so new records appear immediately
+      fetchStudentInvites()
+      fetchInvites()
 
       // Reset form fields
       setCoopFirstName('')
@@ -1591,6 +1669,71 @@ export default function StudentsPage() {
             </div>
           )}
         </div>
+
+        {/* ── SENT STUDENT INVITES ── */}
+        {studentInvites.length > 0 && (
+          <div style={{ borderTop: '1px solid var(--gray-light)', paddingTop: '40px', marginBottom: '0' }}>
+            <h3 style={{ fontFamily: 'var(--font-display)', fontSize: '18px', color: 'var(--foreground)', marginBottom: '4px' }}>Sent Invites</h3>
+            <p style={{ color: 'var(--gray-mid)', fontSize: '13px', marginBottom: '20px' }}>
+              Pending invites disappear once a student claims them. Used ones can be cleared manually.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {studentInvites.map(inv => {
+                const link = `${typeof window !== 'undefined' ? window.location.origin : ''}/join/${inv.token}`
+                const isUsed = inv.used === true
+                const sentDate = new Date(inv.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                return (
+                  <div key={inv.id} style={{ background: 'var(--background)', border: `1px solid ${isUsed ? '#86EFAC' : 'var(--gray-light)'}`, borderRadius: '10px', padding: '14px 18px', display: 'flex', alignItems: 'center', gap: '16px', opacity: isUsed ? 0.75 : 1 }}>
+                    {/* Status dot */}
+                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: isUsed ? '#22C55E' : '#F59E0B', flexShrink: 0 }} />
+                    {/* Info */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        <span style={{ fontWeight: 600, fontSize: '14px', color: 'var(--foreground)' }}>{inv.firstName} {inv.lastName}</span>
+                        {inv.courseTitle && <span style={{ fontSize: '11px', background: 'rgba(123,79,166,0.1)', color: 'var(--plum)', padding: '2px 8px', borderRadius: '20px', fontWeight: 600 }}>{inv.courseTitle}</span>}
+                        <span style={{ fontSize: '11px', background: isUsed ? '#D1FAE5' : '#FEF3C7', color: isUsed ? '#065F46' : '#92400E', padding: '2px 8px', borderRadius: '20px', fontWeight: 600 }}>
+                          {isUsed ? '✓ Claimed' : '⏳ Pending'}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginTop: '2px' }}>{inv.email} · Sent {sentDate}</div>
+                    </div>
+                    {/* Actions */}
+                    <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+                      {!isUsed && (
+                        <>
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(link)
+                              setCopiedStudentInviteId(inv.id)
+                              setTimeout(() => setCopiedStudentInviteId(null), 2000)
+                            }}
+                            style={{ background: copiedStudentInviteId === inv.id ? '#D1FAE5' : 'var(--page-bg)', color: copiedStudentInviteId === inv.id ? '#065F46' : 'var(--foreground)', border: '1px solid var(--gray-light)', borderRadius: '6px', padding: '5px 12px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                          >
+                            {copiedStudentInviteId === inv.id ? '✓ Copied' : 'Copy Link'}
+                          </button>
+                          <button
+                            onClick={() => resendStudentInviteEmail(inv)}
+                            disabled={resendingInviteId === inv.id}
+                            style={{ background: 'var(--page-bg)', color: 'var(--gray-mid)', border: '1px solid var(--gray-light)', borderRadius: '6px', padding: '5px 12px', fontSize: '12px', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                          >
+                            {resendingInviteId === inv.id ? 'Sending…' : 'Resend'}
+                          </button>
+                        </>
+                      )}
+                      <button
+                        onClick={() => deleteStudentInviteRecord(inv.id)}
+                        disabled={deletingInviteId === inv.id}
+                        style={{ background: 'transparent', color: '#ef4444', border: 'none', borderRadius: '6px', padding: '5px 8px', fontSize: '12px', cursor: 'pointer' }}
+                      >
+                        {deletingInviteId === inv.id ? '…' : '✕'}
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         {/* ── PARENT INVITES ── */}
         <div style={{ borderTop: '1px solid var(--gray-light)', paddingTop: '48px' }}>
