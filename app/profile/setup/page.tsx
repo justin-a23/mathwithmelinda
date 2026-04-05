@@ -1,41 +1,30 @@
 'use client'
 
 import { useAuthenticator } from '@aws-amplify/ui-react'
-import { useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { useEffect, useState, Suspense } from 'react'
 import { generateClient } from 'aws-amplify/api'
 import ThemeToggle from '../../components/ThemeToggle'
 
 const client = generateClient()
 
-const listStudentProfiles = /* GraphQL */`
+const LIST_STUDENT_PROFILES = /* GraphQL */`
   query ListStudentProfiles($filter: ModelStudentProfileFilterInput) {
     listStudentProfiles(filter: $filter) {
-      items {
-        id
-        userId
-        firstName
-        lastName
-        status
-      }
+      items { id userId firstName lastName status }
     }
   }
 `
 
-const createStudentProfile = /* GraphQL */`
+const CREATE_STUDENT_PROFILE = /* GraphQL */`
   mutation CreateStudentProfile($input: CreateStudentProfileInput!) {
     createStudentProfile(input: $input) {
-      id
-      userId
-      email
-      firstName
-      lastName
-      status
+      id userId email firstName lastName status planType courseId
     }
   }
 `
 
-const listCourses = /* GraphQL */`
+const LIST_COURSES = /* GraphQL */`
   query ListCourses {
     listCourses(limit: 100) {
       items { id title gradeLevel isArchived }
@@ -43,28 +32,57 @@ const listCourses = /* GraphQL */`
   }
 `
 
-type Course = { id: string; title: string; gradeLevel: string | null; isArchived: boolean | null }
+const FIND_INVITE = /* GraphQL */`
+  query ListStudentInvites($filter: ModelStudentInviteFilterInput) {
+    listStudentInvites(filter: $filter, limit: 1) {
+      items { id token firstName lastName email courseId courseTitle semesterId planType used }
+    }
+  }
+`
 
-export default function ProfileSetupPage() {
+const MARK_INVITE_USED = /* GraphQL */`
+  mutation UpdateStudentInvite($input: UpdateStudentInviteInput!) {
+    updateStudentInvite(input: $input) { id used }
+  }
+`
+
+type Course = { id: string; title: string; gradeLevel: string | null; isArchived: boolean | null }
+type InviteData = {
+  id: string
+  token: string
+  firstName: string
+  lastName: string
+  email: string
+  courseId: string | null
+  courseTitle: string | null
+  semesterId: string | null
+  planType: string
+  used: boolean | null
+}
+
+const GRADE_LEVELS = ['5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th']
+
+function ProfileSetupInner() {
   const { user } = useAuthenticator()
   const router = useRouter()
+  const searchParams = useSearchParams()
+
   const [checking, setChecking] = useState(true)
   const [courses, setCourses] = useState<Course[]>([])
+  const [invite, setInvite] = useState<InviteData | null>(null)
+
+  // Form fields
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [gradeLevel, setGradeLevel] = useState('')
   const [selectedCourseId, setSelectedCourseId] = useState('')
+
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [submitted, setSubmitted] = useState(false)
 
-  const GRADE_LEVELS = ['5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th']
-
   useEffect(() => {
-    if (user === null) {
-      router.replace('/login')
-      return
-    }
+    if (user === null) { router.replace('/login'); return }
     if (!user) return
     checkExistingProfile()
     fetchCourses()
@@ -72,7 +90,7 @@ export default function ProfileSetupPage() {
 
   async function fetchCourses() {
     try {
-      const result = await client.graphql({ query: listCourses }) as any
+      const result = await client.graphql({ query: LIST_COURSES }) as any
       const items = (result.data.listCourses.items as Course[]).filter(c => !c.isArchived)
       setCourses(items.sort((a, b) => a.title.localeCompare(b.title)))
     } catch { /* non-fatal */ }
@@ -81,26 +99,54 @@ export default function ProfileSetupPage() {
   async function checkExistingProfile() {
     try {
       const result = await client.graphql({
-        query: listStudentProfiles,
+        query: LIST_STUDENT_PROFILES,
         variables: { filter: { userId: { eq: user.userId } } }
       }) as any
       const items = result.data.listStudentProfiles.items
       if (items && items.length > 0) {
         const profile = items[0]
         if (profile.status === 'pending') {
-          // Already submitted, show waiting screen
           setSubmitted(true)
           setChecking(false)
           return
         }
-        // Active profile — go to dashboard
         router.replace('/dashboard')
         return
       }
     } catch (err) {
       console.error('Error checking profile:', err)
-    } finally {
-      setChecking(false)
+    }
+
+    // No existing profile — look up invite token
+    const tokenFromUrl = searchParams.get('token')
+    let token = tokenFromUrl
+    if (!token) {
+      try { token = localStorage.getItem('mwm:joinToken') } catch { /* ignore */ }
+    }
+
+    if (token) {
+      await loadInvite(token)
+    }
+
+    setChecking(false)
+  }
+
+  async function loadInvite(token: string) {
+    try {
+      const res = await client.graphql({
+        query: FIND_INVITE,
+        variables: { filter: { token: { eq: token } } }
+      }) as any
+      const items: InviteData[] = res.data.listStudentInvites.items
+      if (items.length > 0 && !items[0].used) {
+        const inv = items[0]
+        setInvite(inv)
+        setFirstName(inv.firstName)
+        setLastName(inv.lastName)
+        if (inv.courseId) setSelectedCourseId(inv.courseId)
+      }
+    } catch (err) {
+      console.error('Error loading invite:', err)
     }
   }
 
@@ -112,10 +158,13 @@ export default function ProfileSetupPage() {
     }
     setSubmitting(true)
     setError('')
+
     try {
       const email = user.signInDetails?.loginId || user.userId
+      const isInvited = !!invite
+
       await client.graphql({
-        query: createStudentProfile,
+        query: CREATE_STUDENT_PROFILE,
         variables: {
           input: {
             userId: user.userId,
@@ -124,12 +173,27 @@ export default function ProfileSetupPage() {
             lastName: lastName.trim(),
             gradeLevel: gradeLevel || null,
             courseId: selectedCourseId || null,
-            status: 'pending',
+            planType: invite?.planType || null,
+            status: isInvited ? 'active' : 'pending',
           }
         }
       }) as any
 
-      setSubmitted(true)
+      // Mark invite as used
+      if (invite) {
+        await client.graphql({
+          query: MARK_INVITE_USED,
+          variables: { input: { id: invite.id, used: true } }
+        }) as any
+        // Clear token from localStorage
+        try { localStorage.removeItem('mwm:joinToken') } catch { /* ignore */ }
+      }
+
+      if (isInvited) {
+        router.replace('/dashboard')
+      } else {
+        setSubmitted(true)
+      }
     } catch (err) {
       console.error('Error saving profile:', err)
       setError('Something went wrong. Please try again.')
@@ -145,7 +209,7 @@ export default function ProfileSetupPage() {
     )
   }
 
-  // Waiting for teacher approval
+  // Waiting for teacher approval (non-invited students only)
   if (submitted) {
     return (
       <div style={{ fontFamily: 'var(--font-body)', background: 'var(--page-bg)', minHeight: '100vh' }}>
@@ -163,17 +227,13 @@ export default function ProfileSetupPage() {
         </nav>
 
         <main style={{ maxWidth: '520px', margin: '0 auto', padding: '80px 24px', textAlign: 'center' }}>
-          {/* Pending icon */}
           <div style={{ width: '72px', height: '72px', background: '#FEF3C7', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 28px' }}>
             <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#D97706" strokeWidth="2">
               <circle cx="12" cy="12" r="10"/>
               <path d="M12 6v6l4 2"/>
             </svg>
           </div>
-
-          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '28px', color: 'var(--foreground)', marginBottom: '12px' }}>
-            Request sent!
-          </h1>
+          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '28px', color: 'var(--foreground)', marginBottom: '12px' }}>Request sent!</h1>
           <p style={{ color: 'var(--gray-mid)', fontSize: '15px', lineHeight: '1.6', marginBottom: '32px' }}>
             Your request to join Math with Melinda has been received.<br/>
             Melinda will review your request and set up your course. You&apos;ll be able to access your dashboard once approved.
@@ -182,11 +242,7 @@ export default function ProfileSetupPage() {
           <div style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: '12px', padding: '20px 24px', marginBottom: '32px', textAlign: 'left' }}>
             <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--gray-mid)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>What happens next</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {[
-                'Melinda reviews your request',
-                'She assigns your course and academic year',
-                'You get full access to your dashboard',
-              ].map((step, i) => (
+              {['Melinda reviews your request', 'She assigns your course and academic year', 'You get full access to your dashboard'].map((step, i) => (
                 <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
                   <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'var(--plum)', color: 'white', fontSize: '11px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: '1px' }}>{i + 1}</div>
                   <span style={{ fontSize: '14px', color: 'var(--foreground)' }}>{step}</span>
@@ -197,16 +253,14 @@ export default function ProfileSetupPage() {
 
           <button
             onClick={async () => {
-              // Check if approved yet
               const result = await client.graphql({
-                query: listStudentProfiles,
+                query: LIST_STUDENT_PROFILES,
                 variables: { filter: { userId: { eq: user.userId } } }
               }) as any
               const items = result.data.listStudentProfiles.items
               if (items?.[0]?.status !== 'pending') {
                 router.replace('/dashboard')
               } else {
-                // Still pending — just a visual refresh
                 window.location.reload()
               }
             }}
@@ -218,6 +272,12 @@ export default function ProfileSetupPage() {
       </div>
     )
   }
+
+  const isInvited = !!invite
+  const planLabel = invite?.planType === 'coop' ? 'Co-op Student'
+    : invite?.planType === 'virtual' ? 'Virtual Student'
+    : invite?.planType === 'self-paced' ? 'Self-Paced Student'
+    : null
 
   return (
     <div style={{ fontFamily: 'var(--font-body)', background: 'var(--page-bg)', minHeight: '100vh' }}>
@@ -235,45 +295,86 @@ export default function ProfileSetupPage() {
       </nav>
 
       <main style={{ maxWidth: '520px', margin: '0 auto', padding: '64px 24px' }}>
-        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '32px', color: 'var(--foreground)', marginBottom: '8px' }}>
-          Welcome to Math with Melinda
-        </h1>
-        <p style={{ color: 'var(--gray-mid)', fontSize: '15px', marginBottom: '8px' }}>
-          Enter your name to request access. Melinda will set up your course once approved.
-        </p>
-        <p style={{ color: 'var(--gray-mid)', fontSize: '13px', marginBottom: '40px' }}>
-          Signed in as <strong>{user?.signInDetails?.loginId || user?.userId}</strong>
-        </p>
+        {isInvited ? (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+              <span style={{ fontSize: '28px' }}>🎓</span>
+              <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '32px', color: 'var(--foreground)', margin: 0 }}>
+                Hi, {invite.firstName}!
+              </h1>
+            </div>
+            <p style={{ color: 'var(--gray-mid)', fontSize: '15px', marginBottom: '8px' }}>
+              Melinda has set up your account. Just confirm your details and you&apos;re in.
+            </p>
+            <p style={{ color: 'var(--gray-mid)', fontSize: '13px', marginBottom: '40px' }}>
+              Signed in as <strong>{user?.signInDetails?.loginId || user?.userId}</strong>
+            </p>
+          </>
+        ) : (
+          <>
+            <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '32px', color: 'var(--foreground)', marginBottom: '8px' }}>
+              Welcome to Math with Melinda
+            </h1>
+            <p style={{ color: 'var(--gray-mid)', fontSize: '15px', marginBottom: '8px' }}>
+              Enter your name to request access. Melinda will set up your course once approved.
+            </p>
+            <p style={{ color: 'var(--gray-mid)', fontSize: '13px', marginBottom: '40px' }}>
+              Signed in as <strong>{user?.signInDetails?.loginId || user?.userId}</strong>
+            </p>
+          </>
+        )}
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+
+          {/* Name row — read-only if invited */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             <div>
               <label style={{ fontSize: '13px', fontWeight: 500, color: 'var(--foreground)', display: 'block', marginBottom: '6px' }}>
-                First Name <span style={{ color: '#c0392b' }}>*</span>
+                First Name {!isInvited && <span style={{ color: '#c0392b' }}>*</span>}
               </label>
-              <input
-                type="text"
-                value={firstName}
-                onChange={e => setFirstName(e.target.value)}
-                placeholder="Jane"
-                style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)', boxSizing: 'border-box' }}
-              />
+              {isInvited ? (
+                <div style={{ padding: '10px 12px', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', fontSize: '14px', background: 'var(--page-bg)', color: 'var(--foreground)', opacity: 0.7 }}>
+                  {firstName}
+                </div>
+              ) : (
+                <input
+                  type="text"
+                  value={firstName}
+                  onChange={e => setFirstName(e.target.value)}
+                  placeholder="Jane"
+                  style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)', boxSizing: 'border-box' }}
+                />
+              )}
             </div>
             <div>
               <label style={{ fontSize: '13px', fontWeight: 500, color: 'var(--foreground)', display: 'block', marginBottom: '6px' }}>
-                Last Name <span style={{ color: '#c0392b' }}>*</span>
+                Last Name {!isInvited && <span style={{ color: '#c0392b' }}>*</span>}
               </label>
-              <input
-                type="text"
-                value={lastName}
-                onChange={e => setLastName(e.target.value)}
-                placeholder="Smith"
-                style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)', boxSizing: 'border-box' }}
-              />
+              {isInvited ? (
+                <div style={{ padding: '10px 12px', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', fontSize: '14px', background: 'var(--page-bg)', color: 'var(--foreground)', opacity: 0.7 }}>
+                  {lastName}
+                </div>
+              ) : (
+                <input
+                  type="text"
+                  value={lastName}
+                  onChange={e => setLastName(e.target.value)}
+                  placeholder="Smith"
+                  style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)', boxSizing: 'border-box' }}
+                />
+              )}
             </div>
           </div>
 
-          {courses.length > 0 && (
+          {/* Course — read-only if invited with a course, otherwise show picker */}
+          {isInvited && invite.courseTitle ? (
+            <div>
+              <label style={{ fontSize: '13px', fontWeight: 500, color: 'var(--foreground)', display: 'block', marginBottom: '6px' }}>Course</label>
+              <div style={{ padding: '10px 12px', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', fontSize: '14px', background: 'var(--page-bg)', color: 'var(--foreground)', opacity: 0.7 }}>
+                {invite.courseTitle}
+              </div>
+            </div>
+          ) : !isInvited && courses.length > 0 ? (
             <div>
               <label style={{ fontSize: '13px', fontWeight: 500, color: 'var(--foreground)', display: 'block', marginBottom: '6px' }}>
                 Course I want to take <span style={{ color: 'var(--gray-mid)', fontWeight: 400 }}>(optional — teacher can adjust)</span>
@@ -289,8 +390,19 @@ export default function ProfileSetupPage() {
                 ))}
               </select>
             </div>
+          ) : null}
+
+          {/* Plan badge for invited students */}
+          {isInvited && planLabel && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--plum)', background: 'rgba(123,79,166,0.1)', padding: '4px 10px', borderRadius: '20px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                {planLabel}
+              </span>
+              <span style={{ fontSize: '12px', color: 'var(--gray-mid)' }}>— set by Melinda</span>
+            </div>
           )}
 
+          {/* Grade level — everyone fills this in */}
           <div>
             <label style={{ fontSize: '13px', fontWeight: 500, color: 'var(--foreground)', display: 'block', marginBottom: '6px' }}>
               Grade Level <span style={{ color: 'var(--gray-mid)', fontWeight: 400 }}>(optional)</span>
@@ -307,19 +419,31 @@ export default function ProfileSetupPage() {
             </select>
           </div>
 
-          {error && (
-            <p style={{ color: '#c0392b', fontSize: '13px', margin: 0 }}>{error}</p>
-          )}
+          {error && <p style={{ color: '#c0392b', fontSize: '13px', margin: 0 }}>{error}</p>}
 
           <button
             type="submit"
             disabled={submitting}
             style={{ background: submitting ? 'var(--gray-mid)' : 'var(--plum)', color: 'white', padding: '12px 32px', borderRadius: 'var(--radius)', border: 'none', cursor: submitting ? 'not-allowed' : 'pointer', fontSize: '15px', fontWeight: 500, fontFamily: 'var(--font-body)', marginTop: '4px' }}
           >
-            {submitting ? 'Sending request…' : 'Request Access'}
+            {submitting
+              ? (isInvited ? 'Setting up your account…' : 'Sending request…')
+              : (isInvited ? 'Go to My Dashboard' : 'Request Access')}
           </button>
         </form>
       </main>
     </div>
+  )
+}
+
+export default function ProfileSetupPage() {
+  return (
+    <Suspense fallback={
+      <div style={{ fontFamily: 'var(--font-body)', background: 'var(--page-bg)', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <p style={{ color: 'var(--gray-mid)' }}>Loading...</p>
+      </div>
+    }>
+      <ProfileSetupInner />
+    </Suspense>
   )
 }

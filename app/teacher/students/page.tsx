@@ -114,6 +114,14 @@ const createParentInvite = /* GraphQL */`
   }
 `
 
+const createStudentInvite = /* GraphQL */`
+  mutation CreateStudentInvite($input: CreateStudentInviteInput!) {
+    createStudentInvite(input: $input) {
+      id token firstName lastName email courseId courseTitle planType parentEmail used
+    }
+  }
+`
+
 const deleteParentInvite = /* GraphQL */`
   mutation DeleteParentInvite($input: DeleteParentInviteInput!) {
     deleteParentInvite(input: $input) {
@@ -221,6 +229,19 @@ export default function StudentsPage() {
   const [studentEmail, setStudentEmail] = useState('')
   const [creating, setCreating] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
+
+  // Add Co-op Student form
+  const [showCoopForm, setShowCoopForm] = useState(false)
+  const [coopFirstName, setCoopFirstName] = useState('')
+  const [coopLastName, setCoopLastName] = useState('')
+  const [coopEmail, setCoopEmail] = useState('')
+  const [coopCourseId, setCoopCourseId] = useState('')
+  const [coopParentFirstName, setCoopParentFirstName] = useState('')
+  const [coopParentLastName, setCoopParentLastName] = useState('')
+  const [coopParentEmail, setCoopParentEmail] = useState('')
+  const [coopCreating, setCoopCreating] = useState(false)
+  const [coopResult, setCoopResult] = useState<{ studentLink: string; parentLink: string; studentName: string } | null>(null)
+  const [copiedCoopLink, setCopiedCoopLink] = useState<string | null>(null)
 
   useEffect(() => {
     if (user === null) router.replace('/login')
@@ -534,6 +555,80 @@ export default function StudentsPage() {
     } finally {
       setCreating(false)
     }
+  }
+
+  async function createCoopStudent() {
+    if (!coopFirstName.trim() || !coopLastName.trim() || !coopEmail.trim()) return
+    setCoopCreating(true)
+    try {
+      const studentToken = randomToken()
+      const course = courses.find(c => c.id === coopCourseId)
+
+      // Create student invite
+      await (client.graphql({
+        query: createStudentInvite,
+        variables: {
+          input: {
+            token: studentToken,
+            firstName: coopFirstName.trim(),
+            lastName: coopLastName.trim(),
+            email: coopEmail.trim().toLowerCase(),
+            courseId: coopCourseId || null,
+            courseTitle: course?.title || null,
+            planType: 'coop',
+            parentFirstName: coopParentFirstName.trim() || null,
+            parentLastName: coopParentLastName.trim() || null,
+            parentEmail: coopParentEmail.trim().toLowerCase() || null,
+            used: false,
+          }
+        }
+      }) as any)
+
+      // Create parent invite if parent email provided
+      let parentLink = ''
+      if (coopParentEmail.trim()) {
+        const parentToken = randomToken()
+        const studentFullName = `${coopFirstName.trim()} ${coopLastName.trim()}`
+        await (client.graphql({
+          query: createParentInvite,
+          variables: {
+            input: {
+              token: parentToken,
+              studentName: studentFullName,
+              studentEmail: coopEmail.trim().toLowerCase(),
+              used: false,
+            }
+          }
+        }) as any)
+        parentLink = `${window.location.origin}/parent/accept/${parentToken}`
+      }
+
+      const studentLink = `${window.location.origin}/join/${studentToken}`
+      setCoopResult({
+        studentLink,
+        parentLink,
+        studentName: `${coopFirstName.trim()} ${coopLastName.trim()}`,
+      })
+
+      // Reset form fields
+      setCoopFirstName('')
+      setCoopLastName('')
+      setCoopEmail('')
+      setCoopCourseId('')
+      setCoopParentFirstName('')
+      setCoopParentLastName('')
+      setCoopParentEmail('')
+    } catch (err) {
+      console.error('Error creating co-op student:', err)
+    } finally {
+      setCoopCreating(false)
+    }
+  }
+
+  function copyCoopLink(link: string, key: string) {
+    navigator.clipboard.writeText(link)
+    setCopiedCoopLink(key)
+    setTimeout(() => setCopiedCoopLink(null), 2000)
   }
 
   async function deleteInvite(id: string) {
@@ -1240,6 +1335,116 @@ export default function StudentsPage() {
             )}
           </div>
         )}
+
+        {/* ── ADD CO-OP STUDENT ── */}
+        <div style={{ borderTop: '1px solid var(--gray-light)', paddingTop: '48px', marginBottom: '48px' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '24px' }}>
+            <div>
+              <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '24px', color: 'var(--foreground)', marginBottom: '6px' }}>Add Co-op Student</h2>
+              <p style={{ color: 'var(--gray-mid)', fontSize: '14px', margin: 0 }}>Enter the student and parent info from the co-op roster. Generates invite links for both.</p>
+            </div>
+            {!showCoopForm && !coopResult && (
+              <button
+                onClick={() => setShowCoopForm(true)}
+                style={{ background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '8px', padding: '10px 20px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
+              >
+                + Add Student
+              </button>
+            )}
+          </div>
+
+          {showCoopForm && !coopResult && (
+            <div style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', padding: '28px', maxWidth: '640px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--gray-mid)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>Student First Name</label>
+                  <input value={coopFirstName} onChange={e => setCoopFirstName(e.target.value)} style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--gray-light)', borderRadius: '6px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)', boxSizing: 'border-box' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--gray-mid)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>Student Last Name</label>
+                  <input value={coopLastName} onChange={e => setCoopLastName(e.target.value)} style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--gray-light)', borderRadius: '6px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)', boxSizing: 'border-box' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--gray-mid)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>Student Email</label>
+                  <input type="email" value={coopEmail} onChange={e => setCoopEmail(e.target.value)} style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--gray-light)', borderRadius: '6px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)', boxSizing: 'border-box' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--gray-mid)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>Course</label>
+                  <select value={coopCourseId} onChange={e => setCoopCourseId(e.target.value)} style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--gray-light)', borderRadius: '6px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)', boxSizing: 'border-box' }}>
+                    <option value="">Select course…</option>
+                    {courses.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ borderTop: '1px solid var(--gray-light)', paddingTop: '20px', marginBottom: '20px' }}>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--gray-mid)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '14px' }}>Parent Info <span style={{ fontWeight: 400, textTransform: 'none' }}>(optional — generates parent invite link)</span></div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--gray-mid)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>Parent First Name</label>
+                    <input value={coopParentFirstName} onChange={e => setCoopParentFirstName(e.target.value)} style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--gray-light)', borderRadius: '6px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)', boxSizing: 'border-box' }} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--gray-mid)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>Parent Last Name</label>
+                    <input value={coopParentLastName} onChange={e => setCoopParentLastName(e.target.value)} style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--gray-light)', borderRadius: '6px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)', boxSizing: 'border-box' }} />
+                  </div>
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--gray-mid)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>Parent Email</label>
+                    <input type="email" value={coopParentEmail} onChange={e => setCoopParentEmail(e.target.value)} style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--gray-light)', borderRadius: '6px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)', boxSizing: 'border-box' }} />
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  onClick={createCoopStudent}
+                  disabled={coopCreating || !coopFirstName.trim() || !coopLastName.trim() || !coopEmail.trim()}
+                  style={{ background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '8px', padding: '10px 24px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', opacity: (coopCreating || !coopFirstName.trim() || !coopLastName.trim() || !coopEmail.trim()) ? 0.6 : 1 }}
+                >
+                  {coopCreating ? 'Generating…' : 'Generate Invite Links'}
+                </button>
+                <button onClick={() => { setShowCoopForm(false); setCoopResult(null) }} style={{ background: 'transparent', color: 'var(--gray-mid)', border: '1px solid var(--gray-light)', borderRadius: '8px', padding: '10px 20px', fontSize: '14px', cursor: 'pointer' }}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {coopResult && (
+            <div style={{ background: 'var(--background)', border: '1px solid #86EFAC', borderRadius: 'var(--radius)', padding: '28px', maxWidth: '640px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
+                <div style={{ width: '32px', height: '32px', background: '#D1FAE5', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#065F46" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                </div>
+                <div style={{ fontFamily: 'var(--font-display)', fontSize: '18px', color: 'var(--foreground)' }}>Invite links ready for {coopResult.studentName}</div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
+                <div style={{ background: 'var(--page-bg)', border: '1px solid var(--gray-light)', borderRadius: '8px', padding: '14px 16px' }}>
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--plum)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>🎓 Student Invite Link</div>
+                  <div style={{ fontSize: '12px', color: 'var(--gray-mid)', wordBreak: 'break-all', marginBottom: '10px' }}>{coopResult.studentLink}</div>
+                  <button onClick={() => copyCoopLink(coopResult.studentLink, 'student')} style={{ background: copiedCoopLink === 'student' ? '#D1FAE5' : 'var(--plum)', color: copiedCoopLink === 'student' ? '#065F46' : 'white', border: 'none', borderRadius: '6px', padding: '7px 16px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>
+                    {copiedCoopLink === 'student' ? '✓ Copied!' : 'Copy Student Link'}
+                  </button>
+                </div>
+
+                {coopResult.parentLink && (
+                  <div style={{ background: 'var(--page-bg)', border: '1px solid var(--gray-light)', borderRadius: '8px', padding: '14px 16px' }}>
+                    <div style={{ fontSize: '11px', fontWeight: 700, color: '#0369a1', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>👨‍👩‍👧 Parent Invite Link</div>
+                    <div style={{ fontSize: '12px', color: 'var(--gray-mid)', wordBreak: 'break-all', marginBottom: '10px' }}>{coopResult.parentLink}</div>
+                    <button onClick={() => copyCoopLink(coopResult.parentLink, 'parent')} style={{ background: copiedCoopLink === 'parent' ? '#D1FAE5' : '#0369a1', color: copiedCoopLink === 'parent' ? '#065F46' : 'white', border: 'none', borderRadius: '6px', padding: '7px 16px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>
+                      {copiedCoopLink === 'parent' ? '✓ Copied!' : 'Copy Parent Link'}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <button onClick={() => { setCoopResult(null); setShowCoopForm(true) }} style={{ background: 'transparent', color: 'var(--plum)', border: '1px solid var(--plum)', borderRadius: '8px', padding: '8px 20px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
+                + Add Another Student
+              </button>
+            </div>
+          )}
+        </div>
 
         {/* ── PARENT INVITES ── */}
         <div style={{ borderTop: '1px solid var(--gray-light)', paddingTop: '48px' }}>

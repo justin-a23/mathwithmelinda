@@ -24,6 +24,23 @@ type Semester @model {
   gradeB: Int
   gradeC: Int
   gradeD: Int
+  semesterType: String
+}
+
+type StudentInvite @model {
+  id: ID!
+  token: String!
+  firstName: String!
+  lastName: String!
+  email: String!
+  courseId: String
+  courseTitle: String
+  semesterId: String
+  planType: String!
+  parentFirstName: String
+  parentLastName: String
+  parentEmail: String
+  used: Boolean
 }
 
 type Course @model {
