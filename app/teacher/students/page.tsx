@@ -718,7 +718,7 @@ export default function StudentsPage() {
       // Fire student email
       let emailSentToStudent = false
       try {
-        await fetch('/api/send-email', {
+        const studentEmailRes = await fetch('/api/send-email', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -756,7 +756,8 @@ export default function StudentsPage() {
             text: `Hi ${coopFirstName.trim()}!\n\nMelinda has enrolled you as a Co-op Student${courseTitle ? ` in ${courseTitle}` : ''}.\n\nClick this link to create your account:\n${studentLink}\n\nSee you in class!`,
           }),
         })
-        emailSentToStudent = true
+        emailSentToStudent = studentEmailRes.ok
+        if (!studentEmailRes.ok) console.error('Student email failed:', await studentEmailRes.text())
       } catch { /* non-fatal */ }
 
       // Fire parent email
@@ -764,7 +765,7 @@ export default function StudentsPage() {
       if (coopParentEmail.trim() && parentLink) {
         try {
           const parentFirstName = coopParentFirstName.trim() || 'there'
-          await fetch('/api/send-email', {
+          const parentEmailRes = await fetch('/api/send-email', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -798,7 +799,8 @@ export default function StudentsPage() {
               text: `Hi ${parentFirstName}!\n\n${studentFullName} has been enrolled in Math with Melinda${courseTitle ? ` in ${courseTitle}` : ''}.\n\nSet up your parent account here:\n${parentLink}`,
             }),
           })
-          emailSentToParent = true
+          emailSentToParent = parentEmailRes.ok
+          if (!parentEmailRes.ok) console.error('Parent email failed:', await parentEmailRes.text())
         } catch { /* non-fatal */ }
       }
 
@@ -1668,14 +1670,18 @@ export default function StudentsPage() {
 
               {/* Email confirmation banners */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '20px', paddingLeft: '42px' }}>
-                {coopResult.emailSentToStudent && (
-                  <div style={{ fontSize: '13px', color: '#065F46', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span>✉️</span> Invite email sent to <strong>{coopResult.studentEmail}</strong>
-                  </div>
-                )}
-                {coopResult.emailSentToParent && coopResult.parentEmail && (
-                  <div style={{ fontSize: '13px', color: '#1e40af', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span>✉️</span> Parent email sent to <strong>{coopResult.parentEmail}</strong>
+                <div style={{ fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px', color: coopResult.emailSentToStudent ? '#065F46' : '#b91c1c' }}>
+                  <span>{coopResult.emailSentToStudent ? '✉️' : '⚠️'}</span>
+                  {coopResult.emailSentToStudent
+                    ? <span>Invite email sent to <strong>{coopResult.studentEmail}</strong></span>
+                    : <span>Email failed for <strong>{coopResult.studentEmail}</strong> — copy link above to send manually</span>}
+                </div>
+                {coopResult.parentEmail && (
+                  <div style={{ fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px', color: coopResult.emailSentToParent ? '#1e40af' : '#b91c1c' }}>
+                    <span>{coopResult.emailSentToParent ? '✉️' : '⚠️'}</span>
+                    {coopResult.emailSentToParent
+                      ? <span>Parent email sent to <strong>{coopResult.parentEmail}</strong></span>
+                      : <span>Email failed for <strong>{coopResult.parentEmail}</strong> — copy link above to send manually</span>}
                   </div>
                 )}
               </div>
