@@ -8,6 +8,9 @@ const nextConfig: NextConfig = {
     ZOOM_ACCOUNT_ID: process.env.ZOOM_ACCOUNT_ID,
     ZOOM_CLIENT_ID: process.env.ZOOM_CLIENT_ID,
     ZOOM_CLIENT_SECRET: process.env.ZOOM_CLIENT_SECRET,
+    SES_SMTP_USERNAME: process.env.SES_SMTP_USERNAME,
+    SES_SMTP_PASSWORD: process.env.SES_SMTP_PASSWORD,
+    SES_FROM_EMAIL: process.env.SES_FROM_EMAIL,
   },
 };
 
