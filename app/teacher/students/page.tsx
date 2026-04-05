@@ -260,11 +260,13 @@ export default function StudentsPage() {
   const [deletingInviteId, setDeletingInviteId] = useState<string | null>(null)
   const [resendingInviteId, setResendingInviteId] = useState<string | null>(null)
 
-  // Parent invite form
-  const [studentName, setStudentName] = useState('')
-  const [studentEmail, setStudentEmail] = useState('')
-  const [creating, setCreating] = useState(false)
-  const [copiedId, setCopiedId] = useState<string | null>(null)
+  // Per-student parent invite modal
+  const [inviteParentStudent, setInviteParentStudent] = useState<Student | null>(null)
+  const [inviteParentFirstName, setInviteParentFirstName] = useState('')
+  const [inviteParentLastName, setInviteParentLastName] = useState('')
+  const [inviteParentEmail, setInviteParentEmail] = useState('')
+  const [inviteParentCreating, setInviteParentCreating] = useState(false)
+  const [inviteParentCopied, setInviteParentCopied] = useState<string | null>(null)
 
   // Add Co-op Student form
   const [showCoopForm, setShowCoopForm] = useState(false)
@@ -613,23 +615,53 @@ export default function StudentsPage() {
     setYearEndConfirm(false)
   }
 
-  async function createInvite() {
-    if (!studentName.trim() || !studentEmail.trim()) return
-    setCreating(true)
+  async function createParentInviteForStudent() {
+    if (!inviteParentStudent || !inviteParentEmail.trim()) return
+    const studentParentInvites = invites.filter(i => i.studentEmail.toLowerCase() === inviteParentStudent.email.toLowerCase())
+    if (studentParentInvites.length >= 2) return
+    setInviteParentCreating(true)
     try {
       const token = randomToken()
+      const fullName = `${inviteParentStudent.firstName} ${inviteParentStudent.lastName}`
       const result = await client.graphql({
         query: createParentInvite,
-        variables: { input: { token, studentName: studentName.trim(), studentEmail: studentEmail.trim().toLowerCase(), used: false } }
+        variables: { input: { token, studentName: fullName, studentEmail: inviteParentStudent.email.toLowerCase(), used: false } }
       }) as any
       setInvites(prev => [result.data.createParentInvite, ...prev])
-      setStudentName('')
-      setStudentEmail('')
+      const parentLink = `${window.location.origin}/parent/accept/${token}`
+      const parentFirstName = inviteParentFirstName.trim() || 'there'
+      // Fire invite email
+      fetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: inviteParentEmail.trim().toLowerCase(),
+          subject: `${fullName} has been enrolled in Math with Melinda`,
+          html: `<div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:32px 24px">
+            <div style="background:#1E1E2E;padding:16px 24px;border-radius:8px;margin-bottom:28px">
+              <span style="color:white;font-size:18px;font-weight:600">Math with Melinda</span>
+            </div>
+            <h2 style="color:#1E1E2E">Hi ${parentFirstName}!</h2>
+            <p style="color:#555;font-size:15px;line-height:1.6"><strong>${fullName}</strong> is enrolled in Math with Melinda. Set up your parent account to track their grades, assignments, and feedback from Melinda.</p>
+            <a href="${parentLink}" style="display:inline-block;background:#0369a1;color:white;padding:13px 28px;border-radius:8px;font-size:15px;font-weight:600;text-decoration:none;margin:16px 0">Set Up My Parent Account →</a>
+            <p style="color:#aaa;font-size:13px;word-break:break-all">${parentLink}</p>
+          </div>`,
+          text: `Hi ${parentFirstName}!\n\n${fullName} is enrolled in Math with Melinda. Set up your parent account:\n${parentLink}`,
+        }),
+      }).catch(() => {})
+      setInviteParentFirstName('')
+      setInviteParentLastName('')
+      setInviteParentEmail('')
     } catch (err) {
       console.error(err)
     } finally {
-      setCreating(false)
+      setInviteParentCreating(false)
     }
+  }
+
+  async function deleteInvite(id: string) {
+    await client.graphql({ query: deleteParentInvite, variables: { input: { id } } })
+    setInvites(prev => prev.filter(i => i.id !== id))
   }
 
   async function createCoopStudent() {
@@ -811,18 +843,16 @@ export default function StudentsPage() {
     setInvites(prev => prev.filter(i => i.id !== id))
   }
 
-  function copyLink(invite: Invite) {
-    const origin = window.location.origin
-    navigator.clipboard.writeText(origin + '/parent/accept/' + invite.token)
-    setCopiedId(invite.id)
-    setTimeout(() => setCopiedId(null), 2000)
-  }
-
   const courseMap: Record<string, string> = {}
   for (const c of courses) courseMap[c.id] = c.title
 
-  const inviteMap: Record<string, Invite> = {}
-  for (const inv of invites) inviteMap[inv.studentEmail.toLowerCase()] = inv
+  // Map studentEmail -> all parent invites for that student
+  const parentInviteMap: Record<string, Invite[]> = {}
+  for (const inv of invites) {
+    const key = inv.studentEmail.toLowerCase()
+    if (!parentInviteMap[key]) parentInviteMap[key] = []
+    parentInviteMap[key].push(inv)
+  }
 
   const pendingStudents = students.filter(s => s.status === 'pending')
   const activeStudents = students.filter(s => s.status !== 'removed' && s.status !== 'pending' && s.status !== 'declined' && s.status !== 'archived')
@@ -1144,7 +1174,8 @@ export default function StudentsPage() {
             {filteredStudents.map(s => {
               const isEditing = editingId === s.id
               const isRemoving = removeConfirmId === s.id
-              const invite = inviteMap[s.email.toLowerCase()]
+              const studentParentInvites = parentInviteMap[s.email.toLowerCase()] || []
+              const parentCount = studentParentInvites.length
               const courseName = s.courseId ? (courseMap[s.courseId] || 'Unknown course') : ''
               const studentEnrollments = enrollments.filter(e => e.studentId === s.userId)
               const enrolledSemesters = semesters.filter(sem =>
@@ -1199,6 +1230,17 @@ export default function StudentsPage() {
                         title="Email student">
                         ✉
                       </a>
+                      {parentCount >= 2 ? (
+                        <span style={{ fontSize: '11px', color: '#065F46', background: '#D1FAE5', padding: '4px 10px', borderRadius: '6px', fontWeight: 600 }}>
+                          👨‍👩‍👧 2/2 Parents
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => { setInviteParentStudent(s); setInviteParentFirstName(''); setInviteParentLastName(''); setInviteParentEmail('') }}
+                          style={{ background: 'transparent', color: '#0369a1', border: '1px solid #93C5FD', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', whiteSpace: 'nowrap' }}>
+                          {parentCount === 1 ? '+ 2nd Parent' : '+ Parent'}
+                        </button>
+                      )}
                       <button
                         onClick={() => isEditing ? setEditingId(null) : startEdit(s)}
                         style={{ background: isEditing ? 'var(--plum-light)' : 'transparent', color: isEditing ? 'var(--plum)' : 'var(--gray-mid)', border: '1px solid ' + (isEditing ? 'var(--plum-mid)' : 'var(--gray-light)'), padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}>
@@ -1735,68 +1777,90 @@ export default function StudentsPage() {
           </div>
         )}
 
-        {/* ── PARENT INVITES ── */}
-        <div style={{ borderTop: '1px solid var(--gray-light)', paddingTop: '48px' }}>
-          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '24px', color: 'var(--foreground)', marginBottom: '6px' }}>Parent Invites</h2>
-          <p style={{ color: 'var(--gray-mid)', fontSize: '14px', marginBottom: '28px' }}>Generate a link for a parent to create their account and view their child's grades.</p>
+      </main>
 
-          {/* Create invite */}
-          <div style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', padding: '24px', marginBottom: '32px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '12px', alignItems: 'flex-end' }}>
-              <div>
-                <label style={{ fontSize: '12px', fontWeight: 500, color: 'var(--gray-dark)', display: 'block', marginBottom: '6px' }}>Student Name</label>
-                <input type="text" value={studentName} onChange={e => setStudentName(e.target.value)} placeholder="e.g. Emma Johnson"
-                  style={{ ...inputStyle }} />
+      {/* ── INVITE PARENT MODAL ── */}
+      {inviteParentStudent && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+          <div style={{ background: 'var(--background)', borderRadius: '14px', padding: '32px', maxWidth: '480px', width: '100%' }}>
+            <div style={{ marginBottom: '24px' }}>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: '20px', color: 'var(--foreground)', marginBottom: '4px' }}>
+                Invite Parent — {inviteParentStudent.firstName} {inviteParentStudent.lastName}
               </div>
-              <div>
-                <label style={{ fontSize: '12px', fontWeight: 500, color: 'var(--gray-dark)', display: 'block', marginBottom: '6px' }}>Student Email</label>
-                <input type="email" value={studentEmail} onChange={e => setStudentEmail(e.target.value)} placeholder="emma@example.com"
-                  onKeyDown={e => { if (e.key === 'Enter') createInvite() }}
-                  style={{ ...inputStyle }} />
-              </div>
-              <button onClick={createInvite} disabled={creating || !studentName.trim() || !studentEmail.trim()}
-                style={{ background: (!studentName.trim() || !studentEmail.trim()) ? 'var(--gray-light)' : 'var(--plum)', color: (!studentName.trim() || !studentEmail.trim()) ? 'var(--gray-mid)' : 'white', padding: '9px 20px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '14px', fontWeight: 500, whiteSpace: 'nowrap' }}>
-                {creating ? 'Generating...' : 'Generate Link'}
-              </button>
+              {(() => {
+                const existing = parentInviteMap[inviteParentStudent.email.toLowerCase()] || []
+                const remaining = 2 - existing.length
+                return <div style={{ fontSize: '13px', color: 'var(--gray-mid)' }}>{remaining} parent slot{remaining !== 1 ? 's' : ''} remaining</div>
+              })()}
             </div>
-          </div>
 
-          {/* Invite list */}
-          {invites.length === 0 ? (
-            <p style={{ color: 'var(--gray-mid)', fontSize: '14px' }}>No invites yet.</p>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {invites.map(invite => (
-                <div key={invite.id} style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', padding: '14px 20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '3px' }}>
-                      <span style={{ fontWeight: 500, fontSize: '14px', color: 'var(--foreground)' }}>{invite.studentName}</span>
-                      <span style={{ background: invite.used ? '#D1FAE5' : '#FEF3C7', color: invite.used ? '#065F46' : '#92400E', fontSize: '11px', padding: '2px 8px', borderRadius: '20px', fontWeight: 500 }}>
-                        {invite.used ? 'Claimed' : 'Pending'}
-                      </span>
+            {/* Existing parent invites for this student */}
+            {(parentInviteMap[inviteParentStudent.email.toLowerCase()] || []).length > 0 && (
+              <div style={{ marginBottom: '20px' }}>
+                {(parentInviteMap[inviteParentStudent.email.toLowerCase()] || []).map(inv => (
+                  <div key={inv.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', background: 'var(--page-bg)', borderRadius: '8px', marginBottom: '6px' }}>
+                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: inv.used ? '#22C55E' : '#F59E0B', flexShrink: 0 }} />
+                    <div style={{ flex: 1, fontSize: '13px', color: 'var(--foreground)' }}>
+                      {inv.studentName} parent · <span style={{ color: 'var(--gray-mid)' }}>{inv.used ? 'Claimed' : 'Pending'}</span>
                     </div>
-                    <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginBottom: '4px' }}>{invite.studentEmail}</div>
-                    <div style={{ fontSize: '11px', color: 'var(--gray-mid)', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {baseUrl}/parent/accept/{invite.token}
-                    </div>
+                    <button
+                      onClick={() => {
+                        const link = `${window.location.origin}/parent/accept/${inv.token}`
+                        navigator.clipboard.writeText(link)
+                        setInviteParentCopied(inv.id)
+                        setTimeout(() => setInviteParentCopied(null), 2000)
+                      }}
+                      style={{ fontSize: '11px', background: inviteParentCopied === inv.id ? '#D1FAE5' : 'var(--page-bg)', color: inviteParentCopied === inv.id ? '#065F46' : 'var(--gray-mid)', border: '1px solid var(--gray-light)', borderRadius: '5px', padding: '3px 10px', cursor: 'pointer' }}>
+                      {inviteParentCopied === inv.id ? '✓ Copied' : 'Copy'}
+                    </button>
+                    <button onClick={() => deleteInvite(inv.id)} style={{ fontSize: '11px', background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '3px 6px' }}>✕</button>
                   </div>
-                  <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
-                    <button onClick={() => copyLink(invite)}
-                      style={{ background: copiedId === invite.id ? '#D1FAE5' : 'var(--plum-light)', color: copiedId === invite.id ? '#065F46' : 'var(--plum)', border: '1px solid ' + (copiedId === invite.id ? '#6EE7B7' : 'var(--plum-mid)'), padding: '6px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 500 }}>
-                      {copiedId === invite.id ? 'Copied!' : 'Copy Link'}
-                    </button>
-                    <button onClick={() => deleteInvite(invite.id)}
-                      style={{ background: 'transparent', color: 'var(--gray-mid)', border: '1px solid var(--gray-light)', padding: '6px 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}>
-                      Delete
-                    </button>
+                ))}
+              </div>
+            )}
+
+            {/* New parent invite form — only if under limit */}
+            {(parentInviteMap[inviteParentStudent.email.toLowerCase()] || []).length < 2 && (
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                  <div>
+                    <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--gray-mid)', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '5px' }}>First Name</label>
+                    <input value={inviteParentFirstName} onChange={e => setInviteParentFirstName(e.target.value)} placeholder="Jane"
+                      style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--gray-light)', borderRadius: '6px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)', boxSizing: 'border-box' }} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--gray-mid)', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '5px' }}>Last Name</label>
+                    <input value={inviteParentLastName} onChange={e => setInviteParentLastName(e.target.value)} placeholder="Smith"
+                      style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--gray-light)', borderRadius: '6px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)', boxSizing: 'border-box' }} />
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
+                <div style={{ marginBottom: '20px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--gray-mid)', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '5px' }}>Parent Email <span style={{ color: '#c0392b' }}>*</span></label>
+                  <input type="email" value={inviteParentEmail} onChange={e => setInviteParentEmail(e.target.value)} placeholder="parent@example.com"
+                    style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--gray-light)', borderRadius: '6px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)', boxSizing: 'border-box' }} />
+                </div>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button
+                    onClick={createParentInviteForStudent}
+                    disabled={inviteParentCreating || !inviteParentEmail.trim()}
+                    style={{ flex: 1, background: (!inviteParentEmail.trim() || inviteParentCreating) ? 'var(--gray-light)' : '#0369a1', color: (!inviteParentEmail.trim() || inviteParentCreating) ? 'var(--gray-mid)' : 'white', border: 'none', borderRadius: '8px', padding: '10px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>
+                    {inviteParentCreating ? 'Sending…' : 'Send Invite Email'}
+                  </button>
+                  <button onClick={() => setInviteParentStudent(null)} style={{ background: 'transparent', color: 'var(--gray-mid)', border: '1px solid var(--gray-light)', borderRadius: '8px', padding: '10px 20px', fontSize: '14px', cursor: 'pointer' }}>
+                    Close
+                  </button>
+                </div>
+              </>
+            )}
 
-      </main>
+            {(parentInviteMap[inviteParentStudent.email.toLowerCase()] || []).length >= 2 && (
+              <button onClick={() => setInviteParentStudent(null)} style={{ background: 'transparent', color: 'var(--gray-mid)', border: '1px solid var(--gray-light)', borderRadius: '8px', padding: '10px 20px', fontSize: '14px', cursor: 'pointer', width: '100%' }}>
+                Close
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
