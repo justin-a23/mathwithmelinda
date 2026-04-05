@@ -838,11 +838,6 @@ export default function StudentsPage() {
     setTimeout(() => setCopiedCoopLink(null), 2000)
   }
 
-  async function deleteInvite(id: string) {
-    await client.graphql({ query: deleteParentInvite, variables: { input: { id } } })
-    setInvites(prev => prev.filter(i => i.id !== id))
-  }
-
   const courseMap: Record<string, string> = {}
   for (const c of courses) courseMap[c.id] = c.title
 
