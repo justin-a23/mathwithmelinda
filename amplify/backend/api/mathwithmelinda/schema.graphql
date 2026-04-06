@@ -188,6 +188,9 @@ type ParentInvite @model {
   studentEmail: String!
   studentName: String!
   used: Boolean
+  parentEmail: String
+  parentFirstName: String
+  parentLastName: String
 }
 
 type ParentStudent @model {
