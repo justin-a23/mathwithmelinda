@@ -245,6 +245,7 @@ type Message @model {
   repliedAt: String
   isArchivedByTeacher: Boolean
   isDeletedByStudent: Boolean
+  isTeacherInitiated: Boolean
 }
 
 type Syllabus @model {

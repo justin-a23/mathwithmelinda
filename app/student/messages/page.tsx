@@ -12,7 +12,7 @@ const LIST_MESSAGES = /* GraphQL */ `
   query ListMessages($filter: ModelMessageFilterInput) {
     listMessages(filter: $filter, limit: 500) {
       items {
-        id studentId studentName content sentAt isRead teacherReply repliedAt isDeletedByStudent
+        id studentId studentName content sentAt isRead teacherReply repliedAt isDeletedByStudent isTeacherInitiated
       }
     }
   }
@@ -42,6 +42,7 @@ type Message = {
   teacherReply: string | null
   repliedAt: string | null
   isDeletedByStudent: boolean | null
+  isTeacherInitiated: boolean | null
 }
 
 function fmtDate(s: string): string {
@@ -261,65 +262,66 @@ function StudentMessagesPageInner() {
               {messages.map(msg => (
                 <div key={msg.id} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
 
-                  {/* Student's message — right side */}
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', alignItems: 'flex-end' }}>
-                    <div style={{ maxWidth: '75%', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
-                      {/* Strip hidden [ref:sub=...] metadata line before displaying */}
-                      {/^\[ref:sub=[^\]]+\]\n/.test(msg.content) && (
-                        <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)', paddingRight: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
-                          Grade question
-                        </div>
-                      )}
-                      <div style={{
-                        background: 'var(--plum)', color: 'white',
-                        borderRadius: '18px 18px 4px 18px',
-                        padding: '10px 14px', fontSize: '14px', lineHeight: '1.55',
-                        whiteSpace: 'pre-wrap',
-                      }}>
-                        {msg.content.replace(/^\[ref:sub=[^\]]+\]\n/, '')}
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ fontSize: '11px', color: 'var(--gray-mid)' }}>{fmtDate(msg.sentAt)}</span>
-                        <button
-                          onClick={() => deleteMessage(msg.id)}
-                          title="Delete this message and any reply"
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', color: 'var(--gray-mid)', fontSize: '11px', lineHeight: 1, borderRadius: '3px' }}
-                          onMouseEnter={e => (e.currentTarget.style.color = '#e05252')}
-                          onMouseLeave={e => (e.currentTarget.style.color = 'var(--gray-mid)')}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Teacher reply — left side */}
-                  {msg.teacherReply && (
+                  {/* Teacher-initiated: Melinda's opening message on the left */}
+                  {msg.isTeacherInitiated && (
                     <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '10px', alignItems: 'flex-end' }}>
-                      {/* Melinda avatar */}
                       <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--plum)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginBottom: '4px' }}>
                         <span style={{ fontSize: '12px', fontWeight: 700, color: 'white' }}>M</span>
                       </div>
                       <div style={{ maxWidth: '75%', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                         <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--gray-mid)', paddingLeft: '4px' }}>Melinda</div>
-                        <div style={{
-                          background: 'var(--page-bg)', border: '1px solid var(--gray-light)',
-                          color: 'var(--foreground)',
-                          borderRadius: '4px 18px 18px 18px',
-                          padding: '10px 14px', fontSize: '14px', lineHeight: '1.55'
-                        }}>
-                          {msg.teacherReply}
+                        <div style={{ background: 'var(--page-bg)', border: '1px solid var(--gray-light)', color: 'var(--foreground)', borderRadius: '4px 18px 18px 18px', padding: '10px 14px', fontSize: '14px', lineHeight: '1.55', whiteSpace: 'pre-wrap' }}>
+                          {msg.content}
                         </div>
-                        {msg.repliedAt && (
-                          <span style={{ fontSize: '11px', color: 'var(--gray-mid)', paddingLeft: '4px' }}>{fmtDate(msg.repliedAt)}</span>
-                        )}
+                        <span style={{ fontSize: '11px', color: 'var(--gray-mid)', paddingLeft: '4px' }}>{fmtDate(msg.sentAt)}</span>
                       </div>
                     </div>
                   )}
 
-                  {/* "Waiting for reply" indicator */}
-                  {!msg.teacherReply && (
+                  {/* Student's message — right side (only for student-initiated threads) */}
+                  {!msg.isTeacherInitiated && (
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', alignItems: 'flex-end' }}>
+                      <div style={{ maxWidth: '75%', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+                        {/^\[ref:sub=[^\]]+\]\n/.test(msg.content) && (
+                          <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)', paddingRight: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                            Grade question
+                          </div>
+                        )}
+                        <div style={{ background: 'var(--plum)', color: 'white', borderRadius: '18px 18px 4px 18px', padding: '10px 14px', fontSize: '14px', lineHeight: '1.55', whiteSpace: 'pre-wrap' }}>
+                          {msg.content.replace(/^\[ref:sub=[^\]]+\]\n/, '')}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ fontSize: '11px', color: 'var(--gray-mid)' }}>{fmtDate(msg.sentAt)}</span>
+                          <button onClick={() => deleteMessage(msg.id)} title="Delete this message and any reply"
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', color: 'var(--gray-mid)', fontSize: '11px', lineHeight: 1, borderRadius: '3px' }}
+                            onMouseEnter={e => (e.currentTarget.style.color = '#e05252')}
+                            onMouseLeave={e => (e.currentTarget.style.color = 'var(--gray-mid)')}>
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Teacher reply — left side */}
+                  {msg.teacherReply && (
+                    <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '10px', alignItems: 'flex-end' }}>
+                      <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--plum)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginBottom: '4px' }}>
+                        <span style={{ fontSize: '12px', fontWeight: 700, color: 'white' }}>M</span>
+                      </div>
+                      <div style={{ maxWidth: '75%', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--gray-mid)', paddingLeft: '4px' }}>Melinda</div>
+                        <div style={{ background: 'var(--page-bg)', border: '1px solid var(--gray-light)', color: 'var(--foreground)', borderRadius: '4px 18px 18px 18px', padding: '10px 14px', fontSize: '14px', lineHeight: '1.55' }}>
+                          {msg.teacherReply}
+                        </div>
+                        {msg.repliedAt && <span style={{ fontSize: '11px', color: 'var(--gray-mid)', paddingLeft: '4px' }}>{fmtDate(msg.repliedAt)}</span>}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* "Waiting for reply" — only on student-initiated threads */}
+                  {!msg.isTeacherInitiated && !msg.teacherReply && (
                     <div style={{ textAlign: 'right', fontSize: '11px', color: 'var(--gray-mid)', fontStyle: 'italic', paddingRight: '4px' }}>
                       Waiting for reply…
                     </div>

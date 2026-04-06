@@ -53,6 +53,12 @@ const DELETE_ANNOUNCEMENT = /* GraphQL */ `
   }
 `
 
+const CREATE_MESSAGE = /* GraphQL */ `
+  mutation CreateMessage($input: CreateMessageInput!) {
+    createMessage(input: $input) { id studentId studentName content sentAt isRead isTeacherInitiated }
+  }
+`
+
 const UPDATE_MESSAGE = /* GraphQL */ `
   mutation UpdateMessage($input: UpdateMessageInput!) {
     updateMessage(input: $input) { id }
@@ -117,6 +123,12 @@ export default function TeacherMessagesPage() {
   const [replyText, setReplyText] = useState<Record<string, string>>({})
   const [sending, setSending] = useState<Record<string, boolean>>({})
   const [archiving, setArchiving] = useState<Record<string, boolean>>({})
+
+  // Compose new message state
+  const [showCompose, setShowCompose] = useState(false)
+  const [composeStudentId, setComposeStudentId] = useState('')
+  const [composeText, setComposeText] = useState('')
+  const [composing, setComposing] = useState(false)
 
   // Announcement state
   const [showAnnouncement, setShowAnnouncement] = useState(false)
@@ -279,6 +291,59 @@ export default function TeacherMessagesPage() {
     }
   }
 
+  async function sendNewMessage() {
+    if (!composeStudentId || !composeText.trim()) return
+    setComposing(true)
+    try {
+      const student = students.find(s => s.userId === composeStudentId)
+      if (!student) return
+      const sentAt = new Date().toISOString()
+      const result = await (client.graphql({
+        query: CREATE_MESSAGE,
+        variables: {
+          input: {
+            studentId: student.userId,
+            studentName: `${student.name}`,
+            content: composeText.trim(),
+            sentAt,
+            isRead: true,
+            isTeacherInitiated: true,
+          }
+        }
+      }) as any)
+      const newMsg = result.data.createMessage
+      setMessages(prev => [newMsg, ...prev])
+      setComposeText('')
+      setComposeStudentId('')
+      setShowCompose(false)
+
+      // Email the student
+      fetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: student.email,
+          subject: 'New message from Melinda',
+          html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+            <h2 style="color:#7B4FA6">Hi ${student.name},</h2>
+            <p style="font-size:15px;color:#333">You have a new message from Melinda:</p>
+            <div style="background:#f5f3ff;border-left:4px solid #7B4FA6;border-radius:8px;padding:16px;margin:16px 0;font-size:15px;line-height:1.6;color:#4C1D95">
+              ${composeText.trim().replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br/>')}
+            </div>
+            <a href="https://mathwithmelinda.com/student/messages" style="display:inline-block;background:#7B4FA6;color:white;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:600">
+              Reply in Messages
+            </a>
+          </div>`,
+          text: `Hi ${student.name},\n\nNew message from Melinda:\n\n${composeText.trim()}\n\nReply at https://mathwithmelinda.com/student/messages`,
+        }),
+      }).catch(() => {})
+    } catch (err) {
+      console.error('Error sending message:', err)
+    } finally {
+      setComposing(false)
+    }
+  }
+
   async function sendReply(msgId: string) {
     const reply = (replyText[msgId] || '').trim()
     if (!reply) return
@@ -401,7 +466,13 @@ export default function TeacherMessagesPage() {
                 </span>
               )}
               <button
-                onClick={() => { setShowAnnouncement(a => !a); setAnnouncementSent(false) }}
+                onClick={() => { setShowCompose(a => !a); setShowAnnouncement(false) }}
+                style={{ background: showCompose ? 'var(--plum)' : 'transparent', color: showCompose ? 'white' : 'var(--plum)', border: '1px solid var(--plum)', borderRadius: '8px', padding: '8px 16px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                ✏️ New Message
+              </button>
+              <button
+                onClick={() => { setShowAnnouncement(a => !a); setShowCompose(false); setAnnouncementSent(false) }}
                 style={{ background: showAnnouncement ? 'var(--plum)' : 'transparent', color: showAnnouncement ? 'white' : 'var(--plum)', border: '1px solid var(--plum)', borderRadius: '8px', padding: '8px 16px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
               >
                 📢 Announce
@@ -409,6 +480,50 @@ export default function TeacherMessagesPage() {
             </div>
           </div>
         </div>
+
+        {/* Compose new message panel */}
+        {showCompose && (
+          <div style={{ background: 'var(--background)', border: '1px solid var(--plum)', borderRadius: '12px', padding: '24px', marginBottom: '28px' }}>
+            <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '20px', color: 'var(--foreground)', margin: '0 0 4px' }}>New Message</h2>
+            <p style={{ color: 'var(--gray-mid)', fontSize: '13px', margin: '0 0 20px' }}>Start a new conversation with a student. They'll receive an email notification and can reply in their messages.</p>
+            <div style={{ marginBottom: '14px' }}>
+              <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--foreground)', display: 'block', marginBottom: '6px' }}>To</label>
+              <select
+                value={composeStudentId}
+                onChange={e => setComposeStudentId(e.target.value)}
+                style={{ width: '100%', maxWidth: '360px', padding: '9px 12px', border: '1px solid var(--gray-light)', borderRadius: '8px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: composeStudentId ? 'var(--foreground)' : 'var(--gray-mid)' }}
+              >
+                <option value="">Select a student…</option>
+                {students.map(s => (
+                  <option key={s.userId} value={s.userId}>{s.name}</option>
+                ))}
+              </select>
+            </div>
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--foreground)', display: 'block', marginBottom: '6px' }}>Message</label>
+              <textarea
+                value={composeText}
+                onChange={e => setComposeText(e.target.value)}
+                placeholder="Write your message…"
+                rows={4}
+                style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--gray-light)', borderRadius: '8px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)', resize: 'vertical', boxSizing: 'border-box' }}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                onClick={sendNewMessage}
+                disabled={composing || !composeStudentId || !composeText.trim()}
+                style={{ background: (composing || !composeStudentId || !composeText.trim()) ? 'var(--gray-light)' : 'var(--plum)', color: (composing || !composeStudentId || !composeText.trim()) ? 'var(--gray-mid)' : 'white', border: 'none', borderRadius: '8px', padding: '10px 24px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}
+              >
+                {composing ? 'Sending…' : 'Send Message'}
+              </button>
+              <button onClick={() => { setShowCompose(false); setComposeText(''); setComposeStudentId('') }}
+                style={{ background: 'transparent', color: 'var(--gray-mid)', border: '1px solid var(--gray-light)', borderRadius: '8px', padding: '10px 20px', fontSize: '14px', cursor: 'pointer' }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Announcement panel */}
         {showAnnouncement && (
