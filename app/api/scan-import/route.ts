@@ -95,15 +95,10 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // Build user text: if teacher specified problem numbers, only extract those
+      // Build user text: if teacher provided instructions, tell Claude to filter by them
       let userText = 'Extract all math problems from this worksheet. Return JSON only.'
       if (teacherInstructions) {
-        // Look for patterns like "#s: 45, 47, 51" or "problems 3-8" or "#45, 47"
-        const numbersMatch = teacherInstructions.match(/#s?:?\s*([\d,\s\-–and]+)/i)
-        if (numbersMatch) {
-          const rawNums = numbersMatch[1]
-          userText = `The teacher's instructions are: "${teacherInstructions}"\n\nOnly extract the specific problems listed in those instructions (${rawNums.trim()}). Skip all other problems on the page. Return JSON only.`
-        }
+        userText = `The teacher's assignment instructions are:\n"${teacherInstructions}"\n\nIf those instructions specify particular problem numbers (e.g. "#s: 45, 47, 51" or "problems 3–8"), extract ONLY those problems and skip everything else. If no specific numbers are mentioned, extract all problems. Return JSON only.`
       }
 
       const message = await anthropic.messages.create({

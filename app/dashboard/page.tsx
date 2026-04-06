@@ -7,6 +7,7 @@ import { generateClient } from 'aws-amplify/api'
 import { getCurrentUser } from 'aws-amplify/auth'
 import StudentNav from '../components/StudentNav'
 import { apiFetch } from '@/app/lib/apiFetch'
+import { useRoleGuard } from '@/app/hooks/useRoleGuard'
 const findPlanItemByLessonQuery = /* GraphQL */`
   query FindPlanItemByLesson($filter: ModelWeeklyPlanItemFilterInput) {
     listWeeklyPlanItems(filter: $filter, limit: 1) {
@@ -213,6 +214,7 @@ type WeeklyPlan = {
 }
 
 export default function Dashboard() {
+  const { checking } = useRoleGuard('student')
   const { signOut, authStatus } = useAuthenticator()
   const router = useRouter()
   const [weeklyPlans, setWeeklyPlans] = useState<WeeklyPlan[]>([])
@@ -242,24 +244,15 @@ export default function Dashboard() {
   const [dismissedAnnouncements, setDismissedAnnouncements] = useState<Set<string>>(new Set())
 
 
-  // On mount: verify session with getCurrentUser (reliable, not subject to authStatus
-  // race conditions on page refresh). On sign-out: authStatus transitions to
-  // 'unauthenticated' which is still caught by the second effect.
+  // useRoleGuard handles the initial redirect if not authenticated.
+  // This effect only fires once auth is confirmed (!checking) to catch mid-session sign-out.
   useEffect(() => {
-    let cancelled = false
-    getCurrentUser().catch(() => {
-      if (!cancelled) router.replace('/login')
-    })
-    return () => { cancelled = true }
-  }, [router])
-
-  useEffect(() => {
-    if (authStatus === 'unauthenticated') router.replace('/login')
-  }, [authStatus, router])
+    if (!checking && authStatus === 'unauthenticated') router.replace('/login')
+  }, [checking, authStatus, router])
 
 
   useEffect(() => {
-    if (authStatus !== 'authenticated') return
+    if (checking) return
 
     async function loadDashboard() {
       const currentUser = await getCurrentUser()
@@ -454,7 +447,7 @@ export default function Dashboard() {
     }
 
     loadDashboard()
-  }, [authStatus])
+  }, [checking])
 
   async function handlePicUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -530,6 +523,8 @@ export default function Dashboard() {
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) +
       ' at ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
   }
+
+  if (checking) return null
 
   // Pending approval waiting room
   if (pendingApproval) {
