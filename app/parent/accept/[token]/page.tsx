@@ -36,7 +36,7 @@ const listParentStudentLinks = /* GraphQL */`
 `
 
 type Invite = { id: string; token: string; studentEmail: string; studentName: string; used: boolean | null }
-type State = 'loading' | 'not-found' | 'already-used' | 'already-linked' | 'auth-fork' | 'ready' | 'confirming' | 'done' | 'error'
+type State = 'loading' | 'not-found' | 'already-used' | 'already-linked' | 'auth-fork' | 'confirming' | 'done' | 'error'
 
 export default function AcceptInvitePage() {
   const router = useRouter()
@@ -45,7 +45,6 @@ export default function AcceptInvitePage() {
 
   const [invite, setInvite] = useState<Invite | null>(null)
   const [state, setState] = useState<State>('loading')
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!token) return
@@ -55,7 +54,7 @@ export default function AcceptInvitePage() {
   async function loadEverything() {
     setState('loading')
 
-    // Step 1: Load the invite publicly (API key auth — works without login)
+    // Step 1: Load the invite publicly via API key (works without auth)
     let foundInvite: Invite | null = null
     try {
       const result = await (client.graphql as any)({
@@ -68,48 +67,55 @@ export default function AcceptInvitePage() {
       foundInvite = items[0]
       setInvite(foundInvite)
     } catch {
-      // API key query failed — fall back to auth-required flow
+      // API key query failed — continue to auth check
     }
 
     // Step 2: Check if the user is logged in
+    let userId: string | null = null
     try {
       const u = await getCurrentUser()
-      setCurrentUserId(u.userId)
+      userId = u.userId
       try { localStorage.removeItem('mwm:parentToken') } catch { /* ignore */ }
-
-      if (!foundInvite) {
-        // Couldn't load invite publicly — try with user auth now
-        await loadInviteAuthenticated(u.userId)
-        return
-      }
-
-      // Invite loaded — check if already used
-      if (foundInvite.used) {
-        const linkResult = await client.graphql({
-          query: listParentStudentLinks,
-          variables: { filter: { parentId: { eq: u.userId }, studentEmail: { eq: foundInvite.studentEmail } } }
-        }) as any
-        const links = linkResult.data.listParentStudents.items
-        setState(links.length > 0 ? 'already-linked' : 'already-used')
-        return
-      }
-
-      setState('ready')
     } catch {
-      // Not signed in
+      // Not signed in — show fork screen if we have invite data, else redirect to signup
       try { localStorage.setItem('mwm:parentToken', token) } catch { /* ignore */ }
-
-      if (foundInvite) {
-        // Show the fork screen — we have the student name to display
+      if (foundInvite && !foundInvite.used) {
         setState('auth-fork')
+      } else if (foundInvite?.used) {
+        setState('already-used')
       } else {
         // Couldn't load invite and not logged in — send to signup
         router.replace(`/signup?redirect=${encodeURIComponent(`/parent/accept/${token}`)}`)
       }
+      return
     }
+
+    // User is logged in — load invite via their auth token if public load failed
+    if (!foundInvite) {
+      await loadInviteAuthenticated(userId)
+      return
+    }
+
+    // Invite already used — check if this user is the one who claimed it
+    if (foundInvite.used) {
+      try {
+        const linkResult = await client.graphql({
+          query: listParentStudentLinks,
+          variables: { filter: { parentId: { eq: userId }, studentEmail: { eq: foundInvite.studentEmail } } }
+        }) as any
+        const links = linkResult.data.listParentStudents.items
+        setState(links.length > 0 ? 'already-linked' : 'already-used')
+      } catch {
+        setState('already-used')
+      }
+      return
+    }
+
+    // Invite is valid and not used — auto-confirm immediately
+    await performConfirmLink(userId, foundInvite)
   }
 
-  // Fallback: load invite using authenticated user's token (if public load failed)
+  // Fallback invite load using Cognito token (if API key load failed)
   async function loadInviteAuthenticated(userId: string) {
     try {
       const result = await client.graphql({
@@ -119,38 +125,41 @@ export default function AcceptInvitePage() {
       const items: Invite[] = result.data.listParentInvites.items
 
       if (items.length === 0) { setState('not-found'); return }
-
       const found = items[0]
       setInvite(found)
 
       if (found.used) {
-        const linkResult = await client.graphql({
-          query: listParentStudentLinks,
-          variables: { filter: { parentId: { eq: userId }, studentEmail: { eq: found.studentEmail } } }
-        }) as any
-        const links = linkResult.data.listParentStudents.items
-        setState(links.length > 0 ? 'already-linked' : 'already-used')
+        try {
+          const linkResult = await client.graphql({
+            query: listParentStudentLinks,
+            variables: { filter: { parentId: { eq: userId }, studentEmail: { eq: found.studentEmail } } }
+          }) as any
+          const links = linkResult.data.listParentStudents.items
+          setState(links.length > 0 ? 'already-linked' : 'already-used')
+        } catch {
+          setState('already-used')
+        }
         return
       }
 
-      setState('ready')
+      await performConfirmLink(userId, found)
     } catch (err) {
       console.error(err)
       setState('error')
     }
   }
 
-  async function confirmLink() {
-    if (!invite || !currentUserId) return
+  // Create the parent-student link and mark invite as used
+  async function performConfirmLink(userId: string, inv: Invite) {
     setState('confirming')
     try {
       await client.graphql({
         query: createParentStudent,
-        variables: { input: { parentId: currentUserId, studentEmail: invite.studentEmail, studentName: invite.studentName } }
+        variables: { input: { parentId: userId, studentEmail: inv.studentEmail, studentName: inv.studentName } }
       })
       await client.graphql({
         query: updateParentInvite,
-        variables: { input: { id: invite.id, used: true } }
+        variables: { input: { id: inv.id, used: true } }
       })
       setState('done')
     } catch (err) {
@@ -182,6 +191,15 @@ export default function AcceptInvitePage() {
           <p style={{ color: 'var(--gray-mid)' }}>Verifying invite…</p>
         )}
 
+        {state === 'confirming' && (
+          <>
+            <div style={{ width: '64px', height: '64px', background: 'rgba(123,79,166,0.1)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px' }}>
+              <span style={{ fontSize: '28px' }}>👨‍👩‍👧</span>
+            </div>
+            <p style={{ color: 'var(--gray-mid)', fontSize: '15px' }}>Connecting your account to {invite?.studentName}…</p>
+          </>
+        )}
+
         {state === 'not-found' && (
           <>
             <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔗</div>
@@ -194,10 +212,15 @@ export default function AcceptInvitePage() {
           <>
             <div style={{ fontSize: '48px', marginBottom: '16px' }}>⚠️</div>
             <div style={{ fontFamily: 'var(--font-display)', fontSize: '28px', color: 'var(--foreground)', marginBottom: '12px' }}>Link Already Used</div>
-            <p style={{ color: 'var(--gray-mid)', lineHeight: '1.6', marginBottom: '24px' }}>This invite has already been claimed. If this is a mistake, contact Melinda.</p>
-            <button onClick={() => router.push('/parent')} style={{ background: '#7B4FA6', color: 'white', padding: '12px 28px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '14px', fontWeight: 600 }}>
-              Go to Parent Portal
-            </button>
+            <p style={{ color: 'var(--gray-mid)', lineHeight: '1.6', marginBottom: '24px' }}>This invite has already been claimed. If you have an account, sign in to view your portal.</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <button onClick={() => router.push('/parent')} style={{ background: '#7B4FA6', color: 'white', padding: '12px 28px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '14px', fontWeight: 600 }}>
+                Go to Parent Portal
+              </button>
+              <button onClick={() => router.push(`/signup?mode=signin&redirect=${encodeURIComponent('/parent')}`)} style={{ background: 'transparent', color: '#0369a1', padding: '12px 28px', borderRadius: '8px', border: '1px solid #93C5FD', cursor: 'pointer', fontSize: '14px', fontWeight: 600 }}>
+                Sign In Instead
+              </button>
+            </div>
           </>
         )}
 
@@ -225,8 +248,7 @@ export default function AcceptInvitePage() {
               Melinda has given you parent access for <strong style={{ color: 'var(--foreground)' }}>{invite.studentName}</strong> in Math with Melinda.
             </p>
 
-            {/* Fork cards */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '8px', textAlign: 'left' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', textAlign: 'left' }}>
               {/* New parent */}
               <div style={{ background: 'var(--background)', border: '2px solid #7B4FA6', borderRadius: '12px', padding: '20px 24px' }}>
                 <div style={{ fontWeight: 700, fontSize: '15px', color: 'var(--foreground)', marginBottom: '6px' }}>
@@ -262,37 +284,6 @@ export default function AcceptInvitePage() {
           </>
         )}
 
-        {state === 'ready' && invite && (
-          <>
-            <div style={{ width: '72px', height: '72px', background: 'rgba(123,79,166,0.1)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px' }}>
-              <span style={{ fontSize: '32px' }}>👨‍👩‍👧</span>
-            </div>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: '28px', color: 'var(--foreground)', marginBottom: '12px' }}>
-              You&apos;re invited!
-            </div>
-            <p style={{ color: 'var(--gray-mid)', fontSize: '15px', lineHeight: '1.7', marginBottom: '32px' }}>
-              Melinda has given you parent access for <strong style={{ color: 'var(--foreground)' }}>{invite.studentName}</strong> in Math with Melinda.
-            </p>
-            <div style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: '12px', padding: '20px 24px', marginBottom: '32px', textAlign: 'left' }}>
-              <div style={{ fontSize: '12px', fontWeight: 700, color: '#7B4FA6', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '10px' }}>Your parent portal includes</div>
-              <ul style={{ margin: 0, paddingLeft: '20px', color: 'var(--foreground)', fontSize: '14px', lineHeight: '2.2' }}>
-                <li>All submitted assignments</li>
-                <li>Grades and teacher comments</li>
-                <li>Photos of submitted work</li>
-                <li>Progress and performance overview</li>
-              </ul>
-            </div>
-            <button onClick={confirmLink}
-              style={{ background: '#7B4FA6', color: 'white', padding: '14px 36px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '15px', fontWeight: 600, width: '100%' }}>
-              Connect to {invite.studentName}&apos;s Account
-            </button>
-          </>
-        )}
-
-        {state === 'confirming' && (
-          <p style={{ color: 'var(--gray-mid)' }}>Connecting your account…</p>
-        )}
-
         {state === 'done' && invite && (
           <>
             <div style={{ width: '72px', height: '72px', background: '#D1FAE5', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px' }}>
@@ -302,11 +293,11 @@ export default function AcceptInvitePage() {
             </div>
             <div style={{ fontFamily: 'var(--font-display)', fontSize: '28px', color: 'var(--foreground)', marginBottom: '12px' }}>You&apos;re all set!</div>
             <p style={{ color: 'var(--gray-mid)', lineHeight: '1.6', marginBottom: '32px' }}>
-              You&apos;re now connected to <strong style={{ color: 'var(--foreground)' }}>{invite.studentName}</strong>. Head to your parent portal to view their grades.
+              You&apos;re now connected to <strong style={{ color: 'var(--foreground)' }}>{invite.studentName}</strong>. Head to your parent portal to view their grades and assignments.
             </p>
             <button onClick={() => router.push('/parent')}
               style={{ background: '#7B4FA6', color: 'white', padding: '14px 36px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '15px', fontWeight: 600, width: '100%' }}>
-              Go to Parent Portal
+              Go to Parent Portal →
             </button>
           </>
         )}

@@ -42,10 +42,12 @@ export default function JoinPage() {
 
   async function loadInvite() {
     try {
-      const res = await (client.graphql({
+      // Use API key auth so unauthenticated students can see their invite
+      const res = await (client.graphql as any)({
         query: FIND_INVITE,
-        variables: { filter: { token: { eq: token } } }
-      }) as any)
+        variables: { filter: { token: { eq: token } } },
+        authMode: 'apiKey',
+      })
       const items: Invite[] = res.data.listStudentInvites.items
       if (items.length === 0) { setState('not-found'); return }
       const found = items[0]
@@ -105,7 +107,7 @@ export default function JoinPage() {
             <div style={{ fontSize: '48px', marginBottom: '16px' }}>✅</div>
             <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '28px', color: 'var(--foreground)', marginBottom: '12px' }}>Already Claimed</h1>
             <p style={{ color: 'var(--gray-mid)', lineHeight: '1.6', marginBottom: '24px' }}>This invite has already been used. If you already have an account, sign in below.</p>
-            <button onClick={() => router.push('/login')} style={{ background: '#7B4FA6', color: 'white', border: 'none', borderRadius: '8px', padding: '12px 28px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>
+            <button onClick={() => router.push(`/signup?mode=signin&redirect=${encodeURIComponent('/dashboard')}`)} style={{ background: '#7B4FA6', color: 'white', border: 'none', borderRadius: '8px', padding: '12px 28px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>
               Sign In
             </button>
           </>
@@ -152,7 +154,7 @@ export default function JoinPage() {
             </button>
             <p style={{ fontSize: '12px', color: 'var(--gray-mid)' }}>
               Already have an account?{' '}
-              <button onClick={() => router.push(`/login?redirect=${encodeURIComponent(`/profile/setup?token=${token}`)}`)} style={{ background: 'none', border: 'none', color: '#7B4FA6', cursor: 'pointer', fontSize: '12px', fontWeight: 600, padding: 0 }}>
+              <button onClick={() => router.push(`/signup?mode=signin&redirect=${encodeURIComponent(`/profile/setup?token=${token}`)}`)} style={{ background: 'none', border: 'none', color: '#7B4FA6', cursor: 'pointer', fontSize: '12px', fontWeight: 600, padding: 0 }}>
                 Sign in instead
               </button>
             </p>
