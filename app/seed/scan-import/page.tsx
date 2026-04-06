@@ -139,6 +139,29 @@ export default function ScanImportPage() {
     setImporting(true)
     setImportError('')
     try {
+      // Upload scan pages to S3 first (if any images — skip PDFs for scan pages)
+      const imageFiles = files.filter(f => f.type.startsWith('image/'))
+      if (imageFiles.length > 0) {
+        const keys: string[] = []
+        for (let i = 0; i < imageFiles.length; i++) {
+          const fd = new FormData()
+          fd.append('file', imageFiles[i])
+          fd.append('lessonId', selectedLesson)
+          fd.append('index', String(i))
+          const r = await apiFetch('/api/scan-upload', { method: 'POST', body: fd })
+          if (r.ok) {
+            const { key } = await r.json()
+            keys.push(key)
+          }
+        }
+        if (keys.length > 0) {
+          await client.graphql({
+            query: updateLessonTemplate,
+            variables: { input: { id: selectedLesson, worksheetUrl: JSON.stringify(keys) } },
+          })
+        }
+      }
+
       if (clearFirst) {
         const { listAssignmentQuestions } = await import('../../../src/graphql/queries')
         const { deleteAssignmentQuestion } = await import('../../../src/graphql/mutations')

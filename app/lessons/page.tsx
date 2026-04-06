@@ -54,6 +54,7 @@ const getLessonTemplateQuery = /* GraphQL */`
       assignmentType
       lessonNumber
       instructions
+      worksheetUrl
       questions {
         items {
           id
@@ -130,6 +131,7 @@ type LessonTemplateData = {
   assignmentType: string | null
   lessonNumber: number | null
   instructions: string | null
+  worksheetUrl: string | null
   questions: { items: AssignmentQuestion[] }
 }
 
@@ -181,6 +183,9 @@ function LessonPageInner() {
   const [lessonTemplate, setLessonTemplate] = useState<LessonTemplateData | null>(null)
   const [answers, setAnswers] = useState<Record<string, string>>({})
   const [studentName, setStudentName] = useState('')
+
+  const [scanPageUrls, setScanPageUrls] = useState<string[]>([])
+  const [scanPagesExpanded, setScanPagesExpanded] = useState(false)
 
   const [existingSubmissionId, setExistingSubmissionId] = useState<string | null>(null)
   const [isReturned, setIsReturned] = useState(false)
@@ -251,6 +256,22 @@ function LessonPageInner() {
             if (tpl) {
               tpl.questions.items.sort((a, b) => a.order - b.order)
               setLessonTemplate(tpl)
+              // Fetch presigned URLs for scan pages if worksheetUrl is a JSON array of S3 keys
+              if (tpl.worksheetUrl?.startsWith('[')) {
+                try {
+                  const keys: string[] = JSON.parse(tpl.worksheetUrl)
+                  const urls = await Promise.all(keys.map(async key => {
+                    const r = await apiFetch('/api/view-submission', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ key }),
+                    })
+                    const d = await r.json()
+                    return d.url as string
+                  }))
+                  setScanPageUrls(urls.filter(Boolean))
+                } catch { /* non-critical */ }
+              }
             }
           } catch (err) {
             console.error('Error fetching lesson template:', err)
@@ -901,6 +922,61 @@ function LessonPageInner() {
               <div style={{ background: 'var(--plum-light)', border: '1px solid var(--plum-mid)', borderRadius: 'var(--radius)', padding: '20px 24px', marginBottom: '32px' }}>
                 <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '16px', color: 'var(--plum)', marginBottom: '8px' }}>Instructions</h2>
                 <p style={{ fontSize: '14px', color: 'var(--foreground)', lineHeight: '1.7' }}>{lessonTemplate?.instructions || lesson?.instructions}</p>
+              </div>
+            )}
+
+            {scanPageUrls.length > 0 && (
+              <div style={{ marginBottom: '32px' }}>
+                <button
+                  type="button"
+                  onClick={() => setScanPagesExpanded(e => !e)}
+                  style={{
+                    width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    background: 'var(--plum-light)', border: '1px solid var(--plum-mid)',
+                    borderRadius: scanPagesExpanded ? 'var(--radius) var(--radius) 0 0' : 'var(--radius)',
+                    padding: '14px 20px', cursor: 'pointer', transition: 'border-radius 0.15s',
+                  }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '10px', fontFamily: 'var(--font-display)', fontSize: '16px', color: 'var(--plum)', fontWeight: 600 }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>
+                    </svg>
+                    Worksheet Reference
+                    <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--plum)', opacity: 0.7 }}>
+                      ({scanPageUrls.length} {scanPageUrls.length === 1 ? 'page' : 'pages'})
+                    </span>
+                  </span>
+                  <svg
+                    width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--plum)" strokeWidth="2.5"
+                    style={{ transform: scanPagesExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s', flexShrink: 0 }}>
+                    <polyline points="6 9 12 15 18 9"/>
+                  </svg>
+                </button>
+                {scanPagesExpanded && (
+                  <div style={{
+                    border: '1px solid var(--plum-mid)', borderTop: 'none',
+                    borderRadius: '0 0 var(--radius) var(--radius)',
+                    padding: '20px', background: 'var(--background)',
+                    display: 'flex', flexDirection: 'column', gap: '20px',
+                  }}>
+                    <p style={{ margin: 0, fontSize: '12px', color: 'var(--gray-mid)' }}>
+                      Use these worksheet images to see the original problems, diagrams, and graphs.
+                    </p>
+                    {scanPageUrls.map((url, i) => (
+                      <div key={i}>
+                        {scanPageUrls.length > 1 && (
+                          <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--gray-mid)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '8px' }}>
+                            Page {i + 1}
+                          </div>
+                        )}
+                        <img
+                          src={url}
+                          alt={`Worksheet page ${i + 1}`}
+                          style={{ width: '100%', borderRadius: '8px', border: '1px solid var(--gray-light)', display: 'block' }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 

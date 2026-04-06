@@ -19,13 +19,15 @@ export type ScanImportResult = {
 
 const SYSTEM_PROMPT = `You are extracting math problems from a scanned worksheet page for a homeschool math learning platform.
 
+The app renders math using KaTeX with \\(...\\) for inline math and \\[...\\] for display/block math.
+
 Your job is to return a JSON object with this exact shape:
 {
   "instructions": "optional string — only include if there is a top-level instruction for the whole page, like a watch-this-video note",
   "questions": [
     {
       "type": "show_work" | "number" | "multiple_choice" | "section_header" | "instructions",
-      "text": "the question text",
+      "text": "the question text, with math in \\(...\\) delimiters",
       "answer": "the correct answer if visible (often not shown)",
       "choices": "for multiple_choice only: one choice per line",
       "hasImage": true or false
@@ -33,19 +35,27 @@ Your job is to return a JSON object with this exact shape:
   ]
 }
 
-Rules:
-- Use "section_header" for section labels like "11.3 Solve." or "11.5 Find the missing side."  Include the full section instruction text in "text".
-- Use "show_work" for problems where students must show work (equations, radical simplification, geometry, proofs, word problems, anything requiring steps).
-- Use "number" only for problems where the answer is a single number with no work needed.
-- Use "multiple_choice" for problems with lettered or numbered answer choices.
-- Always prefix question text with the problem number exactly as printed, e.g. "39. 7√10 + 3√10" or "51. Find the missing side."
-- For math symbols use Unicode: √ for square root, ² for squared, ³ for cubed, ∠ for angle, π for pi, ≠ for not-equal, ≤ ≥ for inequalities. Use fractions like (w²)/(-5) for complex fractions.
-- For problems involving a triangle diagram: describe the triangle in the question text with all labeled side lengths and angles. Example: "51. Right triangle with legs 12 and 9. Find the length of the missing side (hypotenuse)." Set hasImage to true.
-- For problems involving a coordinate grid: describe what points or shapes are shown. Example: "55. Find the distance between the two points plotted on the coordinate grid." Set hasImage to true.
-- For trig problems with a labeled diagram: include all side lengths and angle labels in the text. Example: "59. For the triangle with sides A=35, B=21, C=28 (where C is the vertex angle): sin ∠A = ___, cos ∠A = ___, tan ∠A = ___" Set hasImage to true.
-- Set hasImage to false for pure text/equation problems.
-- Do not include blank answer lines (___) in the extracted text — just the question stem.
-- Return ONLY valid JSON. No markdown, no commentary, no code fences.`
+Math formatting rules (CRITICAL — the renderer only processes \\(...\\) delimiters):
+- Wrap ALL math expressions in \\( and \\). Plain text outside stays as-is.
+- Use \\frac{numerator}{denominator} for fractions. Example: \\(\\frac{w^2}{-5}\\) + 9 = -116
+- Use ^ for exponents: w^2, x^3. Use _ for subscripts when needed.
+- Use \\sqrt{...} for square roots: \\(7\\sqrt{10} + 3\\sqrt{10}\\)
+- Use \\angle for angle symbol, \\pi for pi, \\leq \\geq \\neq for inequalities.
+- Use \\cdot or \\times for multiplication when needed.
+- Mixed text + math example: "\\(\\frac{w^2}{-5}\\) + 9 = -116" or "Find \\(\\sin \\angle A\\)."
+- For pure equation lines (nothing but math), you may use \\[...\\] for centered display: "\\[\\frac{x^2}{4} - 3 = 5\\]"
+
+Problem text rules:
+- Always prefix with the problem number exactly as printed: "51. ...", "39. ..."
+- Do NOT include blank answer lines (___) — just the question stem.
+
+Image/diagram rules:
+- For triangle diagrams: set hasImage true. In the text, include ALL labeled measurements exactly as shown (exact numbers from the image, not approximations). Example: "51. \\(\\triangle ABC\\) with \\(AB = 35\\), \\(BC = 21\\), \\(AC = 28\\), right angle at \\(C\\). Find \\(\\sin \\angle A\\), \\(\\cos \\angle A\\), \\(\\tan \\angle A\\)."
+- For coordinate grid problems: set hasImage true. Read the EXACT grid coordinates of every labeled point — read along the grid lines carefully, do not estimate. Example: "55. Find the distance between \\((6, 7)\\) and \\((-6, -5)\\)."
+- For all other diagram problems: set hasImage true and include every labeled value from the diagram.
+- For pure text/equation problems with no diagram: set hasImage false.
+
+Return ONLY valid JSON. No markdown, no commentary, no code fences.`
 
 export async function POST(req: NextRequest) {
   const auth = await requireTeacher(req)

@@ -1068,7 +1068,9 @@ export default function LessonLibraryPage() {
                               <div style={{ marginBottom: '12px', padding: '12px 16px', background: 'var(--white)', border: '1px solid var(--gray-light)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                 <div>
                                   <div style={{ fontSize: '12px', fontWeight: 600, color: '#2e7d32', marginBottom: '2px' }}>✓ Worksheet attached</div>
-                                  <a href={editForm.worksheetUrl} target="_blank" rel="noreferrer" style={{ fontSize: '11px', color: 'var(--plum)', fontFamily: 'monospace' }}>View PDF ↗</a>
+                                  {editForm.worksheetUrl.startsWith('[')
+                                    ? <span style={{ fontSize: '11px', color: 'var(--gray-mid)', fontFamily: 'monospace' }}>Scan pages imported ({(() => { try { return JSON.parse(editForm.worksheetUrl).length } catch { return '?' } })()} pages)</span>
+                                    : <a href={editForm.worksheetUrl} target="_blank" rel="noreferrer" style={{ fontSize: '11px', color: 'var(--plum)', fontFamily: 'monospace' }}>View PDF ↗</a>}
                                 </div>
                                 <button onClick={() => { if (window.confirm('Are you sure you want to remove this worksheet?')) setEditForm(f => ({ ...f, worksheetUrl: '' })) }} style={{ background: 'none', border: '1px solid #e05252', color: '#e05252', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', padding: '4px 10px', whiteSpace: 'nowrap', marginLeft: '16px' }}>
                                   Remove
