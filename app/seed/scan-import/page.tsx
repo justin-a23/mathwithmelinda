@@ -121,6 +121,7 @@ export default function ScanImportPage() {
     try {
       const formData = new FormData()
       files.forEach(f => formData.append('images', f))
+      if (instructions.trim()) formData.append('instructions', instructions.trim())
       const res = await apiFetch('/api/scan-import', { method: 'POST', body: formData })
       const json = await res.json()
       if (!res.ok) { setExtractError(json.error || 'Extraction failed'); return }

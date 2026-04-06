@@ -1,6 +1,6 @@
 'use client'
 
-import { signUp, confirmSignUp, signIn } from 'aws-amplify/auth'
+import { signUp, confirmSignUp, signIn, signOut } from 'aws-amplify/auth'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useState, Suspense } from 'react'
 
@@ -74,6 +74,7 @@ function SignupInner() {
     if (!email.trim() || !password) { setError('Please enter your email and password.'); return }
     setSubmitting(true)
     try {
+      try { await signOut() } catch { /* no existing session */ }
       await signIn({ username: email.trim().toLowerCase(), password })
       router.replace(redirect)
     } catch (err: any) {
@@ -96,6 +97,7 @@ function SignupInner() {
     setSubmitting(true)
     try {
       await confirmSignUp({ username: email.trim().toLowerCase(), confirmationCode: code.trim() })
+      try { await signOut() } catch { /* no existing session */ }
       await signIn({ username: email.trim().toLowerCase(), password })
       router.replace(redirect)
     } catch (err: any) {

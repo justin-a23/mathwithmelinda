@@ -242,9 +242,17 @@ export default function Dashboard() {
   const [dismissedAnnouncements, setDismissedAnnouncements] = useState<Set<string>>(new Set())
 
 
-  // authStatus is the reliable way to detect sign-out in Amplify UI React v6.
-  // After signOut(), user becomes undefined (not null), so === null check never fires.
-  // authStatus transitions to 'unauthenticated' which reliably triggers the redirect.
+  // On mount: verify session with getCurrentUser (reliable, not subject to authStatus
+  // race conditions on page refresh). On sign-out: authStatus transitions to
+  // 'unauthenticated' which is still caught by the second effect.
+  useEffect(() => {
+    let cancelled = false
+    getCurrentUser().catch(() => {
+      if (!cancelled) router.replace('/login')
+    })
+    return () => { cancelled = true }
+  }, [router])
+
   useEffect(() => {
     if (authStatus === 'unauthenticated') router.replace('/login')
   }, [authStatus, router])

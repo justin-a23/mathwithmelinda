@@ -54,6 +54,7 @@ export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData()
     const files = formData.getAll('images') as File[]
+    const teacherInstructions = (formData.get('instructions') as string | null) || ''
 
     if (!files.length) {
       return NextResponse.json({ error: 'No images provided' }, { status: 400 })
@@ -94,6 +95,17 @@ export async function POST(req: NextRequest) {
         }
       }
 
+      // Build user text: if teacher specified problem numbers, only extract those
+      let userText = 'Extract all math problems from this worksheet. Return JSON only.'
+      if (teacherInstructions) {
+        // Look for patterns like "#s: 45, 47, 51" or "problems 3-8" or "#45, 47"
+        const numbersMatch = teacherInstructions.match(/#s?:?\s*([\d,\s\-–and]+)/i)
+        if (numbersMatch) {
+          const rawNums = numbersMatch[1]
+          userText = `The teacher's instructions are: "${teacherInstructions}"\n\nOnly extract the specific problems listed in those instructions (${rawNums.trim()}). Skip all other problems on the page. Return JSON only.`
+        }
+      }
+
       const message = await anthropic.messages.create({
         model: 'claude-opus-4-5',
         max_tokens: 4096,
@@ -105,7 +117,7 @@ export async function POST(req: NextRequest) {
               contentBlock,
               {
                 type: 'text',
-                text: 'Extract all math problems from this worksheet. Return JSON only.',
+                text: userText,
               },
             ],
           },
