@@ -84,7 +84,7 @@ export default function ScanImportPage() {
 
   // ── File handling ─────────────────────────────────────────────────────────
   function addFiles(newFiles: FileList | File[]) {
-    const arr = Array.from(newFiles).filter(f => f.type.startsWith('image/'))
+    const arr = Array.from(newFiles).filter(f => f.type.startsWith('image/') || f.type === 'application/pdf')
     if (!arr.length) return
     setFiles(prev => [...prev, ...arr])
     setQuestions([])
@@ -309,13 +309,13 @@ export default function ScanImportPage() {
                   transition: 'all 0.15s',
                   marginBottom: files.length ? '16px' : 0,
                 }}>
-                <input ref={fileInputRef} type="file" accept="image/*" multiple style={{ display: 'none' }}
+                <input ref={fileInputRef} type="file" accept="image/*,application/pdf" multiple style={{ display: 'none' }}
                   onChange={e => e.target.files && addFiles(e.target.files)} />
                 <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--gray-mid)" strokeWidth="1.5" style={{ marginBottom: '8px' }}>
                   <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
                 </svg>
                 <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--foreground)', marginBottom: '3px' }}>Drop scans here or click to select</div>
-                <div style={{ fontSize: '12px', color: 'var(--gray-mid)' }}>JPG, PNG, HEIC · drop all pages at once</div>
+                <div style={{ fontSize: '12px', color: 'var(--gray-mid)' }}>JPG, PNG, HEIC, PDF · drop all pages at once</div>
               </div>
 
               {/* Thumbnails */}

@@ -63,22 +63,36 @@ export async function POST(req: NextRequest) {
     let globalInstructions: string | undefined
 
     for (const file of files) {
-      // Validate file type
-      if (!['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'].includes(file.type)) {
+      const isPdf = file.type === 'application/pdf'
+      const isImage = file.type.startsWith('image/')
+
+      if (!isPdf && !isImage) {
         return NextResponse.json({ error: `Unsupported file type: ${file.type}` }, { status: 400 })
       }
-      // 20MB limit per image
+      // 20MB limit
       if (file.size > 20 * 1024 * 1024) {
-        return NextResponse.json({ error: `Image too large (max 20MB): ${file.name}` }, { status: 400 })
+        return NextResponse.json({ error: `File too large (max 20MB): ${file.name}` }, { status: 400 })
       }
 
       const arrayBuffer = await file.arrayBuffer()
       const base64 = Buffer.from(arrayBuffer).toString('base64')
 
-      // Normalize media type for Claude API
-      let mediaType: 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif' = 'image/jpeg'
-      if (file.type === 'image/png') mediaType = 'image/png'
-      else if (file.type === 'image/webp') mediaType = 'image/webp'
+      // Build content block — PDFs use 'document', images use 'image'
+      let contentBlock: any
+      if (isPdf) {
+        contentBlock = {
+          type: 'document',
+          source: { type: 'base64', media_type: 'application/pdf', data: base64 },
+        }
+      } else {
+        let mediaType: 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif' = 'image/jpeg'
+        if (file.type === 'image/png') mediaType = 'image/png'
+        else if (file.type === 'image/webp') mediaType = 'image/webp'
+        contentBlock = {
+          type: 'image',
+          source: { type: 'base64', media_type: mediaType, data: base64 },
+        }
+      }
 
       const message = await anthropic.messages.create({
         model: 'claude-opus-4-5',
@@ -88,13 +102,10 @@ export async function POST(req: NextRequest) {
           {
             role: 'user',
             content: [
-              {
-                type: 'image',
-                source: { type: 'base64', media_type: mediaType, data: base64 },
-              },
+              contentBlock,
               {
                 type: 'text',
-                text: 'Extract all math problems from this worksheet page. Return JSON only.',
+                text: 'Extract all math problems from this worksheet. Return JSON only.',
               },
             ],
           },
