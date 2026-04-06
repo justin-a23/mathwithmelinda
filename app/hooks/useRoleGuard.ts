@@ -23,7 +23,11 @@ export function useRoleGuard(requiredRole: Role): { checking: boolean } {
     fetchAuthSession()
       .then(session => {
         if (cancelled) return
-        const groups = (session.tokens?.accessToken?.payload['cognito:groups'] as string[]) ?? []
+        if (!session.tokens?.accessToken) {
+          router.replace('/login')
+          return
+        }
+        const groups = (session.tokens.accessToken.payload['cognito:groups'] as string[]) ?? []
         const isTeacher = groups.includes('teacher')
 
         if (requiredRole === 'teacher' && !isTeacher) {

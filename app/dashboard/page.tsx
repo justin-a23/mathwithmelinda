@@ -215,7 +215,7 @@ type WeeklyPlan = {
 
 export default function Dashboard() {
   const { checking } = useRoleGuard('student')
-  const { signOut, authStatus } = useAuthenticator()
+  const { signOut } = useAuthenticator()
   const router = useRouter()
   const [weeklyPlans, setWeeklyPlans] = useState<WeeklyPlan[]>([])
   const [loading, setLoading] = useState(true)
@@ -242,13 +242,6 @@ export default function Dashboard() {
   const [upcomingMeetings, setUpcomingMeetings] = useState<Array<{ id: string; topic: string; joinUrl: string; startTime: string; durationMinutes: number }>>([])
   const [activeAnnouncements, setActiveAnnouncements] = useState<Array<{ id: string; subject: string; message: string; sentAt: string }>>([])
   const [dismissedAnnouncements, setDismissedAnnouncements] = useState<Set<string>>(new Set())
-
-
-  // useRoleGuard handles the initial redirect if not authenticated.
-  // This effect only fires once auth is confirmed (!checking) to catch mid-session sign-out.
-  useEffect(() => {
-    if (!checking && authStatus === 'unauthenticated') router.replace('/login')
-  }, [checking, authStatus, router])
 
 
   useEffect(() => {
