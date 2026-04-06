@@ -12,7 +12,7 @@ type Course = { id: string; title: string }
 type Lesson = { id: string; lessonNumber: number; title: string }
 
 type ExtractedQuestion = {
-  type: 'show_work' | 'number' | 'multiple_choice' | 'section_header'
+  type: 'show_work' | 'number' | 'multiple_choice' | 'section_header' | 'instructions'
   text: string
   answer?: string
   choices?: string
