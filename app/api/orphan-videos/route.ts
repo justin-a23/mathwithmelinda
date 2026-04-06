@@ -6,7 +6,7 @@ const accessKeyId = process.env.MWM_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_
 const secretAccessKey = process.env.MWM_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY || ''
 const BUCKET = 'mathwithmelinda-videos'
 const APPSYNC = 'https://irzsqprjcjco5kq7w7g72zm7qy.appsync-api.us-east-1.amazonaws.com/graphql'
-const API_KEY = process.env.APPSYNC_API_KEY!
+const API_KEY = process.env.APPSYNC_API_KEY || 'da2-qgdyi5epjjarbjhwhqq7mrdbsy'
 
 const COURSE_FOLDER: Record<string, string> = {
   'Algebra 1': 'algebra1',

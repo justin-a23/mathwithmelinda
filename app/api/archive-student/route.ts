@@ -18,9 +18,9 @@ function makeCognitoClient() {
   return new CognitoIdentityProviderClient({ region: 'us-east-1' })
 }
 
-const USER_POOL_ID = process.env.COGNITO_USER_POOL_ID!
+const USER_POOL_ID = process.env.COGNITO_USER_POOL_ID || 'us-east-1_LvIY8oPmV'
 const APPSYNC_ENDPOINT = 'https://irzsqprjcjco5kq7w7g72zm7qy.appsync-api.us-east-1.amazonaws.com/graphql'
-const APPSYNC_API_KEY = process.env.APPSYNC_API_KEY!
+const APPSYNC_API_KEY = process.env.APPSYNC_API_KEY || 'da2-qgdyi5epjjarbjhwhqq7mrdbsy'
 
 /**
  * Marks a StudentProfile as archived in DynamoDB — does NOT delete it.
