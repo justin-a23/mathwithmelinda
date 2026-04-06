@@ -95,7 +95,7 @@ export default function TeacherNav({ ungradedCount: propUngraded, unreadCount: p
   const isGrades = pathname === '/teacher/grades'
   const isSchedule = pathname === '/teacher/schedule'
   const isMessages = pathname === '/teacher/messages'
-  const isLessons = pathname === '/teacher' || pathname.startsWith('/teacher/library')
+  const isLessons = pathname.startsWith('/teacher/library')
   const isGradebook = pathname === '/teacher/gradebook'
   const isStudents = pathname === '/teacher/students'
   const isTerms = pathname === '/teacher/semesters'
@@ -224,7 +224,7 @@ export default function TeacherNav({ ungradedCount: propUngraded, unreadCount: p
         {primaryBtn('Grade Work', '/teacher/grades', isGrades, ungraded)}
         {primaryBtn('Schedule', '/teacher/schedule', isSchedule)}
         {primaryBtn('Messages', '/teacher/messages', isMessages, unread)}
-        {primaryBtn('Manage Lessons', '/teacher', isLessons)}
+        {primaryBtn('Manage Lessons', '/teacher/library', isLessons)}
       </div>
 
       {/* Divider */}
