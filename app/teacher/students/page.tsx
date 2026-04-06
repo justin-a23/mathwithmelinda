@@ -654,23 +654,37 @@ export default function StudentsPage() {
       setInvites(prev => [result.data.createParentInvite, ...prev])
       const parentLink = `${window.location.origin}/parent/accept/${token}`
       const parentFirstName = inviteParentFirstName.trim() || 'there'
+      // Check if this parent email already has other invites (returning parent)
+      const isReturningParent = invites.some(i =>
+        i.parentEmail?.toLowerCase() === inviteParentEmail.trim().toLowerCase() &&
+        i.studentEmail.toLowerCase() !== inviteParentStudent.email.toLowerCase()
+      )
+      const emailSubject = isReturningParent
+        ? `${fullName} has also been enrolled in Math with Melinda`
+        : `${fullName} has been enrolled in Math with Melinda`
+      const emailBody = isReturningParent
+        ? `<p style="color:#555;font-size:15px;line-height:1.6"><strong>${fullName}</strong> has also been enrolled in Math with Melinda. Click below to connect them to your existing parent account — <strong>sign in</strong> (don't create a new account) to add ${fullName} to your portal.</p>`
+        : `<p style="color:#555;font-size:15px;line-height:1.6"><strong>${fullName}</strong> is enrolled in Math with Melinda. Create your parent account to track their grades, assignments, and feedback from Melinda.</p>`
+      const emailText = isReturningParent
+        ? `Hi ${parentFirstName}!\n\n${fullName} has also been enrolled in Math with Melinda.\n\nSign in to your existing account to connect them:\n${parentLink}`
+        : `Hi ${parentFirstName}!\n\n${fullName} is enrolled in Math with Melinda. Set up your parent account:\n${parentLink}`
       // Fire invite email
       fetch('/api/send-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           to: inviteParentEmail.trim().toLowerCase(),
-          subject: `${fullName} has been enrolled in Math with Melinda`,
+          subject: emailSubject,
           html: `<div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:32px 24px">
             <div style="background:#1E1E2E;padding:16px 24px;border-radius:8px;margin-bottom:28px">
               <span style="color:white;font-size:18px;font-weight:600">Math with Melinda</span>
             </div>
             <h2 style="color:#1E1E2E">Hi ${parentFirstName}!</h2>
-            <p style="color:#555;font-size:15px;line-height:1.6"><strong>${fullName}</strong> is enrolled in Math with Melinda. Set up your parent account to track their grades, assignments, and feedback from Melinda.</p>
-            <a href="${parentLink}" style="display:inline-block;background:#0369a1;color:white;padding:13px 28px;border-radius:8px;font-size:15px;font-weight:600;text-decoration:none;margin:16px 0">Set Up My Parent Account →</a>
+            ${emailBody}
+            <a href="${parentLink}" style="display:inline-block;background:#0369a1;color:white;padding:13px 28px;border-radius:8px;font-size:15px;font-weight:600;text-decoration:none;margin:16px 0">${isReturningParent ? 'Sign In & Connect →' : 'Set Up My Parent Account →'}</a>
             <p style="color:#aaa;font-size:13px;word-break:break-all">${parentLink}</p>
           </div>`,
-          text: `Hi ${parentFirstName}!\n\n${fullName} is enrolled in Math with Melinda. Set up your parent account:\n${parentLink}`,
+          text: emailText,
         }),
       }).catch(() => {})
       setInviteParentFirstName('')
@@ -824,38 +838,48 @@ export default function StudentsPage() {
       if (coopParentEmail.trim() && parentLink) {
         try {
           const parentFirstName = coopParentFirstName.trim() || 'there'
+          // Check if this parent already has an invite for another student (returning parent)
+          const isReturningParent = invites.some(i =>
+            i.parentEmail?.toLowerCase() === coopParentEmail.trim().toLowerCase()
+          )
+          const parentSubject = isReturningParent
+            ? `${studentFullName} has also been enrolled in Math with Melinda`
+            : `${studentFullName} has been enrolled in Math with Melinda`
+          const parentBodyCopy = isReturningParent
+            ? `<strong>${studentFullName}</strong> has also been enrolled in Math with Melinda as a Co-op Student${courseTitle ? ` in <strong>${courseTitle}</strong>` : ''}. <strong>Sign in to your existing account</strong> to connect them — don't create a new account.`
+            : `<strong>${studentFullName}</strong> has been enrolled in Math with Melinda as a Co-op Student${courseTitle ? ` in <strong>${courseTitle}</strong>` : ''}. Set up your parent account to track their grades, assignments, and teacher feedback.`
+          const parentButtonText = isReturningParent ? 'Sign In & Connect →' : 'Set Up My Parent Account →'
           const parentEmailRes = await fetch('/api/send-email', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               to: coopParentEmail.trim().toLowerCase(),
-              subject: `${studentFullName} has been enrolled in Math with Melinda`,
+              subject: parentSubject,
               html: `
                 <div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:32px 24px;background:#fff">
                   <div style="background:#1E1E2E;padding:16px 24px;border-radius:8px;margin-bottom:28px">
                     <span style="color:white;font-size:18px;font-weight:600">Math with Melinda</span>
                   </div>
                   <h1 style="font-size:24px;color:#1E1E2E;margin:0 0 8px">Hi ${parentFirstName}!</h1>
-                  <p style="color:#555;font-size:15px;line-height:1.6;margin:0 0 20px">
-                    <strong>${studentFullName}</strong> has been enrolled in Math with Melinda as a Co-op Student${courseTitle ? ` in <strong>${courseTitle}</strong>` : ''}.
-                    Set up your parent account to track their grades, assignments, and teacher feedback.
-                  </p>
+                  <p style="color:#555;font-size:15px;line-height:1.6;margin:0 0 20px">${parentBodyCopy}</p>
                   <a href="${parentLink}" style="display:inline-block;background:#0369a1;color:white;padding:13px 28px;border-radius:8px;font-size:15px;font-weight:600;text-decoration:none;margin-bottom:24px">
-                    Set Up My Parent Account →
+                    ${parentButtonText}
                   </a>
                   <p style="color:#888;font-size:13px;line-height:1.6;margin:0 0 8px">Or copy this link into your browser:</p>
                   <p style="color:#0369a1;font-size:13px;word-break:break-all;margin:0 0 28px">${parentLink}</p>
-                  <div style="border:1px solid #e5e7eb;border-radius:8px;padding:16px 20px;margin-bottom:24px">
+                  ${!isReturningParent ? `<div style="border:1px solid #e5e7eb;border-radius:8px;padding:16px 20px;margin-bottom:24px">
                     <p style="font-size:12px;font-weight:700;color:#0369a1;text-transform:uppercase;letter-spacing:0.5px;margin:0 0 10px">Your parent portal includes</p>
                     <ul style="margin:0;padding-left:18px;color:#444;font-size:14px;line-height:2">
                       <li>View grades and teacher feedback</li>
                       <li>See submitted assignments</li>
                       <li>Track progress and performance</li>
                     </ul>
-                  </div>
+                  </div>` : ''}
                   <p style="color:#aaa;font-size:12px;margin:0">Questions? Contact Melinda at melinda@mathwithmelinda.com</p>
                 </div>`,
-              text: `Hi ${parentFirstName}!\n\n${studentFullName} has been enrolled in Math with Melinda${courseTitle ? ` in ${courseTitle}` : ''}.\n\nSet up your parent account here:\n${parentLink}`,
+              text: isReturningParent
+                ? `Hi ${parentFirstName}!\n\n${studentFullName} has also been enrolled in Math with Melinda${courseTitle ? ` in ${courseTitle}` : ''}.\n\nSign in to your existing account to connect them:\n${parentLink}`
+                : `Hi ${parentFirstName}!\n\n${studentFullName} has been enrolled in Math with Melinda${courseTitle ? ` in ${courseTitle}` : ''}.\n\nSet up your parent account here:\n${parentLink}`,
             }),
           })
           emailSentToParent = parentEmailRes.ok
@@ -1699,6 +1723,24 @@ export default function StudentsPage() {
                   <div style={{ gridColumn: '1 / -1' }}>
                     <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--gray-mid)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>Parent Email</label>
                     <input type="email" value={coopParentEmail} onChange={e => setCoopParentEmail(e.target.value)} style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--gray-light)', borderRadius: '6px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)', boxSizing: 'border-box' }} />
+                    {/* Duplicate parent email warning */}
+                    {(() => {
+                      const emailLower = coopParentEmail.trim().toLowerCase()
+                      if (!emailLower) return null
+                      const existingInvites = invites.filter(i => i.parentEmail?.toLowerCase() === emailLower)
+                      if (existingInvites.length === 0) return null
+                      const names = [...new Set(existingInvites.map(i => i.studentName))].join(', ')
+                      return (
+                        <div style={{ marginTop: '8px', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: '6px', padding: '10px 12px', fontSize: '12px', color: '#92400E', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                          <span style={{ flexShrink: 0 }}>ℹ️</span>
+                          <span>
+                            <strong>{emailLower}</strong> already has a parent invite for <strong>{names}</strong>.
+                            When they accept this new invite, they should <strong>sign in</strong> — not create a new account.
+                            The invite email will include sign-in instructions.
+                          </span>
+                        </div>
+                      )
+                    })()}
                   </div>
                 </div>
               </div>
@@ -1983,6 +2025,28 @@ export default function StudentsPage() {
                   <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--gray-mid)', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '5px' }}>Parent Email <span style={{ color: '#c0392b' }}>*</span></label>
                   <input type="email" value={inviteParentEmail} onChange={e => setInviteParentEmail(e.target.value)} placeholder="parent@example.com"
                     style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--gray-light)', borderRadius: '6px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)', boxSizing: 'border-box' }} />
+                  {/* Duplicate parent email warning */}
+                  {(() => {
+                    const emailLower = inviteParentEmail.trim().toLowerCase()
+                    if (!emailLower || !inviteParentStudent) return null
+                    // Check invites for OTHER students (same email, different student)
+                    const otherInvites = invites.filter(i =>
+                      i.parentEmail?.toLowerCase() === emailLower &&
+                      i.studentEmail.toLowerCase() !== inviteParentStudent.email.toLowerCase()
+                    )
+                    if (otherInvites.length === 0) return null
+                    const names = [...new Set(otherInvites.map(i => i.studentName))].join(', ')
+                    return (
+                      <div style={{ marginTop: '8px', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: '6px', padding: '10px 12px', fontSize: '12px', color: '#92400E', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                        <span style={{ flexShrink: 0 }}>ℹ️</span>
+                        <span>
+                          This parent already has an account for <strong>{names}</strong>.
+                          When they accept, they should <strong>sign in</strong> — not create a new account.
+                          The accept page will show both options clearly.
+                        </span>
+                      </div>
+                    )
+                  })()}
                 </div>
                 <div style={{ display: 'flex', gap: '10px' }}>
                   <button
