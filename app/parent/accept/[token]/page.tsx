@@ -9,7 +9,7 @@ const client = generateClient()
 
 const findInviteByToken = /* GraphQL */`
   query ListParentInvites($filter: ModelParentInviteFilterInput) {
-    listParentInvites(filter: $filter, limit: 1) {
+    listParentInvites(filter: $filter, limit: 500) {
       items { id token studentEmail studentName used }
     }
   }

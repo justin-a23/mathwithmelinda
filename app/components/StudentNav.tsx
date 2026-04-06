@@ -230,7 +230,7 @@ export default function StudentNav({ unreadCount: propUnread }: Props = {}) {
         </button>
 
         <button
-          onClick={() => signOut()}
+          onClick={() => { signOut(); router.replace('/login') }}
           style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.7)', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontFamily: 'var(--font-body)', whiteSpace: 'nowrap' }}
         >
           Sign out

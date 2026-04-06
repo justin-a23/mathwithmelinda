@@ -9,7 +9,7 @@ const client = generateClient()
 
 const FIND_INVITE = /* GraphQL */`
   query ListStudentInvites($filter: ModelStudentInviteFilterInput) {
-    listStudentInvites(filter: $filter, limit: 1) {
+    listStudentInvites(filter: $filter, limit: 500) {
       items { id token firstName lastName email courseTitle planType used }
     }
   }

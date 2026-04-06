@@ -4,6 +4,7 @@ import { useAuthenticator } from '@aws-amplify/ui-react'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { generateClient } from 'aws-amplify/api'
+import { getCurrentUser } from 'aws-amplify/auth'
 import { useTheme } from '../ThemeProvider'
 
 const client = generateClient()
@@ -68,7 +69,7 @@ type Submission = {
 }
 
 export default function ParentDashboard() {
-  const { user, signOut } = useAuthenticator()
+  const { authStatus, signOut } = useAuthenticator()
   const router = useRouter()
   const { theme, toggleTheme } = useTheme()
   const [children, setChildren] = useState<Child[]>([])
@@ -80,13 +81,13 @@ export default function ParentDashboard() {
   const [imageUrls, setImageUrls] = useState<string[]>([])
 
   useEffect(() => {
-    if (user === null) router.replace('/login')
-  }, [user, router])
+    if (authStatus === 'unauthenticated') router.replace('/login')
+  }, [authStatus, router])
 
   useEffect(() => {
-    if (!user) return
+    if (authStatus !== 'authenticated') return
     fetchChildren()
-  }, [user])
+  }, [authStatus])
 
   useEffect(() => {
     if (!selectedChild) return
@@ -95,9 +96,10 @@ export default function ParentDashboard() {
 
   async function fetchChildren() {
     try {
+      const currentUser = await getCurrentUser()
       const result = await client.graphql({
         query: listParentStudents,
-        variables: { filter: { parentId: { eq: user?.userId } } }
+        variables: { filter: { parentId: { eq: currentUser.userId } } }
       }) as any
       const items = (result.data as { listParentStudents: { items: Child[] } }).listParentStudents.items
       setChildren(items)

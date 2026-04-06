@@ -4,6 +4,7 @@ import { useAuthenticator } from '@aws-amplify/ui-react'
 import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import { generateClient } from 'aws-amplify/api'
+import { getCurrentUser } from 'aws-amplify/auth'
 import StudentNav from '../components/StudentNav'
 const findPlanItemByLessonQuery = /* GraphQL */`
   query FindPlanItemByLesson($filter: ModelWeeklyPlanItemFilterInput) {
@@ -211,7 +212,7 @@ type WeeklyPlan = {
 }
 
 export default function Dashboard() {
-  const { user, signOut, authStatus } = useAuthenticator()
+  const { signOut, authStatus } = useAuthenticator()
   const router = useRouter()
   const [weeklyPlans, setWeeklyPlans] = useState<WeeklyPlan[]>([])
   const [loading, setLoading] = useState(true)
@@ -249,11 +250,12 @@ export default function Dashboard() {
 
 
   useEffect(() => {
-    const userId = user?.userId || user?.username || ''
-    const loginId = user?.signInDetails?.loginId || ''
-    if (!userId) return
+    if (authStatus !== 'authenticated') return
 
     async function loadDashboard() {
+      const currentUser = await getCurrentUser()
+      const userId = currentUser.userId
+      const loginId = currentUser.signInDetails?.loginId || ''
       try {
         // 1. Fetch profile first — we need courseId before we can filter plans
         const profileResult = await client.graphql({ query: getStudentProfileQuery, variables: { userId } }) as any
@@ -443,7 +445,7 @@ export default function Dashboard() {
     }
 
     loadDashboard()
-  }, [user?.userId, user?.username])
+  }, [authStatus])
 
   async function handlePicUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -478,8 +480,9 @@ export default function Dashboard() {
     if (!content) return
     setAskSending(true)
     try {
-      const userId = user?.userId || user?.username || ''
-      const loginId = user?.signInDetails?.loginId || ''
+      const currentUser = await getCurrentUser()
+      const userId = currentUser.userId
+      const loginId = currentUser.signInDetails?.loginId || ''
       const studentId = loginId || userId
       await (client.graphql({
         query: CREATE_MESSAGE,
