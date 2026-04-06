@@ -1,7 +1,6 @@
 'use client'
 
-import { signIn } from 'aws-amplify/auth'
-import { fetchAuthSession } from 'aws-amplify/auth'
+import { signIn, signOut, fetchAuthSession } from 'aws-amplify/auth'
 import { generateClient } from 'aws-amplify/api'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useState, Suspense } from 'react'
@@ -57,6 +56,9 @@ function LoginInner() {
     if (!email.trim() || !password) { setError('Please enter your email and password.'); return }
     setSubmitting(true)
     try {
+      // Clear any stale session before signing in — prevents
+      // "There is already a signed in user" from Amplify
+      try { await signOut() } catch { /* no session — that's fine */ }
       await signIn({ username: email.trim().toLowerCase(), password })
       const dest = await getRedirectAfterLogin(redirect)
       router.replace(dest)
