@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { generateClient } from 'aws-amplify/api'
 import { useTheme } from '../../ThemeProvider'
+import { apiFetch } from '@/app/lib/apiFetch'
 
 const client = generateClient()
 
@@ -140,7 +141,7 @@ export default function ParentSyllabusPage() {
       if (!syllabi.length || !syllabi[0].publishedPdfKey) { setNoSyllabus(true); return }
 
       const syl = syllabi[0]
-      const res = await fetch('/api/syllabus-pdf?action=view&key=' + encodeURIComponent(syl.publishedPdfKey))
+      const res = await apiFetch('/api/syllabus-pdf?action=view&key=' + encodeURIComponent(syl.publishedPdfKey))
       const { url } = await res.json()
 
       setSyllabusData({

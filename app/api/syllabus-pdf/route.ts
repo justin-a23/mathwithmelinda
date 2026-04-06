@@ -1,6 +1,7 @@
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { NextRequest, NextResponse } from 'next/server'
+import { requireAuth, forbidden } from '@/app/lib/auth'
 
 const BUCKET = 'mathwithmelinda-submissions'
 
@@ -16,6 +17,9 @@ function makeS3() {
 // GET ?action=upload&semesterId=xxx  → { uploadUrl, key }
 // GET ?action=view&key=xxx           → { url }
 export async function GET(request: NextRequest) {
+  const auth = await requireAuth(request)
+  if (auth instanceof NextResponse) return auth
+
   const { searchParams } = new URL(request.url)
   const action = searchParams.get('action')
 
@@ -23,6 +27,7 @@ export async function GET(request: NextRequest) {
     const s3 = makeS3()
 
     if (action === 'upload') {
+      if (auth.role !== 'teacher') return forbidden()
       const semesterId = searchParams.get('semesterId')
       if (!semesterId) return NextResponse.json({ error: 'Missing semesterId' }, { status: 400 })
       const key = `syllabi/${semesterId}/${Date.now()}.pdf`

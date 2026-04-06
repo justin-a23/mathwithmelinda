@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useRef, useState, Suspense } from 'react'
 import { generateClient } from 'aws-amplify/api'
 import StudentNav from '../../components/StudentNav'
+import { apiFetch } from '@/app/lib/apiFetch'
 
 const client = generateClient()
 
@@ -147,7 +148,7 @@ function StudentMessagesPageInner() {
 
       // Notify Melinda by email — fire and forget
       const studentDisplayName = profileName || studentId
-      fetch('/api/send-email', {
+      apiFetch('/api/send-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

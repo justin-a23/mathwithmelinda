@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { useAuthenticator } from '@aws-amplify/ui-react'
 import { generateClient } from 'aws-amplify/api'
 import ThemeToggle from './ThemeToggle'
+import { apiFetch } from '@/app/lib/apiFetch'
 
 const client = generateClient()
 
@@ -78,7 +79,7 @@ export default function TeacherNav({ ungradedCount: propUngraded, unreadCount: p
         if (p.profilePictureKey.startsWith('data:')) {
           setPicUrl(p.profilePictureKey)
         } else {
-          const res = await fetch('/api/profile-pic?key=' + encodeURIComponent(p.profilePictureKey))
+          const res = await apiFetch('/api/profile-pic?key=' + encodeURIComponent(p.profilePictureKey))
           const { url } = await res.json()
           setPicUrl(url)
         }

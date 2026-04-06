@@ -7,6 +7,7 @@ import { generateClient } from 'aws-amplify/api'
 import TeacherNav from '../../components/TeacherNav'
 import { useTheme } from '../../ThemeProvider'
 import { useRoleGuard } from '../../hooks/useRoleGuard'
+import { apiFetch } from '@/app/lib/apiFetch'
 
 const client = generateClient()
 
@@ -239,7 +240,7 @@ export default function ZoomMeetingsPage() {
       const course = courses.find(c => c.id === selectedCourseId)
 
       // Create Zoom meeting via API
-      const res = await fetch('/api/zoom/create-meeting', {
+      const res = await apiFetch('/api/zoom/create-meeting', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ topic: topic.trim(), startTime, durationMinutes: duration }),
@@ -310,7 +311,7 @@ export default function ZoomMeetingsPage() {
         for (const s of invitedStudents) {
           const name = s.preferredName || s.firstName
           const body = emailBody(name)
-          emailPromises.push(fetch('/api/send-email', {
+          emailPromises.push(apiFetch('/api/send-email', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ to: s.email, subject: `Zoom meeting scheduled: ${topic.trim()}`, ...body }),
@@ -321,7 +322,7 @@ export default function ZoomMeetingsPage() {
         for (const s of students.filter(s => s.email)) {
           const name = s.preferredName || s.firstName
           const body = emailBody(name)
-          emailPromises.push(fetch('/api/send-email', {
+          emailPromises.push(apiFetch('/api/send-email', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ to: s.email, subject: `Zoom meeting scheduled: ${topic.trim()}`, ...body }),
@@ -332,7 +333,7 @@ export default function ZoomMeetingsPage() {
         if (parent?.email) {
           const name = parent.firstName
           const body = emailBody(name)
-          emailPromises.push(fetch('/api/send-email', {
+          emailPromises.push(apiFetch('/api/send-email', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ to: parent.email, subject: `Zoom meeting scheduled: ${topic.trim()}`, ...body }),
@@ -343,7 +344,7 @@ export default function ZoomMeetingsPage() {
           for (const s of invitedStudents) {
             const name = s.preferredName || s.firstName
             const body = emailBody(name)
-            emailPromises.push(fetch('/api/send-email', {
+            emailPromises.push(apiFetch('/api/send-email', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ to: s.email, subject: `Zoom meeting scheduled: ${topic.trim()}`, ...body }),

@@ -1,6 +1,7 @@
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { NextRequest, NextResponse } from 'next/server'
+import { requireTeacher } from '@/app/lib/auth'
 
 const s3 = new S3Client({
   region: 'us-east-1',
@@ -11,6 +12,9 @@ const s3 = new S3Client({
 })
 
 export async function POST(request: NextRequest) {
+  const auth = await requireTeacher(request)
+  if (auth instanceof NextResponse) return auth
+
   try {
     const { filename, contentType, course } = await request.json()
     

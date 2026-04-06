@@ -4,6 +4,7 @@ import {
   ListUsersCommand,
 } from '@aws-sdk/client-cognito-identity-provider'
 import { NextRequest, NextResponse } from 'next/server'
+import { requireTeacher } from '@/app/lib/auth'
 
 function makeCognitoClient() {
   const accessKeyId = process.env.MWM_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID
@@ -17,9 +18,9 @@ function makeCognitoClient() {
   return new CognitoIdentityProviderClient({ region: 'us-east-1' })
 }
 
-const USER_POOL_ID = 'us-east-1_LvIY8oPmV'
+const USER_POOL_ID = process.env.COGNITO_USER_POOL_ID!
 const APPSYNC_ENDPOINT = 'https://irzsqprjcjco5kq7w7g72zm7qy.appsync-api.us-east-1.amazonaws.com/graphql'
-const APPSYNC_API_KEY = 'da2-qgdyi5epjjarbjhwhqq7mrdbsy'
+const APPSYNC_API_KEY = process.env.APPSYNC_API_KEY!
 
 async function appsync(query: string, variables: Record<string, unknown>) {
   const res = await fetch(APPSYNC_ENDPOINT, {
@@ -68,6 +69,9 @@ async function findCognitoUsername(cognito: CognitoIdentityProviderClient, sub: 
 }
 
 export async function POST(request: NextRequest) {
+  const auth = await requireTeacher(request)
+  if (auth instanceof NextResponse) return auth
+
   // userId = Cognito sub (from ParentStudent.parentId or ParentProfile.userId)
   // profileId = ParentProfile.id (may be null if no profile record exists)
   // parentStudentIds = all ParentStudent record IDs to delete

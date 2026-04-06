@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react'
 import { generateClient } from 'aws-amplify/api'
 import { getCurrentUser } from 'aws-amplify/auth'
 import StudentNav from '../components/StudentNav'
+import { apiFetch } from '@/app/lib/apiFetch'
 const findPlanItemByLessonQuery = /* GraphQL */`
   query FindPlanItemByLesson($filter: ModelWeeklyPlanItemFilterInput) {
     listWeeklyPlanItems(filter: $filter, limit: 1) {
@@ -276,7 +277,7 @@ export default function Dashboard() {
             if (p.profilePictureKey.startsWith('data:')) {
               setProfilePicUrl(p.profilePictureKey)
             } else {
-              const res = await fetch('/api/profile-pic?key=' + encodeURIComponent(p.profilePictureKey))
+              const res = await apiFetch('/api/profile-pic?key=' + encodeURIComponent(p.profilePictureKey))
               const { url } = await res.json()
               setProfilePicUrl(url)
             }

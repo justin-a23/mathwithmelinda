@@ -7,6 +7,7 @@ import { generateClient } from 'aws-amplify/api'
 import MathRenderer from '../components/MathRenderer'
 import MathInput from '../components/MathInput'
 import StudentNav from '../components/StudentNav'
+import { apiFetch } from '@/app/lib/apiFetch'
 
 const CLOUDFRONT_URL = 'https://dgmfzo1xk5r4e.cloudfront.net'
 
@@ -538,7 +539,7 @@ function LessonPageInner() {
       formData.append('file', file)
       formData.append('studentId', user?.signInDetails?.loginId || user?.userId || 'unknown')
       formData.append('lessonId', planItem?.lesson?.id || itemId || 'unknown')
-      const res = await fetch('/api/submit', { method: 'POST', body: formData })
+      const res = await apiFetch('/api/submit', { method: 'POST', body: formData })
       if (!res.ok) throw new Error('Upload failed')
       const { key } = await res.json()
       setFiles(prev => prev.map(f => f.uid === uid ? { ...f, key, status: 'done', progress: 100 } : f))

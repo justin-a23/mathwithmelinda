@@ -6,6 +6,7 @@ import { generateClient } from 'aws-amplify/api'
 import { listCourses } from '../../src/graphql/queries'
 import TeacherNav from '../components/TeacherNav'
 import { useRoleGuard } from '../hooks/useRoleGuard'
+import { apiFetch } from '@/app/lib/apiFetch'
 
 const client = generateClient()
 
@@ -280,7 +281,7 @@ PLANNING:
 PENDING STUDENT APPROVALS:
 - ${pendingCount > 0 ? `${pendingCount} student(s) waiting for approval: ${pendingNames}` : 'None'}`
 
-      const res = await fetch('/api/briefing', {
+      const res = await apiFetch('/api/briefing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ context }),

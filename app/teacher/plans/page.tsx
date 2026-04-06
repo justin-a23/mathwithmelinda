@@ -7,6 +7,7 @@ import { generateClient } from 'aws-amplify/api'
 import TeacherNav from '../../components/TeacherNav'
 import { useTheme } from '../../ThemeProvider'
 import { useRoleGuard } from '../../hooks/useRoleGuard'
+import { apiFetch } from '@/app/lib/apiFetch'
 
 const client = generateClient()
 
@@ -262,7 +263,7 @@ export default function ManagePlansPage() {
             const email = studentEmailMap[userId]
             const name = studentMap[userId] || 'there'
             if (!email) continue
-            fetch('/api/send-email', {
+            apiFetch('/api/send-email', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({

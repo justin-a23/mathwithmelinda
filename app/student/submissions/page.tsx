@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 import { generateClient } from 'aws-amplify/api'
 import StudentNav from '../../components/StudentNav'
 import MathRenderer from '../../components/MathRenderer'
+import { apiFetch } from '@/app/lib/apiFetch'
 
 const listStudentSubmissions = /* GraphQL */`
   query ListStudentSubmissions($studentId: String!) {
@@ -146,7 +147,7 @@ export default function StudentSubmissions() {
       try {
         const urls = await Promise.all(
           files.map(async (key: string) => {
-            const res = await fetch('/api/view-submission', {
+            const res = await apiFetch('/api/view-submission', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ key })

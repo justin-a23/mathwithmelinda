@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import nodemailer from 'nodemailer'
+import { requireAuth } from '@/app/lib/auth'
 
 const transporter = nodemailer.createTransport({
   host: 'email-smtp.us-east-1.amazonaws.com',
@@ -12,6 +13,9 @@ const transporter = nodemailer.createTransport({
 })
 
 export async function POST(req: NextRequest) {
+  const auth = await requireAuth(req)
+  if (auth instanceof NextResponse) return auth
+
   try {
     const { to, subject, html, text } = await req.json()
 

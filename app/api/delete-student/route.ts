@@ -4,6 +4,7 @@ import {
   ListUsersCommand,
 } from '@aws-sdk/client-cognito-identity-provider'
 import { NextRequest, NextResponse } from 'next/server'
+import { requireTeacher } from '@/app/lib/auth'
 
 function makeCognitoClient() {
   // Amplify Console blocks "AWS_" prefix env vars, so we use MWM_ prefix in production.
@@ -19,10 +20,10 @@ function makeCognitoClient() {
   return new CognitoIdentityProviderClient({ region: 'us-east-1' })
 }
 
-const USER_POOL_ID = 'us-east-1_LvIY8oPmV'
+const USER_POOL_ID = process.env.COGNITO_USER_POOL_ID!
 
 const APPSYNC_ENDPOINT = 'https://irzsqprjcjco5kq7w7g72zm7qy.appsync-api.us-east-1.amazonaws.com/graphql'
-const APPSYNC_API_KEY = 'da2-qgdyi5epjjarbjhwhqq7mrdbsy'
+const APPSYNC_API_KEY = process.env.APPSYNC_API_KEY!
 
 const deleteStudentProfileMutation = /* GraphQL */`
   mutation DeleteStudentProfile($input: DeleteStudentProfileInput!) {
@@ -57,6 +58,9 @@ async function findCognitoUsername(cognito: CognitoIdentityProviderClient, sub: 
 }
 
 export async function POST(request: NextRequest) {
+  const auth = await requireTeacher(request)
+  if (auth instanceof NextResponse) return auth
+
   const { username: userId, profileId } = await request.json()
 
   if (!userId || !profileId) {

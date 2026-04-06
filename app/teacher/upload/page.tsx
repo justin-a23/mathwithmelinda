@@ -7,6 +7,7 @@ import { generateClient } from 'aws-amplify/api'
 import { listCourses } from '../../../src/graphql/queries'
 import TeacherNav from '../../components/TeacherNav'
 import { useRoleGuard } from '../../hooks/useRoleGuard'
+import { apiFetch } from '@/app/lib/apiFetch'
 
 const client = generateClient()
 
@@ -71,7 +72,7 @@ export default function UploadVideo() {
     try {
       const filename = `${selectedCourse} - Lesson ${lessonNumber} - ${lessonTitle}.mp4`
 
-      const res = await fetch('/api/upload', {
+      const res = await apiFetch('/api/upload', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

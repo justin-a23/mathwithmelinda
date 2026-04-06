@@ -8,6 +8,7 @@ import { useTheme } from '../../ThemeProvider'
 import MathRenderer from '../../components/MathRenderer'
 import TeacherNav from '../../components/TeacherNav'
 import { useRoleGuard } from '../../hooks/useRoleGuard'
+import { apiFetch } from '@/app/lib/apiFetch'
 
 function SubmissionFile({ url, alt, inline }: { url: string; alt: string; inline?: boolean }) {
   const [failed, setFailed] = useState(false)
@@ -609,7 +610,7 @@ function GradingPageInner() {
       const lessonTitle = getSubmissionTitle(selectedSubmission)
       const digitalAnswers: Record<string, string> = parsed.answers || {}
       const isRegrade = Object.keys(questionResults).length > 0
-      const res = await fetch('/api/grade-suggestion', {
+      const res = await apiFetch('/api/grade-suggestion', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -649,7 +650,7 @@ function GradingPageInner() {
   }
 
   async function fetchPresignedUrl(key: string): Promise<string> {
-    const res = await fetch('/api/view-submission', {
+    const res = await apiFetch('/api/view-submission', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ key })
@@ -750,7 +751,7 @@ function GradingPageInner() {
       const lessonTitle = getSubmissionTitle(selectedSubmission)
       const studentEmail = selectedSubmission.studentId
       const studentName = studentNameMap[selectedSubmission.studentId] || 'there'
-      fetch('/api/send-email', {
+      apiFetch('/api/send-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -777,7 +778,7 @@ function GradingPageInner() {
 
       // Also notify linked parents
       const studentFullName = studentNameMap[selectedSubmission.studentId] || selectedSubmission.studentId
-      fetch('/api/notify-parents', {
+      apiFetch('/api/notify-parents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -830,7 +831,7 @@ function GradingPageInner() {
       const lessonTitle = getSubmissionTitle(selectedSubmission)
       const studentEmail = selectedSubmission.studentId
       const studentName = studentNameMap[selectedSubmission.studentId] || 'there'
-      fetch('/api/send-email', {
+      apiFetch('/api/send-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -857,7 +858,7 @@ function GradingPageInner() {
 
       // Also notify linked parents
       const studentFullNameR = studentNameMap[selectedSubmission.studentId] || selectedSubmission.studentId
-      fetch('/api/notify-parents', {
+      apiFetch('/api/notify-parents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

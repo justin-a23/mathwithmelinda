@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import nodemailer from 'nodemailer'
+import { requireTeacher } from '@/app/lib/auth'
 
 const APPSYNC_ENDPOINT = 'https://irzsqprjcjco5kq7w7g72zm7qy.appsync-api.us-east-1.amazonaws.com/graphql'
-const APPSYNC_API_KEY = 'da2-qgdyi5epjjarbjhwhqq7mrdbsy'
+const APPSYNC_API_KEY = process.env.APPSYNC_API_KEY!
 
 function makeTransporter() {
   return nodemailer.createTransport({
@@ -52,6 +53,9 @@ const listUsedParentInvitesByStudent = `
 `
 
 export async function POST(req: NextRequest) {
+  const auth = await requireTeacher(req)
+  if (auth instanceof NextResponse) return auth
+
   try {
     const { studentEmail, subject, html, text } = await req.json()
     if (!studentEmail || !subject) {

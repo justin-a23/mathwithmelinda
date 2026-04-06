@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requireTeacher } from '@/app/lib/auth'
 
 async function getZoomAccessToken(): Promise<string> {
   const accountId = (process.env.ZOOM_ACCOUNT_ID || '').trim()
@@ -30,6 +31,9 @@ async function getZoomAccessToken(): Promise<string> {
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await requireTeacher(req)
+  if (auth instanceof NextResponse) return auth
+
   try {
     const { topic, startTime, durationMinutes = 60 } = await req.json()
 

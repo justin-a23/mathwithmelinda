@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
+import { requireTeacher } from '@/app/lib/auth'
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
@@ -23,6 +24,9 @@ async function fetchAsBase64Pdf(key: string): Promise<string> {
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await requireTeacher(req)
+  if (auth instanceof NextResponse) return auth
+
   try {
     const apiKey = process.env.ANTHROPIC_API_KEY
     if (!apiKey) return NextResponse.json({ error: 'ANTHROPIC_API_KEY is not configured' }, { status: 500 })

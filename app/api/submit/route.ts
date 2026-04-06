@@ -1,8 +1,12 @@
 import { PutObjectCommand } from '@aws-sdk/client-s3'
 import { NextRequest, NextResponse } from 'next/server'
+import { requireAuth } from '@/app/lib/auth'
 import { s3 } from '../../lib/s3'
 
 export async function POST(request: NextRequest) {
+  const auth = await requireAuth(request)
+  if (auth instanceof NextResponse) return auth
+
   try {
     const formData = await request.formData()
     const file = formData.get('file') as File

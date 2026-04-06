@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 import { generateClient } from 'aws-amplify/api'
 import TeacherNav from '../../components/TeacherNav'
 import { useRoleGuard } from '../../hooks/useRoleGuard'
+import { apiFetch } from '@/app/lib/apiFetch'
 
 const client = generateClient()
 
@@ -357,7 +358,7 @@ export default function StudentsPage() {
             // Base64 data URLs stored directly — use as-is
             if (key.startsWith('data:')) return [s.id, key] as [string, string]
             // Legacy S3 key — fetch presigned URL
-            const res = await fetch('/api/profile-pic', {
+            const res = await apiFetch('/api/profile-pic', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ action: 'view', key })
@@ -456,7 +457,7 @@ export default function StudentsPage() {
     setResendingInviteId(inv.id)
     const link = `${window.location.origin}/join/${inv.token}`
     try {
-      await fetch('/api/send-email', {
+      await apiFetch('/api/send-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -615,7 +616,7 @@ export default function StudentsPage() {
     setDeleting(true)
     setDeleteError(null)
     try {
-      const res = await fetch('/api/delete-student', {
+      const res = await apiFetch('/api/delete-student', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: s.userId, profileId: s.id }),
@@ -642,7 +643,7 @@ export default function StudentsPage() {
     try {
       const profile = parentProfiles.find(p => p.userId === parentId) || null
       const psIds = allParentStudents.filter(p => p.parentId === parentId).map(p => p.id)
-      const res = await fetch('/api/delete-parent', {
+      const res = await apiFetch('/api/delete-parent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: parentId, profileId: profile?.id || null, parentStudentIds: psIds }),
@@ -667,7 +668,7 @@ export default function StudentsPage() {
     setArchivingId(s.id)
     setArchiveError(null)
     try {
-      const res = await fetch('/api/archive-student', {
+      const res = await apiFetch('/api/archive-student', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: s.userId, profileId: s.id }),
@@ -696,7 +697,7 @@ export default function StudentsPage() {
     // Archive all students
     for (const s of toArchive) {
       try {
-        await fetch('/api/archive-student', {
+        await apiFetch('/api/archive-student', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ userId: s.userId, profileId: s.id }),
@@ -714,7 +715,7 @@ export default function StudentsPage() {
       try {
         const profile = parentProfiles.find(p => p.userId === parentId) || null
         const psIds = allParentStudents.filter(p => p.parentId === parentId).map(p => p.id)
-        await fetch('/api/delete-parent', {
+        await apiFetch('/api/delete-parent', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ userId: parentId, profileId: profile?.id || null, parentStudentIds: psIds }),
@@ -772,7 +773,7 @@ export default function StudentsPage() {
         ? `Hi ${parentFirstName}!\n\n${fullName} has also been enrolled in Math with Melinda.\n\nSign in to your existing account to connect them:\n${parentLink}`
         : `Hi ${parentFirstName}!\n\n${fullName} is enrolled in Math with Melinda. Set up your parent account:\n${parentLink}`
       // Fire invite email
-      fetch('/api/send-email', {
+      apiFetch('/api/send-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -815,7 +816,7 @@ export default function StudentsPage() {
     const link = `${window.location.origin}/parent/accept/${inv.token}`
     const parentFirstName = inv.parentFirstName || 'there'
     try {
-      await fetch('/api/send-email', {
+      await apiFetch('/api/send-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -894,7 +895,7 @@ export default function StudentsPage() {
       // Fire student email
       let emailSentToStudent = false
       try {
-        const studentEmailRes = await fetch('/api/send-email', {
+        const studentEmailRes = await apiFetch('/api/send-email', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -952,7 +953,7 @@ export default function StudentsPage() {
             ? `<strong>${studentFullName}</strong> has also been enrolled in Math with Melinda as a Co-op Student${courseTitle ? ` in <strong>${courseTitle}</strong>` : ''}. <strong>Sign in to your existing account</strong> to connect them — don't create a new account.`
             : `<strong>${studentFullName}</strong> has been enrolled in Math with Melinda as a Co-op Student${courseTitle ? ` in <strong>${courseTitle}</strong>` : ''}. Set up your parent account to track their grades, assignments, and teacher feedback.`
           const parentButtonText = isReturningParent ? 'Sign In & Connect →' : 'Set Up My Parent Account →'
-          const parentEmailRes = await fetch('/api/send-email', {
+          const parentEmailRes = await apiFetch('/api/send-email', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

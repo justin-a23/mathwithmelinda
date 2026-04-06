@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requireTeacher } from '@/app/lib/auth'
 
 export async function POST(req: NextRequest) {
+  const auth = await requireTeacher(req)
+  if (auth instanceof NextResponse) return auth
+
   try {
     const { context } = await req.json()
 

@@ -16,6 +16,7 @@
     "@aws-sdk/s3-request-presigner": "^3.1017.0",
     "@types/nodemailer": "^8.0.0",
     "aws-amplify": "^6.16.3",
+    "aws-jwt-verify": "^5.1.1",
     "heic-convert": "^2.1.0",
     "katex": "^0.16.44",
     "next": "16.2.1",

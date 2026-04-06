@@ -7,6 +7,7 @@ import { generateClient } from 'aws-amplify/api'
 import TeacherNav from '../../components/TeacherNav'
 import ImageCropper from '../../components/ImageCropper'
 import { useRoleGuard } from '../../hooks/useRoleGuard'
+import { apiFetch } from '@/app/lib/apiFetch'
 
 const client = generateClient()
 
@@ -141,7 +142,7 @@ export default function TeacherProfilePage() {
             if (p.profilePictureKey.startsWith('data:')) {
               setProfilePicUrl(p.profilePictureKey)
             } else {
-              const res = await fetch('/api/profile-pic?key=' + encodeURIComponent(p.profilePictureKey))
+              const res = await apiFetch('/api/profile-pic?key=' + encodeURIComponent(p.profilePictureKey))
               const { url } = await res.json()
               setProfilePicUrl(url)
             }

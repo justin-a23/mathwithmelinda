@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 import { generateClient } from 'aws-amplify/api'
 import TeacherNav from '../../components/TeacherNav'
 import { useRoleGuard } from '../../hooks/useRoleGuard'
+import { apiFetch } from '@/app/lib/apiFetch'
 
 const client = generateClient()
 
@@ -214,7 +215,7 @@ export default function TeacherMessagesPage() {
     try {
       const targets = students.filter(s => selectedStudentIds.has(s.userId))
       await Promise.all(targets.map(s =>
-        fetch('/api/send-email', {
+        apiFetch('/api/send-email', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -318,7 +319,7 @@ export default function TeacherMessagesPage() {
       setShowCompose(false)
 
       // Email the student
-      fetch('/api/send-email', {
+      apiFetch('/api/send-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -363,7 +364,7 @@ export default function TeacherMessagesPage() {
       if (msg?.studentId) {
         const studentEmail = msg.studentId // studentId is loginId (email) for password-auth users
         const studentName = msg.studentName || 'there'
-        fetch('/api/send-email', {
+        apiFetch('/api/send-email', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

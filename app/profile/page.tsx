@@ -6,6 +6,7 @@ import { useEffect, useState, useRef } from 'react'
 import { generateClient } from 'aws-amplify/api'
 import ImageCropper from '../components/ImageCropper'
 import StudentNav from '../components/StudentNav'
+import { apiFetch } from '@/app/lib/apiFetch'
 
 const client = generateClient()
 
@@ -113,7 +114,7 @@ export default function ProfilePage() {
             if (p.profilePictureKey.startsWith('data:')) {
               setProfilePicUrl(p.profilePictureKey)
             } else {
-              const res = await fetch('/api/profile-pic?key=' + encodeURIComponent(p.profilePictureKey))
+              const res = await apiFetch('/api/profile-pic?key=' + encodeURIComponent(p.profilePictureKey))
               const { url } = await res.json()
               setProfilePicUrl(url)
             }

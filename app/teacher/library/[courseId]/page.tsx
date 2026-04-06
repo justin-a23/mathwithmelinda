@@ -6,6 +6,7 @@ import { useEffect, useState, useRef } from 'react'
 import { generateClient } from 'aws-amplify/api'
 import { getCourse, listAssignmentQuestions } from '../../../../src/graphql/queries'
 import { createAssignmentQuestion, deleteAssignmentQuestion, updateAssignmentQuestion } from '../../../../src/graphql/mutations'
+import { apiFetch } from '@/app/lib/apiFetch'
 
 // Inline queries include teachingNotes which postdates the generated types
 const listLessonTemplatesInline = /* GraphQL */`
@@ -339,7 +340,7 @@ export default function LessonLibraryPage() {
     setUpload: (s: UploadState) => void
   ): Promise<string> {
     setUpload({ uploading: true, progress: 0, error: '' })
-    const res = await fetch('/api/upload', {
+    const res = await apiFetch('/api/upload', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ filename, contentType, course: folder })

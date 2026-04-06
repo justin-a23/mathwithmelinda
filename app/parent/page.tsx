@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 import { generateClient } from 'aws-amplify/api'
 import { getCurrentUser } from 'aws-amplify/auth'
 import { useTheme } from '../ThemeProvider'
+import { apiFetch } from '@/app/lib/apiFetch'
 
 const client = generateClient()
 
@@ -143,7 +144,7 @@ export default function ParentDashboard() {
       if (parsed.files && parsed.files.length > 0) {
         const urls = await Promise.all(
           parsed.files.map(async (key: string) => {
-            const res = await fetch('/api/view-submission', {
+            const res = await apiFetch('/api/view-submission', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ key })

@@ -6,6 +6,7 @@ import { useEffect, useState, Suspense } from 'react'
 import { generateClient } from 'aws-amplify/api'
 import TeacherNav from '../../components/TeacherNav'
 import { useRoleGuard } from '../../hooks/useRoleGuard'
+import { apiFetch } from '@/app/lib/apiFetch'
 
 const client = generateClient()
 
@@ -183,6 +184,15 @@ function ReportCardInner() {
   const [report, setReport] = useState<ReportData | null>(null)
   const printedDate = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
 
+  // Send report card
+  const [studentEmail, setStudentEmail] = useState('')
+  const [comment, setComment] = useState('')
+  const [aiGenerating, setAiGenerating] = useState(false)
+  const [aiPolishing, setAiPolishing] = useState(false)
+  const [sending, setSending] = useState(false)
+  const [sent, setSent] = useState(false)
+  const [sendError, setSendError] = useState('')
+
   useEffect(() => {
     if (user === null) router.replace('/login')
   }, [user, router])
@@ -215,6 +225,7 @@ function ReportCardInner() {
       if (profItems.length === 0) { setError('Student not found.'); setLoading(false); return }
       const prof = profItems[0]
       const studentName = `${prof.firstName} ${prof.lastName}`
+      setStudentEmail(prof.email || prof.userId || '')
 
       // 3. Load weekly plans and filter
       const plansRes = await (client.graphql({ query: LIST_WEEKLY_PLANS }) as any)
@@ -361,6 +372,183 @@ function ReportCardInner() {
       setError('Failed to load report card data.')
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function generateAiComment() {
+    if (!report) return
+    setAiGenerating(true)
+    setSendError('')
+    try {
+      const res = await apiFetch('/api/report-card-ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'generate',
+          studentName: report.studentName,
+          courseName: report.courseName,
+          semesterName: report.semesterName,
+          finalLetter: report.finalLetter,
+          weightedAvg: report.weightedAvg,
+          lessonAvg: report.lessonAvg,
+          quizAvg: report.quizAvg,
+          testAvg: report.testAvg,
+          lessonWeight: report.lessonWeight,
+          quizWeight: report.quizWeight,
+          testWeight: report.testWeight,
+          completedCount: report.assignments.filter(a => a.score && a.score !== 'Pending').length,
+          totalCount: report.assignments.length,
+          assignments: report.assignments,
+        }),
+      })
+      const json = await res.json()
+      if (json.comment) setComment(json.comment)
+      else setSendError(json.error || 'AI generation failed')
+    } catch {
+      setSendError('Could not reach AI — check your connection.')
+    } finally {
+      setAiGenerating(false)
+    }
+  }
+
+  async function polishComment() {
+    if (!comment.trim()) return
+    setAiPolishing(true)
+    setSendError('')
+    try {
+      const res = await apiFetch('/api/report-card-ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'polish',
+          draft: comment,
+          studentName: report?.studentName,
+        }),
+      })
+      const json = await res.json()
+      if (json.comment) setComment(json.comment)
+      else setSendError(json.error || 'Polish failed')
+    } catch {
+      setSendError('Could not reach AI — check your connection.')
+    } finally {
+      setAiPolishing(false)
+    }
+  }
+
+  async function sendReportCard() {
+    if (!report || !studentEmail) return
+    setSending(true)
+    setSent(false)
+    setSendError('')
+
+    const { bg: gradeBg, text: gradeText } = gradeChip(report.finalLetter)
+    const commentHtml = comment.trim()
+      ? `<div style="background:#f5f3ff;border-left:4px solid #7b4fa6;border-radius:8px;padding:18px 22px;margin:20px 0;font-size:15px;line-height:1.7;color:#2d1b4e;font-style:italic;">"${comment.trim().replace(/\n/g, '<br/>')}"<div style="font-size:12px;color:#9874c8;margin-top:10px;font-style:normal;font-weight:600;">— Melinda</div></div>`
+      : ''
+
+    const categoryRows = [
+      report.lessonAvg !== null ? `<tr><td style="padding:8px 12px;color:#555;">Lessons</td><td style="padding:8px 12px;text-align:center;color:#555;">${report.lessonWeight}%</td><td style="padding:8px 12px;text-align:center;font-weight:700;color:#111;">${report.lessonAvg.toFixed(1)}%</td></tr>` : '',
+      report.quizAvg !== null  ? `<tr><td style="padding:8px 12px;color:#555;">Participation</td><td style="padding:8px 12px;text-align:center;color:#555;">${report.quizWeight}%</td><td style="padding:8px 12px;text-align:center;font-weight:700;color:#111;">${report.quizAvg.toFixed(1)}%</td></tr>` : '',
+      report.testAvg !== null  ? `<tr><td style="padding:8px 12px;color:#555;">Tests</td><td style="padding:8px 12px;text-align:center;color:#555;">${report.testWeight}%</td><td style="padding:8px 12px;text-align:center;font-weight:700;color:#111;">${report.testAvg.toFixed(1)}%</td></tr>` : '',
+    ].filter(Boolean).join('')
+
+    const html = `
+      <div style="font-family:sans-serif;max-width:600px;margin:0 auto;background:#fff;">
+        <div style="background:#1E1E2E;padding:20px 28px;border-radius:10px 10px 0 0;display:flex;align-items:center;gap:12px;">
+          <div style="width:32px;height:32px;background:#7b4fa6;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;">
+            <span style="color:white;font-size:16px;line-height:1;font-weight:900">+</span>
+          </div>
+          <span style="color:white;font-size:18px;font-weight:700;">Math with Melinda</span>
+        </div>
+
+        <div style="border:1px solid #e5e7eb;border-top:none;border-radius:0 0 10px 10px;padding:32px 28px;">
+          <div style="font-size:12px;font-weight:700;color:#7b4fa6;letter-spacing:2px;text-transform:uppercase;margin-bottom:6px;">
+            ${report.semesterName} Report Card
+          </div>
+          <h1 style="font-size:26px;font-weight:800;color:#1a1a2e;margin:0 0 4px;">
+            ${report.studentName}
+          </h1>
+          <div style="font-size:14px;color:#777;margin-bottom:24px;">${report.courseName}</div>
+
+          <!-- Grade highlight -->
+          <div style="display:flex;align-items:center;gap:20px;background:#f8f6fb;border:2px solid #e9e0f5;border-radius:12px;padding:18px 24px;margin-bottom:20px;">
+            <div style="width:72px;height:72px;border-radius:14px;background:${gradeBg};color:${gradeText};display:flex;align-items:center;justify-content:center;font-size:42px;font-weight:900;border:2px solid ${gradeText}44;flex-shrink:0;">
+              ${report.finalLetter}
+            </div>
+            <div>
+              <div style="font-size:30px;font-weight:800;color:#1a1a2e;line-height:1;">
+                ${report.weightedAvg !== null ? report.weightedAvg.toFixed(1) + '%' : 'In progress'}
+              </div>
+              <div style="font-size:13px;color:#777;margin-top:3px;">Weighted average · ${report.assignments.filter(a => a.score && a.score !== 'Pending').length}/${report.assignments.length} assignments completed</div>
+            </div>
+          </div>
+
+          ${commentHtml}
+
+          <!-- Category breakdown -->
+          ${categoryRows ? `
+          <table style="width:100%;border-collapse:collapse;margin-bottom:24px;font-size:13px;">
+            <thead>
+              <tr style="background:#f0eaf8;">
+                <th style="padding:8px 12px;text-align:left;font-size:11px;font-weight:700;color:#555;letter-spacing:1px;text-transform:uppercase;">Category</th>
+                <th style="padding:8px 12px;text-align:center;font-size:11px;font-weight:700;color:#555;letter-spacing:1px;text-transform:uppercase;">Weight</th>
+                <th style="padding:8px 12px;text-align:center;font-size:11px;font-weight:700;color:#555;letter-spacing:1px;text-transform:uppercase;">Average</th>
+              </tr>
+            </thead>
+            <tbody>${categoryRows}</tbody>
+          </table>` : ''}
+
+          <a href="https://mathwithmelinda.com/dashboard" style="display:inline-block;background:#7b4fa6;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px;margin-bottom:20px;">
+            View Full Grades →
+          </a>
+
+          <p style="font-size:12px;color:#aaa;margin:0;line-height:1.6;">
+            For the full assignment breakdown and teacher comments on individual lessons, sign in to your dashboard at mathwithmelinda.com.
+          </p>
+        </div>
+      </div>`
+
+    const text = `${report.semesterName} Report Card — ${report.studentName}\n\nCourse: ${report.courseName}\nGrade: ${report.finalLetter}${report.weightedAvg !== null ? ` (${report.weightedAvg.toFixed(1)}%)` : ''}\n${comment.trim() ? `\nComment from Melinda:\n${comment.trim()}\n` : ''}\nView full grades at: https://mathwithmelinda.com/dashboard`
+
+    try {
+      // Email the student
+      await apiFetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: studentEmail,
+          subject: `Your ${report.semesterName} Report Card — ${report.courseName}`,
+          html,
+          text,
+        }),
+      })
+
+      // Email linked parents
+      await apiFetch('/api/notify-parents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          studentEmail,
+          subject: `${report.studentName}'s ${report.semesterName} Report Card — ${report.courseName}`,
+          html: html.replace(
+            `View Full Grades →`,
+            `View ${report.studentName}'s Grades →`
+          ).replace(
+            `href="https://mathwithmelinda.com/dashboard"`,
+            `href="https://mathwithmelinda.com/parent"`
+          ),
+          text: text.replace(
+            'https://mathwithmelinda.com/dashboard',
+            'https://mathwithmelinda.com/parent'
+          ),
+        }),
+      })
+
+      setSent(true)
+    } catch {
+      setSendError('Send failed — check your connection and try again.')
+    } finally {
+      setSending(false)
     }
   }
 
@@ -567,6 +755,171 @@ function ReportCardInner() {
             </div>
           </div>
         ) : null}
+
+        {/* ── Send Report Card Panel ── */}
+        {report && (
+          <div className="no-print" style={{ marginTop: '40px', background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: '12px', padding: '32px', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
+              <div style={{ width: '36px', height: '36px', background: '#f5f3ff', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7b4fa6" strokeWidth="2">
+                  <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                </svg>
+              </div>
+              <div>
+                <div style={{ fontFamily: 'var(--font-display)', fontSize: '18px', fontWeight: 700, color: 'var(--foreground)', lineHeight: 1.2 }}>Send Report Card</div>
+                <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginTop: '2px' }}>Email this report card to {report.studentName} and their linked parents</div>
+              </div>
+            </div>
+
+            {/* Comment area */}
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: 'var(--plum)', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: '8px' }}>
+                Teacher Comment <span style={{ fontSize: '11px', fontWeight: 400, color: 'var(--gray-mid)', textTransform: 'none', letterSpacing: 0 }}>(optional — shown in the email)</span>
+              </label>
+              <textarea
+                value={comment}
+                onChange={e => { setComment(e.target.value); setSent(false) }}
+                placeholder={`Write a personal note for ${report.studentName}, or use AI to generate one below…`}
+                rows={4}
+                style={{
+                  width: '100%',
+                  padding: '12px 14px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--gray-light)',
+                  background: 'var(--background)',
+                  color: 'var(--foreground)',
+                  fontSize: '14px',
+                  lineHeight: '1.6',
+                  resize: 'vertical',
+                  fontFamily: 'var(--font-body)',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+
+            {/* AI buttons */}
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap' }}>
+              <button
+                onClick={generateAiComment}
+                disabled={aiGenerating || aiPolishing}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                  background: aiGenerating ? 'var(--gray-light)' : '#f5f3ff',
+                  color: aiGenerating ? 'var(--gray-mid)' : '#7b4fa6',
+                  border: '1px solid #e9d5ff',
+                  borderRadius: '8px',
+                  padding: '9px 16px',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: aiGenerating || aiPolishing ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.15s',
+                }}>
+                {aiGenerating ? (
+                  <>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: 'spin 0.8s linear infinite' }}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                    Generating…
+                  </>
+                ) : (
+                  <>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>
+                    Generate with AI
+                  </>
+                )}
+              </button>
+
+              <button
+                onClick={polishComment}
+                disabled={!comment.trim() || aiGenerating || aiPolishing}
+                title={!comment.trim() ? 'Write something first, then polish it' : 'Let AI smooth out your writing while keeping your voice'}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                  background: (!comment.trim() || aiPolishing) ? 'var(--gray-light)' : '#fdf4ff',
+                  color: (!comment.trim() || aiPolishing) ? 'var(--gray-mid)' : '#9333ea',
+                  border: '1px solid #e9d5ff',
+                  borderRadius: '8px',
+                  padding: '9px 16px',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: (!comment.trim() || aiGenerating || aiPolishing) ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.15s',
+                  opacity: !comment.trim() ? 0.5 : 1,
+                }}>
+                {aiPolishing ? (
+                  <>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: 'spin 0.8s linear infinite' }}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                    Polishing…
+                  </>
+                ) : (
+                  <>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                    Polish My Writing
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* Divider */}
+            <div style={{ height: '1px', background: 'var(--gray-light)', marginBottom: '20px' }} />
+
+            {/* Send button + status */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+              <button
+                onClick={sendReportCard}
+                disabled={sending || sent}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '8px',
+                  background: sent ? '#dcfce7' : sending ? 'var(--gray-light)' : 'var(--plum)',
+                  color: sent ? '#15803d' : sending ? 'var(--gray-mid)' : 'white',
+                  border: sent ? '1px solid #bbf7d0' : 'none',
+                  borderRadius: '8px',
+                  padding: '11px 22px',
+                  fontSize: '14px',
+                  fontWeight: 700,
+                  cursor: sending || sent ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.2s',
+                }}>
+                {sent ? (
+                  <>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                    Sent!
+                  </>
+                ) : sending ? (
+                  <>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: 'spin 0.8s linear infinite' }}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                    Sending…
+                  </>
+                ) : (
+                  <>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                    </svg>
+                    Send to Student &amp; Parents
+                  </>
+                )}
+              </button>
+
+              {sent && (
+                <div style={{ fontSize: '13px', color: '#15803d' }}>
+                  Report card emailed to {report.studentName} and any linked parents.
+                </div>
+              )}
+
+              {sendError && (
+                <div style={{ fontSize: '13px', color: '#dc2626', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  {sendError}
+                </div>
+              )}
+            </div>
+
+            {!studentEmail && (
+              <div style={{ marginTop: '12px', fontSize: '12px', color: '#d97706', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                No email address found for this student — report card will be sent to parents only.
+              </div>
+            )}
+          </div>
+        )}
       </main>
     </div>
   )
