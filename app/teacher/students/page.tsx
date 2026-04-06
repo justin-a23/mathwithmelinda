@@ -152,6 +152,22 @@ const deleteStudentInvite = /* GraphQL */`
   }
 `
 
+const listParentProfilesQuery = /* GraphQL */`
+  query ListParentProfiles {
+    listParentProfiles(limit: 200) {
+      items { id userId email firstName lastName }
+    }
+  }
+`
+
+const listAllParentStudentsQuery = /* GraphQL */`
+  query ListAllParentStudents {
+    listParentStudents(limit: 500) {
+      items { id parentId studentEmail studentName }
+    }
+  }
+`
+
 type Student = {
   id: string
   userId: string
@@ -208,6 +224,21 @@ type StudentInviteRecord = {
   planType: string
   used: boolean | null
   createdAt: string
+}
+
+type ParentProfile = {
+  id: string
+  userId: string
+  email: string
+  firstName: string
+  lastName: string
+}
+
+type ParentStudentRecord = {
+  id: string
+  parentId: string
+  studentEmail: string
+  studentName: string
 }
 
 function randomToken() {
@@ -282,6 +313,13 @@ export default function StudentsPage() {
   const [deletingParentInviteId, setDeletingParentInviteId] = useState<string | null>(null)
   const [resendingParentInviteId, setResendingParentInviteId] = useState<string | null>(null)
 
+  // Parent account management
+  const [parentProfiles, setParentProfiles] = useState<ParentProfile[]>([])
+  const [allParentStudents, setAllParentStudents] = useState<ParentStudentRecord[]>([])
+  const [deleteParentConfirmId, setDeleteParentConfirmId] = useState<string | null>(null)
+  const [deletingParent, setDeletingParent] = useState(false)
+  const [deleteParentError, setDeleteParentError] = useState<string | null>(null)
+
   // Add Co-op Student form
   const [showCoopForm, setShowCoopForm] = useState(false)
   const [coopFirstName, setCoopFirstName] = useState('')
@@ -301,7 +339,7 @@ export default function StudentsPage() {
   }, [user, router])
 
   useEffect(() => {
-    Promise.all([fetchStudents(), fetchCourses(), fetchSemesters(), fetchEnrollments(), fetchInvites(), fetchStudentInvites()])
+    Promise.all([fetchStudents(), fetchCourses(), fetchSemesters(), fetchEnrollments(), fetchInvites(), fetchStudentInvites(), fetchParentProfiles(), fetchAllParentStudents()])
       .finally(() => setLoading(false))
   }, [])
 
@@ -389,6 +427,20 @@ export default function StudentsPage() {
     const result = await client.graphql({ query: listStudentInvitesQuery }) as any
     const items = result.data.listStudentInvites.items as StudentInviteRecord[]
     setStudentInvites(items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()))
+  }
+
+  async function fetchParentProfiles() {
+    try {
+      const result = await client.graphql({ query: listParentProfilesQuery }) as any
+      setParentProfiles(result.data.listParentProfiles.items as ParentProfile[])
+    } catch { /* non-fatal */ }
+  }
+
+  async function fetchAllParentStudents() {
+    try {
+      const result = await client.graphql({ query: listAllParentStudentsQuery }) as any
+      setAllParentStudents(result.data.listParentStudents.items as ParentStudentRecord[])
+    } catch { /* non-fatal */ }
   }
 
   async function deleteStudentInviteRecord(id: string) {
@@ -584,6 +636,33 @@ export default function StudentsPage() {
     }
   }
 
+  async function deleteParentCompletely(parentId: string) {
+    setDeletingParent(true)
+    setDeleteParentError(null)
+    try {
+      const profile = parentProfiles.find(p => p.userId === parentId) || null
+      const psIds = allParentStudents.filter(p => p.parentId === parentId).map(p => p.id)
+      const res = await fetch('/api/delete-parent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: parentId, profileId: profile?.id || null, parentStudentIds: psIds }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Delete failed')
+      setParentProfiles(prev => prev.filter(p => p.userId !== parentId))
+      setAllParentStudents(prev => prev.filter(p => p.parentId !== parentId))
+      setDeleteParentConfirmId(null)
+      if (json.cognitoError) {
+        setDeleteParentError(`Parent removed from app. Note: Cognito deletion failed (${json.cognitoError}) — you may need to remove them manually in the AWS console.`)
+      }
+    } catch (err: any) {
+      console.error(err)
+      setDeleteParentError(err.message || 'Something went wrong')
+    } finally {
+      setDeletingParent(false)
+    }
+  }
+
   async function archiveStudent(s: Student) {
     setArchivingId(s.id)
     setArchiveError(null)
@@ -608,9 +687,13 @@ export default function StudentsPage() {
 
   async function archiveAllStudents() {
     const toArchive = activeStudents.filter(s => s.status === 'active')
+    const uniqueParentIds = [...new Set(allParentStudents.map(p => p.parentId))]
+    const totalWork = toArchive.length + uniqueParentIds.length
     setYearEndRunning(true)
-    setYearEndProgress({ done: 0, total: toArchive.length })
+    setYearEndProgress({ done: 0, total: totalWork })
     let done = 0
+
+    // Archive all students
     for (const s of toArchive) {
       try {
         await fetch('/api/archive-student', {
@@ -623,8 +706,28 @@ export default function StudentsPage() {
         console.error('Failed to archive', s.firstName, s.lastName, err)
       }
       done++
-      setYearEndProgress({ done, total: toArchive.length })
+      setYearEndProgress({ done, total: totalWork })
     }
+
+    // Remove all parent accounts
+    for (const parentId of uniqueParentIds) {
+      try {
+        const profile = parentProfiles.find(p => p.userId === parentId) || null
+        const psIds = allParentStudents.filter(p => p.parentId === parentId).map(p => p.id)
+        await fetch('/api/delete-parent', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: parentId, profileId: profile?.id || null, parentStudentIds: psIds }),
+        })
+        setParentProfiles(prev => prev.filter(p => p.userId !== parentId))
+        setAllParentStudents(prev => prev.filter(p => p.parentId !== parentId))
+      } catch (err) {
+        console.error('Failed to delete parent', parentId, err)
+      }
+      done++
+      setYearEndProgress({ done, total: totalWork })
+    }
+
     setYearEndRunning(false)
     setYearEndConfirm(false)
   }
@@ -1003,20 +1106,20 @@ export default function StudentsPage() {
               <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px' }}>
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#D97706" strokeWidth="2"><path d="M21 8v13H3V8"/><path d="M23 3H1v5h22V3z"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
               </div>
-              <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', color: 'var(--foreground)', marginBottom: '10px' }}>End of Year — Archive All Students</h2>
+              <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', color: 'var(--foreground)', marginBottom: '10px' }}>End of Year Reset</h2>
               <p style={{ fontSize: '14px', color: 'var(--gray-mid)', lineHeight: 1.6, marginBottom: '16px' }}>
-                This will archive all <strong>{activeStudents.filter(s => s.status === 'active').length} active students</strong>:
+                This will reset access for <strong>{activeStudents.filter(s => s.status === 'active').length} students</strong> and <strong>{[...new Set(allParentStudents.map(p => p.parentId))].length} parents</strong>:
               </p>
               <ul style={{ fontSize: '13px', color: 'var(--gray-mid)', lineHeight: 1.8, paddingLeft: '20px', marginBottom: '20px' }}>
-                <li>Their <strong>Cognito login is deleted</strong> — they cannot sign in next year</li>
+                <li>All <strong>student and parent Cognito logins are deleted</strong> — no one can sign in next year</li>
                 <li>All <strong>grades, submissions, and comments are preserved</strong> for your records</li>
                 <li>Student names remain visible in the gradebook and grade history</li>
-                <li>To re-enroll next year, they create a <strong>fresh account</strong> and you approve them again</li>
+                <li>Next year everyone creates a <strong>fresh account</strong> from their new invite links</li>
               </ul>
               {yearEndRunning && (
                 <div style={{ marginBottom: '20px' }}>
                   <div style={{ fontSize: '13px', color: 'var(--gray-mid)', marginBottom: '8px' }}>
-                    Archiving… {yearEndProgress.done} / {yearEndProgress.total}
+                    Resetting… {yearEndProgress.done} / {yearEndProgress.total}
                   </div>
                   <div style={{ height: '6px', background: 'var(--gray-light)', borderRadius: '3px', overflow: 'hidden' }}>
                     <div style={{ height: '100%', background: 'var(--plum)', borderRadius: '3px', width: `${yearEndProgress.total > 0 ? (yearEndProgress.done / yearEndProgress.total) * 100 : 0}%`, transition: 'width 0.3s ease' }} />
@@ -1034,7 +1137,7 @@ export default function StudentsPage() {
                   onClick={archiveAllStudents}
                   disabled={yearEndRunning}
                   style={{ flex: 2, padding: '11px', borderRadius: '8px', border: 'none', background: yearEndRunning ? '#92400E' : '#D97706', color: 'white', fontSize: '14px', fontWeight: 600, cursor: yearEndRunning ? 'not-allowed' : 'pointer', fontFamily: 'var(--font-body)' }}>
-                  {yearEndRunning ? `Archiving ${yearEndProgress.done}/${yearEndProgress.total}…` : 'Archive All Students'}
+                  {yearEndRunning ? `Resetting… ${yearEndProgress.done}/${yearEndProgress.total}` : 'Reset All Access'}
                 </button>
               </div>
             </div>
@@ -1956,6 +2059,118 @@ export default function StudentsPage() {
             )}
           </div>
         )}
+
+        {/* ── PARENT ACCOUNTS ── */}
+        {(() => {
+          const uniqueParentIds = [...new Set(allParentStudents.map(p => p.parentId))]
+          if (uniqueParentIds.length === 0) return null
+
+          return (
+            <div style={{ borderTop: '1px solid var(--gray-light)', paddingTop: '40px', marginTop: '40px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                <h3 style={{ fontFamily: 'var(--font-display)', fontSize: '18px', color: 'var(--foreground)', margin: 0 }}>Parent Accounts</h3>
+                <span style={{ fontSize: '12px', background: 'rgba(123,79,166,0.1)', color: 'var(--plum)', padding: '3px 10px', borderRadius: '20px', fontWeight: 600 }}>
+                  {uniqueParentIds.length} active
+                </span>
+              </div>
+              <p style={{ color: 'var(--gray-mid)', fontSize: '13px', marginBottom: '20px' }}>
+                Parents who have accepted their invite and created accounts. Delete removes their login from Cognito and unlinks them from all students.
+              </p>
+
+              {deleteParentError && (
+                <div style={{ background: '#FEF2F2', border: '1px solid #fca5a5', borderRadius: '8px', padding: '12px 16px', marginBottom: '16px', fontSize: '13px', color: '#b91c1c' }}>
+                  {deleteParentError}
+                  <button onClick={() => setDeleteParentError(null)} style={{ float: 'right', background: 'none', border: 'none', color: '#b91c1c', cursor: 'pointer' }}>×</button>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {uniqueParentIds.map(parentId => {
+                  const profile = parentProfiles.find(p => p.userId === parentId)
+                  const linkedStudents = allParentStudents.filter(p => p.parentId === parentId)
+
+                  // Try to get name/email from profile, fall back to invite records
+                  let displayName = profile ? `${profile.firstName} ${profile.lastName}` : ''
+                  let displayEmail = profile?.email || ''
+                  if (!displayName || !displayEmail) {
+                    // Look up invite records matched by studentEmail
+                    for (const ps of linkedStudents) {
+                      const matchedInvite = invites.find(
+                        i => i.used && i.studentEmail.toLowerCase() === ps.studentEmail.toLowerCase()
+                      )
+                      if (matchedInvite) {
+                        if (!displayName && matchedInvite.parentFirstName) {
+                          displayName = `${matchedInvite.parentFirstName}${matchedInvite.parentLastName ? ' ' + matchedInvite.parentLastName : ''}`
+                        }
+                        if (!displayEmail && matchedInvite.parentEmail) {
+                          displayEmail = matchedInvite.parentEmail
+                        }
+                        if (displayName && displayEmail) break
+                      }
+                    }
+                  }
+
+                  const isConfirming = deleteParentConfirmId === parentId
+
+                  return (
+                    <div key={parentId} style={{ background: 'var(--background)', border: `1px solid ${isConfirming ? '#fca5a5' : 'var(--gray-light)'}`, borderRadius: '10px', padding: '14px 16px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                        <div style={{ width: '34px', height: '34px', borderRadius: '50%', background: 'rgba(3,105,161,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '16px' }}>
+                          👤
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--foreground)' }}>
+                            {displayName || <span style={{ color: 'var(--gray-mid)', fontStyle: 'italic' }}>Unknown name</span>}
+                          </div>
+                          <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginTop: '1px' }}>
+                            {displayEmail || <span style={{ fontStyle: 'italic' }}>No email on record</span>}
+                          </div>
+                          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>
+                            {linkedStudents.map(ps => (
+                              <span key={ps.id} style={{ fontSize: '11px', background: 'rgba(123,79,166,0.08)', color: 'var(--plum)', padding: '2px 8px', borderRadius: '20px', fontWeight: 500 }}>
+                                {ps.studentName}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                        {!isConfirming ? (
+                          <button
+                            onClick={() => setDeleteParentConfirmId(parentId)}
+                            style={{ background: 'transparent', color: '#ef4444', border: '1px solid #fca5a5', borderRadius: '6px', padding: '5px 12px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                          >
+                            Remove
+                          </button>
+                        ) : (
+                          <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                            <button
+                              onClick={() => setDeleteParentConfirmId(null)}
+                              disabled={deletingParent}
+                              style={{ background: 'transparent', color: 'var(--gray-mid)', border: '1px solid var(--gray-light)', borderRadius: '6px', padding: '5px 12px', fontSize: '12px', cursor: 'pointer' }}
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              onClick={() => deleteParentCompletely(parentId)}
+                              disabled={deletingParent}
+                              style={{ background: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', padding: '5px 12px', fontSize: '12px', fontWeight: 600, cursor: deletingParent ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}
+                            >
+                              {deletingParent ? 'Removing…' : 'Confirm Remove'}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      {isConfirming && (
+                        <div style={{ marginTop: '10px', padding: '10px 12px', background: '#FEF2F2', borderRadius: '6px', fontSize: '12px', color: '#b91c1c' }}>
+                          This will delete their Cognito login and remove all student links. Grades and submissions are not affected.
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })()}
 
       </main>
 
