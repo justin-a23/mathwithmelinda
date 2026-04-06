@@ -3,6 +3,7 @@
 import { useAuthenticator } from '@aws-amplify/ui-react'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
+import { useRoleGuard } from '@/app/hooks/useRoleGuard'
 import { generateClient } from 'aws-amplify/api'
 import StudentNav from '../../components/StudentNav'
 import MathRenderer from '../../components/MathRenderer'
@@ -89,7 +90,8 @@ function SubmissionImage({ url, alt, style }: { url: string; alt: string; style?
 const client = generateClient()
 
 export default function StudentSubmissions() {
-  const { user, signOut, authStatus } = useAuthenticator()
+  const { checking } = useRoleGuard('student')
+  const { user, signOut } = useAuthenticator()
   const router = useRouter()
   const [submissions, setSubmissions] = useState<StudentSubmission[]>([])
   const [loading, setLoading] = useState(true)
@@ -97,10 +99,6 @@ export default function StudentSubmissions() {
   const [fileUrls, setFileUrls] = useState<Record<string, string[]>>({})
   const [questionMap, setQuestionMap] = useState<Record<string, Question[]>>({})
   const [fetchedIds, setFetchedIds] = useState<Set<string>>(new Set())
-
-  useEffect(() => {
-    if (authStatus === 'unauthenticated') router.replace('/login')
-  }, [authStatus, router])
 
   useEffect(() => {
     const studentId = user?.signInDetails?.loginId || user?.userId
@@ -190,6 +188,7 @@ export default function StudentSubmissions() {
     })
   }
 
+  if (checking) return null
   return (
     <div style={{ fontFamily: 'var(--font-body)', background: 'var(--page-bg)', minHeight: '100vh' }}>
       <StudentNav />

@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, Suspense } from 'react'
 import { generateClient } from 'aws-amplify/api'
 import StudentNav from '../../components/StudentNav'
 import { apiFetch } from '@/app/lib/apiFetch'
+import { useRoleGuard } from '@/app/hooks/useRoleGuard'
 
 const client = generateClient()
 
@@ -56,7 +57,8 @@ function fmtDate(s: string): string {
 }
 
 function StudentMessagesPageInner() {
-  const { user, signOut, authStatus } = useAuthenticator()
+  const { checking } = useRoleGuard('student')
+  const { user, signOut } = useAuthenticator()
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -74,10 +76,6 @@ function StudentMessagesPageInner() {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const studentId = user?.signInDetails?.loginId || user?.userId || ''
-
-  useEffect(() => {
-    if (authStatus === 'unauthenticated') router.replace('/login')
-  }, [authStatus, router])
 
   useEffect(() => {
     if (!studentId) return
@@ -209,6 +207,7 @@ function StudentMessagesPageInner() {
     }
   }
 
+  if (checking) return null
   return (
     <div style={{ fontFamily: 'var(--font-body)', background: 'var(--page-bg)', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
 

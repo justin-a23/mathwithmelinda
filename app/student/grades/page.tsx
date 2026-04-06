@@ -3,6 +3,7 @@
 import { useAuthenticator } from '@aws-amplify/ui-react'
 import { useRouter } from 'next/navigation'
 import StudentNav from '../../components/StudentNav'
+import { useRoleGuard } from '@/app/hooks/useRoleGuard'
 import { useEffect, useState } from 'react'
 import { generateClient } from 'aws-amplify/api'
 
@@ -142,7 +143,8 @@ function scoreColor(n: number, gradeA: number, gradeB: number, gradeC: number, g
 }
 
 export default function StudentGradesPage() {
-  const { user, authStatus } = useAuthenticator()
+  const { checking } = useRoleGuard('student')
+  const { user } = useAuthenticator()
   const router = useRouter()
 
   const [profile, setProfile] = useState<StudentProfile | null>(null)
@@ -152,10 +154,6 @@ export default function StudentGradesPage() {
   const [loading, setLoading] = useState(true)
   const [dataLoading, setDataLoading] = useState(false)
   const [expandedId, setExpandedId] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (authStatus === 'unauthenticated') router.replace('/login')
-  }, [authStatus, router])
 
   useEffect(() => {
     const userId = user?.userId || user?.username || ''
@@ -352,6 +350,7 @@ export default function StudentGradesPage() {
   const pendingCount = assignments.filter(a => a.grade === 'pending').length
   const notStartedCount = assignments.filter(a => !a.grade).length
 
+  if (checking) return null
   return (
     <div style={{ fontFamily: 'var(--font-body)', background: 'var(--page-bg)', minHeight: '100vh' }}>
       <style>{`

@@ -39,9 +39,10 @@ export default function StudentNav({ unreadCount: propUnread }: Props = {}) {
   const [profilePic, setProfilePic] = useState<string | null>(null)
 
   useEffect(() => {
+    if (!user?.userId && !user?.username) return
     if (propUnread === undefined) fetchUnread()
     fetchProfile()
-  }, [])
+  }, [user?.userId])
 
   async function fetchUnread() {
     try {

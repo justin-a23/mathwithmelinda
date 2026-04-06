@@ -3,6 +3,7 @@
 import { useAuthenticator } from '@aws-amplify/ui-react'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
+import { useRoleGuard } from '@/app/hooks/useRoleGuard'
 import { generateClient } from 'aws-amplify/api'
 import StudentNav from '../../components/StudentNav'
 import { apiFetch } from '@/app/lib/apiFetch'
@@ -59,7 +60,8 @@ function formatDateRange(start: string, end: string): string {
 }
 
 export default function StudentSyllabusPage() {
-  const { user, authStatus } = useAuthenticator()
+  const { checking } = useRoleGuard('student')
+  const { user } = useAuthenticator()
   const router = useRouter()
 
   const [loading, setLoading] = useState(true)
@@ -68,9 +70,6 @@ export default function StudentSyllabusPage() {
   const [semesterInfo, setSemesterInfo] = useState('')
   const [noSyllabus, setNoSyllabus] = useState(false)
 
-  useEffect(() => {
-    if (authStatus === 'unauthenticated') router.replace('/login')
-  }, [authStatus, router])
 
   useEffect(() => {
     const userId = user?.userId || user?.username || ''
@@ -130,6 +129,7 @@ export default function StudentSyllabusPage() {
     }
   }
 
+  if (checking) return null
   return (
     <div style={{ fontFamily: 'var(--font-body)', background: 'var(--page-bg)', minHeight: '100vh' }}>
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
