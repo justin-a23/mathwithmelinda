@@ -10,7 +10,7 @@ const client = generateClient()
 const findInviteByToken = /* GraphQL */`
   query ListParentInvites($filter: ModelParentInviteFilterInput) {
     listParentInvites(filter: $filter, limit: 500) {
-      items { id token studentEmail studentName used }
+      items { id token studentEmail studentName used parentEmail parentFirstName parentLastName }
     }
   }
 `
@@ -35,7 +35,21 @@ const listParentStudentLinks = /* GraphQL */`
   }
 `
 
-type Invite = { id: string; token: string; studentEmail: string; studentName: string; used: boolean | null }
+const findParentProfile = `
+  query ListParentProfiles($filter: ModelParentProfileFilterInput) {
+    listParentProfiles(filter: $filter, limit: 1) {
+      items { id }
+    }
+  }
+`
+
+const createParentProfileMutation = `
+  mutation CreateParentProfile($input: CreateParentProfileInput!) {
+    createParentProfile(input: $input) { id }
+  }
+`
+
+type Invite = { id: string; token: string; studentEmail: string; studentName: string; used: boolean | null; parentEmail?: string | null; parentFirstName?: string | null; parentLastName?: string | null }
 type State = 'loading' | 'not-found' | 'already-used' | 'already-linked' | 'auth-fork' | 'confirming' | 'done' | 'error'
 
 export default function AcceptInvitePage() {
@@ -157,6 +171,32 @@ export default function AcceptInvitePage() {
         query: createParentStudent,
         variables: { input: { parentId: userId, studentEmail: inv.studentEmail, studentName: inv.studentName } }
       })
+
+      // Create ParentProfile if this is their first accept (needed for email lookups)
+      try {
+        const currentUser = await getCurrentUser()
+        const email = currentUser.signInDetails?.loginId || ''
+        if (email) {
+          const existing = await (client.graphql as any)({
+            query: findParentProfile,
+            variables: { filter: { userId: { eq: userId } } },
+          })
+          if (existing.data.listParentProfiles.items.length === 0) {
+            await (client.graphql as any)({
+              query: createParentProfileMutation,
+              variables: {
+                input: {
+                  userId,
+                  email,
+                  firstName: inv.parentFirstName || 'Parent',
+                  lastName: inv.parentLastName || '',
+                }
+              }
+            })
+          }
+        }
+      } catch { /* non-fatal — profile creation failure doesn't block the accept */ }
+
       await client.graphql({
         query: updateParentInvite,
         variables: { input: { id: inv.id, used: true } }

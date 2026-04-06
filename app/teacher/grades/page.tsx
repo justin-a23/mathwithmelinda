@@ -774,6 +774,32 @@ function GradingPageInner() {
           text: `Hi ${studentName},\n\nMelinda graded your submission for ${lessonTitle}.\n\nGrade: ${grade}${comment ? `\n\nComment: ${comment}` : ''}\n\nView at https://mathwithmelinda.com/dashboard`,
         }),
       }).catch(() => {})
+
+      // Also notify linked parents
+      const studentFullName = studentNameMap[selectedSubmission.studentId] || selectedSubmission.studentId
+      fetch('/api/notify-parents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          studentEmail: selectedSubmission.studentId,
+          subject: `${studentFullName}'s work has been graded: ${lessonTitle}`,
+          html: `
+            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #7B4FA6;">Grade posted for ${studentFullName}</h2>
+              <p style="font-size: 15px; color: #333;">Melinda has graded <strong>${studentFullName}</strong>'s submission for <strong>${lessonTitle}</strong>.</p>
+              <div style="background: #f5f3ff; border-left: 4px solid #7B4FA6; border-radius: 8px; padding: 16px 20px; margin: 20px 0;">
+                <div style="font-size: 14px; color: #555; margin-bottom: 8px;">Grade</div>
+                <div style="font-size: 28px; font-weight: 700; color: #7B4FA6;">${grade}</div>
+                ${comment ? `<div style="font-size: 14px; color: #444; margin-top: 12px; line-height: 1.6;"><strong>Melinda's comment:</strong><br/>${comment.replace(/\n/g, '<br/>')}</div>` : ''}
+              </div>
+              <a href="https://mathwithmelinda.com/parent" style="display: inline-block; background: #7B4FA6; color: white; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: 600;">
+                View in Parent Portal
+              </a>
+            </div>
+          `,
+          text: `${studentFullName}'s submission for ${lessonTitle} has been graded.\n\nGrade: ${grade}${comment ? `\n\nComment: ${comment}` : ''}\n\nView at https://mathwithmelinda.com/parent`,
+        }),
+      }).catch(() => {})
     } catch (err) {
       console.error(err)
     } finally {
@@ -826,6 +852,31 @@ function GradingPageInner() {
             </div>
           `,
           text: `Hi ${studentName},\n\nMelinda is sending back your submission for ${lessonTitle} for revision.\n\nFeedback: ${returnReason.trim()}${returnDueDate ? `\n\nNew due date: ${returnDueDate}` : ''}\n\nGo to https://mathwithmelinda.com/dashboard`,
+        }),
+      }).catch(() => {})
+
+      // Also notify linked parents
+      const studentFullNameR = studentNameMap[selectedSubmission.studentId] || selectedSubmission.studentId
+      fetch('/api/notify-parents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          studentEmail: selectedSubmission.studentId,
+          subject: `${studentFullNameR}'s work has been returned for revision: ${lessonTitle}`,
+          html: `
+            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #d97706;">Work returned for ${studentFullNameR}</h2>
+              <p style="font-size: 15px; color: #333;">Melinda has returned <strong>${studentFullNameR}</strong>'s submission for <strong>${lessonTitle}</strong> for revision.</p>
+              <div style="background: #fffbeb; border-left: 4px solid #d97706; border-radius: 8px; padding: 16px 20px; margin: 20px 0;">
+                <div style="font-size: 13px; font-weight: 700; color: #92400e; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">Feedback</div>
+                <div style="font-size: 15px; color: #78350f; line-height: 1.6;">${returnReason.trim().replace(/\n/g, '<br/>')}</div>
+              </div>
+              <a href="https://mathwithmelinda.com/parent" style="display: inline-block; background: #d97706; color: white; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: 600;">
+                View in Parent Portal
+              </a>
+            </div>
+          `,
+          text: `${studentFullNameR}'s submission for ${lessonTitle} has been returned for revision.\n\nFeedback: ${returnReason.trim()}\n\nView at https://mathwithmelinda.com/parent`,
         }),
       }).catch(() => {})
     } catch (err) { console.error(err) }
