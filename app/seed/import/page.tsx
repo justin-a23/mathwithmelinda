@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { generateClient } from 'aws-amplify/api'
+import { useRoleGuard } from '@/app/hooks/useRoleGuard'
 import { listCourses } from '../../../src/graphql/queries'
 
 const client = generateClient()
@@ -11,6 +12,7 @@ type Course = { id: string; title: string }
 type LessonRow = { lessonNumber: string; title: string; instructions: string; worksheetUrl: string }
 
 export default function ImportLessons() {
+  const { checking } = useRoleGuard('teacher')
   const router = useRouter()
   const [courses, setCourses] = useState<Course[]>([])
   const [selectedCourse, setSelectedCourse] = useState('')
@@ -111,6 +113,8 @@ export default function ImportLessons() {
       setImporting(false)
     }
   }
+
+  if (checking) return null
 
   return (
     <div style={{ fontFamily: 'var(--font-body)', background: 'var(--white)', minHeight: '100vh', padding: '48px 24px' }}>

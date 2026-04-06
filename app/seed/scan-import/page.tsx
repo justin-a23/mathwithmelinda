@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback } from 'react'
 import { generateClient } from 'aws-amplify/api'
 import { apiFetch } from '@/app/lib/apiFetch'
+import { useRoleGuard } from '@/app/hooks/useRoleGuard'
 import { listCourses, listLessonTemplates } from '../../../src/graphql/queries'
 import { createAssignmentQuestion, updateLessonTemplate } from '../../../src/graphql/mutations'
 
@@ -27,6 +28,8 @@ const TYPE_BADGE: Record<string, { bg: string; color: string; label: string }> =
 }
 
 export default function ScanImportPage() {
+  const { checking } = useRoleGuard('teacher')
+
   // ── Lesson info (Melinda provides) ────────────────────────────────────────
   const [courses, setCourses] = useState<Course[]>([])
   const [lessons, setLessons] = useState<Lesson[]>([])
@@ -195,6 +198,8 @@ export default function ScanImportPage() {
   const selectedLessonObj = lessons.find(l => l.id === selectedLesson)
   const canExtract = files.length > 0
   const canImport = questions.length > 0 && selectedLesson
+
+  if (checking) return null
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (

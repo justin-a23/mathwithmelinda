@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { generateClient } from 'aws-amplify/api'
+import { useRoleGuard } from '@/app/hooks/useRoleGuard'
 import { listCourses, listLessonTemplates } from '../../../src/graphql/queries'
 import { createAssignmentQuestion, updateLessonTemplate } from '../../../src/graphql/mutations'
 
@@ -70,6 +71,7 @@ function parseCSV(text: string): QuestionRow[] {
 }
 
 export default function ImportQuestionsPage() {
+  const { checking } = useRoleGuard('teacher')
   const [courses, setCourses] = useState<Course[]>([])
   const [lessons, setLessons] = useState<Lesson[]>([])
   const [selectedCourse, setSelectedCourse] = useState('')
@@ -198,6 +200,8 @@ export default function ImportQuestionsPage() {
   }
 
   const selectedLessonObj = lessons.find(l => l.id === selectedLesson)
+
+  if (checking) return null
 
   return (
     <div style={{ fontFamily: 'var(--font-body)', background: 'var(--page-bg)', minHeight: '100vh', padding: '48px 24px' }}>
