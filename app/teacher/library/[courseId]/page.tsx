@@ -140,6 +140,8 @@ export default function LessonLibraryPage() {
   const [questions, setQuestions] = useState<AssignmentQuestion[]>([])
   const [loadingQuestions, setLoadingQuestions] = useState(false)
   const [newQuestion, setNewQuestion] = useState({ questionText: '', questionType: 'number', choices: '', correctAnswer: '' })
+  const [addMode, setAddMode] = useState<'question' | 'header'>('question')
+  const [newHeaderText, setNewHeaderText] = useState('')
   const [addingQuestion, setAddingQuestion] = useState(false)
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null)
   const [editingQuestionForm, setEditingQuestionForm] = useState({ questionText: '', questionType: 'number', choices: '', correctAnswer: '' })
@@ -428,8 +430,10 @@ export default function LessonLibraryPage() {
   }
 
   async function saveEdit(id: string) {
-    // Auto-add the in-progress question if the form has content
-    if (newQuestion.questionText.trim() || pendingDiagramFile) {
+    // Auto-add the in-progress question/header if the form has content
+    if (addMode === 'header' && newHeaderText.trim()) {
+      await handleAddSectionHeader(id)
+    } else if (addMode === 'question' && (newQuestion.questionText.trim() || pendingDiagramFile)) {
       await handleAddQuestion(id)
     }
     setSaving(true)
@@ -540,13 +544,14 @@ export default function LessonLibraryPage() {
   }
 
   async function handleAddSectionHeader(lessonId: string) {
+    if (!newHeaderText.trim()) return
     setAddingQuestion(true)
     try {
       const result: any = await client.graphql({
         query: createAssignmentQuestion,
         variables: {
           input: {
-            questionText: 'Section Header',
+            questionText: newHeaderText.trim(),
             questionType: 'section_header',
             choices: null,
             correctAnswer: null,
@@ -568,9 +573,7 @@ export default function LessonLibraryPage() {
       }
       setQuestions(prev => [...prev, newQ])
       setIsDirty(true)
-      // Auto-open edit so teacher can type the header text
-      setEditingQuestionId(created.id)
-      setEditingQuestionForm({ questionText: '', questionType: 'section_header', choices: '', correctAnswer: '' })
+      setNewHeaderText('')
     } catch (err) {
       console.error('Error adding section header:', err)
     } finally {
@@ -1471,18 +1474,7 @@ export default function LessonLibraryPage() {
                                       fontSize: '13px', fontWeight: 600, fontFamily: 'var(--font-body)',
                                     }}
                                   >
-                                    + Add Question
-                                  </button>
-                                  <button
-                                    onClick={() => handleAddSectionHeader(lesson.id)}
-                                    disabled={addingQuestion}
-                                    style={{
-                                      background: 'var(--white)', border: '1px dashed var(--plum)', color: 'var(--plum)',
-                                      borderRadius: '6px', padding: '7px 16px', cursor: 'pointer',
-                                      fontSize: '13px', fontWeight: 600, fontFamily: 'var(--font-body)',
-                                    }}
-                                  >
-                                    § Section Header
+                                    + Add New ↓
                                   </button>
                                   {(editForm.assignmentType === 'questions' || editForm.assignmentType === 'both') && (
                                     <button
@@ -1557,7 +1549,13 @@ export default function LessonLibraryPage() {
                                                       style={{ background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '6px', padding: '7px 18px', cursor: 'pointer', fontSize: '13px', fontWeight: 500, fontFamily: 'var(--font-body)' }}>
                                                       {savingQuestion ? 'Saving...' : 'Save'}
                                                     </button>
-                                                    <button onClick={() => setEditingQuestionId(null)}
+                                                    <button onClick={() => {
+                                                      // If header still has default placeholder text, delete it on cancel
+                                                      if (q.questionText === 'Section Header' && !editingQuestionForm.questionText.trim()) {
+                                                        handleDeleteQuestion(q.id)
+                                                      }
+                                                      setEditingQuestionId(null)
+                                                    }}
                                                       style={{ background: 'none', border: '1px solid var(--gray-light)', color: 'var(--gray-dark)', borderRadius: '6px', padding: '7px 18px', cursor: 'pointer', fontSize: '13px', fontFamily: 'var(--font-body)' }}>
                                                       Cancel
                                                     </button>
@@ -1753,155 +1751,209 @@ export default function LessonLibraryPage() {
                                   </div>
                                 )}
 
-                                {/* Add Question form */}
+                                {/* Add Question / Header form */}
                                 <div id={`question-builder-${lesson.id}`} style={{ background: 'var(--white)', border: '1px solid var(--gray-light)', borderRadius: '8px', padding: '16px', marginBottom: '0' }}>
-                                  <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--gray-dark)', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Add Question</div>
-                                  <div style={{ marginBottom: '12px' }}>
-                                    <label style={labelStyle}>Question</label>
-                                    <MathToolbar
-                                      textareaRef={questionTextareaRef}
-                                      value={newQuestion.questionText}
-                                      onChange={val => setNewQuestion(q => ({ ...q, questionText: val }))}
-                                    />
-                                    <textarea
-                                      ref={questionTextareaRef}
-                                      value={newQuestion.questionText}
-                                      onChange={e => setNewQuestion(q => ({ ...q, questionText: e.target.value }))}
-                                      placeholder="Type your question here..."
-                                      rows={3}
-                                      style={{ ...inputStyle, resize: 'vertical' }}
-                                    />
-                                  </div>
-                                  <div style={{ marginBottom: '12px' }}>
-                                    <label style={labelStyle}>Answer Type</label>
-                                    <select
-                                      value={newQuestion.questionType}
-                                      onChange={e => setNewQuestion(q => ({ ...q, questionType: e.target.value, choices: '', correctAnswer: '' }))}
-                                      style={{ ...inputStyle }}
+                                  {/* Toggle: Question vs Header */}
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0', marginBottom: '14px' }}>
+                                    <button
+                                      type="button"
+                                      onClick={() => setAddMode('question')}
+                                      style={{
+                                        background: addMode === 'question' ? 'var(--plum)' : 'var(--background)',
+                                        color: addMode === 'question' ? 'white' : 'var(--gray-dark)',
+                                        border: `1px solid ${addMode === 'question' ? 'var(--plum)' : 'var(--gray-light)'}`,
+                                        borderRadius: '6px 0 0 6px', padding: '7px 16px', cursor: 'pointer',
+                                        fontSize: '12px', fontWeight: 700, fontFamily: 'var(--font-body)',
+                                        textTransform: 'uppercase', letterSpacing: '0.5px',
+                                      }}
                                     >
-                                      <option value="number">Number answer</option>
-                                      <option value="short_text">Short text answer</option>
-                                      <option value="multiple_choice">Multiple choice (pick one)</option>
-                                      <option value="multiple_choice_multi">Multiple choice (pick all that apply)</option>
-                                      <option value="show_work">Show work (photo)</option>
-                                    </select>
+                                      + Question
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setAddMode('header')}
+                                      style={{
+                                        background: addMode === 'header' ? 'var(--plum)' : 'var(--background)',
+                                        color: addMode === 'header' ? 'white' : 'var(--gray-dark)',
+                                        border: `1px solid ${addMode === 'header' ? 'var(--plum)' : 'var(--gray-light)'}`,
+                                        borderLeft: 'none',
+                                        borderRadius: '0 6px 6px 0', padding: '7px 16px', cursor: 'pointer',
+                                        fontSize: '12px', fontWeight: 700, fontFamily: 'var(--font-body)',
+                                        textTransform: 'uppercase', letterSpacing: '0.5px',
+                                      }}
+                                    >
+                                      § Header
+                                    </button>
                                   </div>
-                                  {(newQuestion.questionType === 'multiple_choice' || newQuestion.questionType === 'multiple_choice_multi') && (
-                                    <div style={{ marginBottom: '12px' }}>
-                                      <label style={labelStyle}>Choices — one per line</label>
-                                      <textarea
-                                        value={newQuestion.choices}
-                                        onChange={e => setNewQuestion(q => ({ ...q, choices: e.target.value }))}
-                                        placeholder={"12\n24\n36\n48"}
-                                        rows={4}
-                                        style={{ ...inputStyle, resize: 'vertical', fontFamily: 'monospace', fontSize: '13px' }}
-                                      />
-                                      <p style={{ fontSize: '11px', color: 'var(--gray-mid)', margin: '4px 0 0' }}>One choice per line. Letters (A, B, C…) are added automatically when displayed to students.</p>
-                                    </div>
-                                  )}
-                                  {newQuestion.questionType === 'multiple_choice_multi' && (
-                                    <div style={{ marginBottom: '12px' }}>
-                                      <label style={labelStyle}>Correct answer(s) (optional — for auto-grading)</label>
-                                      <textarea
-                                        value={newQuestion.correctAnswer}
-                                        onChange={e => setNewQuestion(q => ({ ...q, correctAnswer: e.target.value }))}
-                                        rows={2}
-                                        placeholder={(() => {
-                                          const lines = newQuestion.choices.split('\n').filter(Boolean)
-                                          if (lines.length >= 2) return `e.g. ${lines[0]} | ${lines[lines.length - 1]}`
-                                          if (lines.length === 1) return `e.g. ${lines[0]}`
-                                          return 'e.g. Red | Green'
-                                        })()}
-                                        style={{ ...inputStyle, resize: 'vertical' }}
-                                      />
-                                      <p style={{ fontSize: '11px', color: 'var(--gray-mid)', margin: '4px 0 0' }}>
-                                        Type each correct choice separated by <code style={{ background: 'var(--gray-light)', padding: '1px 5px', borderRadius: '3px', fontSize: '12px' }}>|</code> — copy the text exactly as written in your choices above.
-                                      </p>
-                                    </div>
-                                  )}
-                                  {(newQuestion.questionType === 'number' || newQuestion.questionType === 'short_text' || newQuestion.questionType === 'multiple_choice') && (
-                                    <div style={{ marginBottom: '12px' }}>
-                                      <label style={labelStyle}>Correct answer (optional — for auto-grading)</label>
-                                      <MathToolbar
-                                        textareaRef={correctAnswerInputRef}
-                                        value={newQuestion.correctAnswer}
-                                        onChange={val => setNewQuestion(q => ({ ...q, correctAnswer: val }))}
-                                      />
-                                      <textarea
-                                        ref={correctAnswerInputRef}
-                                        value={newQuestion.correctAnswer}
-                                        onChange={e => setNewQuestion(q => ({ ...q, correctAnswer: e.target.value }))}
-                                        rows={2}
-                                        placeholder="e.g. \(\frac{7}{8}\) or just 42"
-                                        style={{ ...inputStyle, resize: 'vertical' }}
-                                      />
-                                      {newQuestion.correctAnswer && (
-                                        <div style={{ marginTop: '6px', fontSize: '12px', color: 'var(--gray-dark)' }}>
-                                          Preview: <MathRenderer text={newQuestion.correctAnswer} />
+
+                                  {addMode === 'question' ? (
+                                    <>
+                                      <div style={{ marginBottom: '12px' }}>
+                                        <label style={labelStyle}>Question</label>
+                                        <MathToolbar
+                                          textareaRef={questionTextareaRef}
+                                          value={newQuestion.questionText}
+                                          onChange={val => setNewQuestion(q => ({ ...q, questionText: val }))}
+                                        />
+                                        <textarea
+                                          ref={questionTextareaRef}
+                                          value={newQuestion.questionText}
+                                          onChange={e => setNewQuestion(q => ({ ...q, questionText: e.target.value }))}
+                                          placeholder="Type your question here..."
+                                          rows={3}
+                                          style={{ ...inputStyle, resize: 'vertical' }}
+                                        />
+                                      </div>
+                                      <div style={{ marginBottom: '12px' }}>
+                                        <label style={labelStyle}>Answer Type</label>
+                                        <select
+                                          value={newQuestion.questionType}
+                                          onChange={e => setNewQuestion(q => ({ ...q, questionType: e.target.value, choices: '', correctAnswer: '' }))}
+                                          style={{ ...inputStyle }}
+                                        >
+                                          <option value="number">Number answer</option>
+                                          <option value="short_text">Short text answer</option>
+                                          <option value="multiple_choice">Multiple choice (pick one)</option>
+                                          <option value="multiple_choice_multi">Multiple choice (pick all that apply)</option>
+                                          <option value="show_work">Show work (photo)</option>
+                                        </select>
+                                      </div>
+                                      {(newQuestion.questionType === 'multiple_choice' || newQuestion.questionType === 'multiple_choice_multi') && (
+                                        <div style={{ marginBottom: '12px' }}>
+                                          <label style={labelStyle}>Choices — one per line</label>
+                                          <textarea
+                                            value={newQuestion.choices}
+                                            onChange={e => setNewQuestion(q => ({ ...q, choices: e.target.value }))}
+                                            placeholder={"12\n24\n36\n48"}
+                                            rows={4}
+                                            style={{ ...inputStyle, resize: 'vertical', fontFamily: 'monospace', fontSize: '13px' }}
+                                          />
+                                          <p style={{ fontSize: '11px', color: 'var(--gray-mid)', margin: '4px 0 0' }}>One choice per line. Letters (A, B, C…) are added automatically when displayed to students.</p>
                                         </div>
                                       )}
-                                    </div>
-                                  )}
-                                  {/* Diagram image upload */}
-                                  <div style={{ marginBottom: '12px' }}>
-                                    <label style={labelStyle}>Diagram Image (optional)</label>
-                                    {pendingDiagramPreview && (
-                                      <div style={{ marginBottom: '8px', maxWidth: '200px', position: 'relative' }}>
-                                        <img src={pendingDiagramPreview} alt="Diagram preview" style={{ width: '100%', borderRadius: '6px', border: '1px solid var(--gray-light)' }} />
-                                        <button onClick={() => { setPendingDiagramFile(null); setPendingDiagramPreview(null) }}
-                                          style={{ position: 'absolute', top: '4px', right: '4px', background: '#e05252', color: 'white', border: 'none', borderRadius: '50%', width: '22px', height: '22px', cursor: 'pointer', fontSize: '12px', lineHeight: '22px', textAlign: 'center' }}>
-                                          x
+                                      {newQuestion.questionType === 'multiple_choice_multi' && (
+                                        <div style={{ marginBottom: '12px' }}>
+                                          <label style={labelStyle}>Correct answer(s) (optional — for auto-grading)</label>
+                                          <textarea
+                                            value={newQuestion.correctAnswer}
+                                            onChange={e => setNewQuestion(q => ({ ...q, correctAnswer: e.target.value }))}
+                                            rows={2}
+                                            placeholder={(() => {
+                                              const lines = newQuestion.choices.split('\n').filter(Boolean)
+                                              if (lines.length >= 2) return `e.g. ${lines[0]} | ${lines[lines.length - 1]}`
+                                              if (lines.length === 1) return `e.g. ${lines[0]}`
+                                              return 'e.g. Red | Green'
+                                            })()}
+                                            style={{ ...inputStyle, resize: 'vertical' }}
+                                          />
+                                          <p style={{ fontSize: '11px', color: 'var(--gray-mid)', margin: '4px 0 0' }}>
+                                            Type each correct choice separated by <code style={{ background: 'var(--gray-light)', padding: '1px 5px', borderRadius: '3px', fontSize: '12px' }}>|</code> — copy the text exactly as written in your choices above.
+                                          </p>
+                                        </div>
+                                      )}
+                                      {(newQuestion.questionType === 'number' || newQuestion.questionType === 'short_text' || newQuestion.questionType === 'multiple_choice') && (
+                                        <div style={{ marginBottom: '12px' }}>
+                                          <label style={labelStyle}>Correct answer (optional — for auto-grading)</label>
+                                          <MathToolbar
+                                            textareaRef={correctAnswerInputRef}
+                                            value={newQuestion.correctAnswer}
+                                            onChange={val => setNewQuestion(q => ({ ...q, correctAnswer: val }))}
+                                          />
+                                          <textarea
+                                            ref={correctAnswerInputRef}
+                                            value={newQuestion.correctAnswer}
+                                            onChange={e => setNewQuestion(q => ({ ...q, correctAnswer: e.target.value }))}
+                                            rows={2}
+                                            placeholder="e.g. \(\frac{7}{8}\) or just 42"
+                                            style={{ ...inputStyle, resize: 'vertical' }}
+                                          />
+                                          {newQuestion.correctAnswer && (
+                                            <div style={{ marginTop: '6px', fontSize: '12px', color: 'var(--gray-dark)' }}>
+                                              Preview: <MathRenderer text={newQuestion.correctAnswer} />
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
+                                      {/* Diagram image upload */}
+                                      <div style={{ marginBottom: '12px' }}>
+                                        <label style={labelStyle}>Diagram Image (optional)</label>
+                                        {pendingDiagramPreview && (
+                                          <div style={{ marginBottom: '8px', maxWidth: '200px', position: 'relative' }}>
+                                            <img src={pendingDiagramPreview} alt="Diagram preview" style={{ width: '100%', borderRadius: '6px', border: '1px solid var(--gray-light)' }} />
+                                            <button onClick={() => { setPendingDiagramFile(null); setPendingDiagramPreview(null) }}
+                                              style={{ position: 'absolute', top: '4px', right: '4px', background: '#e05252', color: 'white', border: 'none', borderRadius: '50%', width: '22px', height: '22px', cursor: 'pointer', fontSize: '12px', lineHeight: '22px', textAlign: 'center' }}>
+                                              x
+                                            </button>
+                                          </div>
+                                        )}
+                                        <input
+                                          ref={diagramInputRef}
+                                          type="file"
+                                          accept="image/jpeg,image/png"
+                                          style={{ display: 'none' }}
+                                          onChange={e => {
+                                            const f = e.target.files?.[0]
+                                            if (f) {
+                                              setPendingDiagramFile(f)
+                                              const url = URL.createObjectURL(f)
+                                              setPendingDiagramPreview(url)
+                                            }
+                                          }}
+                                        />
+                                        <button
+                                          onClick={() => diagramInputRef.current?.click()}
+                                          style={{ background: 'none', border: '1px dashed var(--gray-light)', color: 'var(--gray-mid)', borderRadius: '6px', padding: '6px 14px', cursor: 'pointer', fontSize: '12px', fontFamily: 'var(--font-body)' }}
+                                        >
+                                          {pendingDiagramFile ? 'Replace image...' : 'Add image...'}
                                         </button>
                                       </div>
-                                    )}
-                                    <input
-                                      ref={diagramInputRef}
-                                      type="file"
-                                      accept="image/jpeg,image/png"
-                                      style={{ display: 'none' }}
-                                      onChange={e => {
-                                        const f = e.target.files?.[0]
-                                        if (f) {
-                                          setPendingDiagramFile(f)
-                                          const url = URL.createObjectURL(f)
-                                          setPendingDiagramPreview(url)
-                                        }
-                                      }}
-                                    />
-                                    <button
-                                      onClick={() => diagramInputRef.current?.click()}
-                                      style={{ background: 'none', border: '1px dashed var(--gray-light)', color: 'var(--gray-mid)', borderRadius: '6px', padding: '6px 14px', cursor: 'pointer', fontSize: '12px', fontFamily: 'var(--font-body)' }}
-                                    >
-                                      {pendingDiagramFile ? 'Replace image...' : 'Add image...'}
-                                    </button>
-                                  </div>
-                                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                                    <button
-                                      onClick={() => handleAddQuestion(lesson.id)}
-                                      disabled={addingQuestion || (!newQuestion.questionText.trim() && !pendingDiagramFile)}
-                                      style={{
-                                        background: (newQuestion.questionText.trim() || pendingDiagramFile) ? 'var(--plum)' : 'var(--gray-light)',
-                                        color: (newQuestion.questionText.trim() || pendingDiagramFile) ? 'white' : 'var(--gray-mid)',
-                                        border: 'none', borderRadius: '6px', padding: '8px 20px',
-                                        cursor: (newQuestion.questionText.trim() || pendingDiagramFile) ? 'pointer' : 'not-allowed',
-                                        fontSize: '13px', fontWeight: 500, fontFamily: 'var(--font-body)'
-                                      }}
-                                    >
-                                      {addingQuestion ? 'Adding...' : 'Add Question'}
-                                    </button>
-                                    <span style={{ color: 'var(--gray-light)', fontSize: '13px' }}>or</span>
-                                    <button
-                                      onClick={() => handleAddSectionHeader(lesson.id)}
-                                      disabled={addingQuestion}
-                                      style={{
-                                        background: 'none', border: '1px dashed var(--plum)', color: 'var(--plum)',
-                                        borderRadius: '6px', padding: '7px 16px', cursor: addingQuestion ? 'not-allowed' : 'pointer',
-                                        fontSize: '13px', fontWeight: 600, fontFamily: 'var(--font-body)',
-                                      }}
-                                    >
-                                      § Add Section Header
-                                    </button>
-                                  </div>
+                                      <button
+                                        onClick={() => handleAddQuestion(lesson.id)}
+                                        disabled={addingQuestion || (!newQuestion.questionText.trim() && !pendingDiagramFile)}
+                                        style={{
+                                          background: (newQuestion.questionText.trim() || pendingDiagramFile) ? 'var(--plum)' : 'var(--gray-light)',
+                                          color: (newQuestion.questionText.trim() || pendingDiagramFile) ? 'white' : 'var(--gray-mid)',
+                                          border: 'none', borderRadius: '6px', padding: '8px 20px',
+                                          cursor: (newQuestion.questionText.trim() || pendingDiagramFile) ? 'pointer' : 'not-allowed',
+                                          fontSize: '13px', fontWeight: 500, fontFamily: 'var(--font-body)'
+                                        }}
+                                      >
+                                        {addingQuestion ? 'Adding...' : 'Add Question'}
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <div style={{ marginBottom: '12px' }}>
+                                        <label style={labelStyle}>Header Text</label>
+                                        <MathToolbar
+                                          textareaRef={questionTextareaRef}
+                                          value={newHeaderText}
+                                          onChange={val => setNewHeaderText(val)}
+                                        />
+                                        <textarea
+                                          ref={questionTextareaRef}
+                                          value={newHeaderText}
+                                          onChange={e => setNewHeaderText(e.target.value)}
+                                          placeholder="e.g. Simplify each expression"
+                                          rows={2}
+                                          style={{ ...inputStyle, resize: 'vertical' }}
+                                        />
+                                      </div>
+                                      <button
+                                        onClick={() => handleAddSectionHeader(lesson.id)}
+                                        disabled={addingQuestion || !newHeaderText.trim()}
+                                        style={{
+                                          background: newHeaderText.trim() ? 'var(--plum)' : 'var(--gray-light)',
+                                          color: newHeaderText.trim() ? 'white' : 'var(--gray-mid)',
+                                          border: 'none', borderRadius: '6px', padding: '8px 20px',
+                                          cursor: newHeaderText.trim() ? 'pointer' : 'not-allowed',
+                                          fontSize: '13px', fontWeight: 500, fontFamily: 'var(--font-body)'
+                                        }}
+                                      >
+                                        {addingQuestion ? 'Adding...' : 'Add Header'}
+                                      </button>
+                                    </>
+                                  )}
                                 </div>
 
                                 {/* Save / Cancel row — bottom of Questions tab */}
