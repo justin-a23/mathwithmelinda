@@ -98,6 +98,7 @@ type AssignmentQuestion = {
   questionType: string
   choices: string | null
   correctAnswer: string | null
+  diagramKey: string | null
   lessonTemplateAssignmentQuestionsId: string | null
 }
 
@@ -145,6 +146,14 @@ export default function LessonLibraryPage() {
   const [savingQuestion, setSavingQuestion] = useState(false)
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
+  const [diagramUrls, setDiagramUrls] = useState<Record<string, string>>({})
+  const [pendingDiagramFile, setPendingDiagramFile] = useState<File | null>(null)
+  const [pendingDiagramPreview, setPendingDiagramPreview] = useState<string | null>(null)
+  const [editingDiagramFile, setEditingDiagramFile] = useState<File | null>(null)
+  const [editingDiagramPreview, setEditingDiagramPreview] = useState<string | null>(null)
+  const [editingDiagramRemoved, setEditingDiagramRemoved] = useState(false)
+  const diagramInputRef = useRef<HTMLInputElement>(null)
+  const editDiagramInputRef = useRef<HTMLInputElement>(null)
   const editQuestionTextareaRef = useRef<HTMLTextAreaElement>(null)
   const correctAnswerInputRef = useRef<HTMLTextAreaElement>(null)
   const editCorrectAnswerInputRef = useRef<HTMLTextAreaElement>(null)
@@ -245,6 +254,25 @@ export default function LessonLibraryPage() {
       } while (nextToken)
       allItems.sort((a, b) => a.order - b.order)
       setQuestions(allItems)
+      // Fetch presigned URLs for any questions with diagramKey
+      const withDiagrams = allItems.filter(q => q.diagramKey)
+      if (withDiagrams.length > 0) {
+        const urls: Record<string, string> = {}
+        await Promise.all(withDiagrams.map(async (q) => {
+          try {
+            const res = await apiFetch('/api/view-submission', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ key: q.diagramKey })
+            })
+            if (res.ok) {
+              const data = await res.json()
+              urls[q.id] = data.url
+            }
+          } catch { /* skip */ }
+        }))
+        setDiagramUrls(urls)
+      }
     } catch (err) {
       console.error('Error fetching questions:', err)
     } finally {
@@ -272,6 +300,12 @@ export default function LessonLibraryPage() {
     setVideoUpload({ uploading: false, progress: 0, error: '' })
     setWorksheetUpload({ uploading: false, progress: 0, error: '' })
     setQuestions([])
+    setDiagramUrls({})
+    setPendingDiagramFile(null)
+    setPendingDiagramPreview(null)
+    setEditingDiagramFile(null)
+    setEditingDiagramPreview(null)
+    setEditingDiagramRemoved(false)
     setNewQuestion({ questionText: '', questionType: 'number', choices: '', correctAnswer: '' })
     fetchQuestions(lesson.id)
   }
@@ -436,6 +470,20 @@ export default function LessonLibraryPage() {
     if (!newQuestion.questionText.trim()) return
     setAddingQuestion(true)
     try {
+      // Upload diagram image first if one is pending
+      let diagramKey: string | null = null
+      if (pendingDiagramFile) {
+        const formData = new FormData()
+        formData.append('file', pendingDiagramFile)
+        formData.append('lessonId', lessonId)
+        formData.append('index', `diagram-${Date.now()}`)
+        const uploadRes = await apiFetch('/api/scan-upload', { method: 'POST', body: formData })
+        if (uploadRes.ok) {
+          const uploadData = await uploadRes.json()
+          diagramKey = uploadData.key
+        }
+      }
+
       const result: any = await client.graphql({
         query: createAssignmentQuestion,
         variables: {
@@ -445,7 +493,8 @@ export default function LessonLibraryPage() {
             choices: (newQuestion.questionType === 'multiple_choice' || newQuestion.questionType === 'multiple_choice_multi') && newQuestion.choices.trim() ? newQuestion.choices.trim() : null,
             correctAnswer: (newQuestion.questionType === 'number' || newQuestion.questionType === 'multiple_choice' || newQuestion.questionType === 'multiple_choice_multi') && newQuestion.correctAnswer.trim() ? newQuestion.correctAnswer.trim() : null,
             order: questions.length + 1,
-            lessonTemplateQuestionsId: lessonId
+            lessonTemplateQuestionsId: lessonId,
+            diagramKey,
           }
         }
       })
@@ -457,11 +506,28 @@ export default function LessonLibraryPage() {
         questionType: created.questionType,
         choices: created.choices ?? null,
         correctAnswer: created.correctAnswer ?? null,
+        diagramKey: created.diagramKey ?? null,
         lessonTemplateAssignmentQuestionsId: lessonId
       }
       setQuestions(prev => [...prev, newQ])
+      // If we uploaded a diagram, fetch its presigned URL
+      if (diagramKey) {
+        try {
+          const res = await apiFetch('/api/view-submission', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key: diagramKey })
+          })
+          if (res.ok) {
+            const data = await res.json()
+            setDiagramUrls(prev => ({ ...prev, [created.id]: data.url }))
+          }
+        } catch { /* skip */ }
+      }
       setIsDirty(true)
       setNewQuestion({ questionText: '', questionType: 'number', choices: '', correctAnswer: '' })
+      setPendingDiagramFile(null)
+      setPendingDiagramPreview(null)
     } catch (err) {
       console.error('Error adding question:', err)
     } finally {
@@ -493,6 +559,7 @@ export default function LessonLibraryPage() {
         questionType: created.questionType,
         choices: null,
         correctAnswer: null,
+        diagramKey: null,
         lessonTemplateAssignmentQuestionsId: lessonId
       }
       setQuestions(prev => [...prev, newQ])
@@ -529,6 +596,9 @@ export default function LessonLibraryPage() {
       choices: q.choices || '',
       correctAnswer: q.correctAnswer || ''
     })
+    setEditingDiagramFile(null)
+    setEditingDiagramPreview(null)
+    setEditingDiagramRemoved(false)
   }
 
   async function reorderQuestions(fromIndex: number, toIndex: number) {
@@ -554,22 +624,66 @@ export default function LessonLibraryPage() {
     if (!editingQuestionForm.questionText.trim()) return
     setSavingQuestion(true)
     try {
+      // Upload new diagram if one was selected
+      let newDiagramKey: string | null | undefined = undefined
+      if (editingDiagramFile && editingId) {
+        const formData = new FormData()
+        formData.append('file', editingDiagramFile)
+        formData.append('lessonId', editingId)
+        formData.append('index', `diagram-${Date.now()}`)
+        const uploadRes = await apiFetch('/api/scan-upload', { method: 'POST', body: formData })
+        if (uploadRes.ok) {
+          const uploadData = await uploadRes.json()
+          newDiagramKey = uploadData.key
+        }
+      } else if (editingDiagramRemoved) {
+        newDiagramKey = null
+      }
+
+      const input: any = {
+        id: questionId,
+        questionText: editingQuestionForm.questionText.trim(),
+        questionType: editingQuestionForm.questionType,
+        choices: (editingQuestionForm.questionType === 'multiple_choice' || editingQuestionForm.questionType === 'multiple_choice_multi') && editingQuestionForm.choices.trim() ? editingQuestionForm.choices.trim() : null,
+        correctAnswer: (editingQuestionForm.questionType === 'number' || editingQuestionForm.questionType === 'multiple_choice' || editingQuestionForm.questionType === 'multiple_choice_multi') && editingQuestionForm.correctAnswer.trim() ? editingQuestionForm.correctAnswer.trim() : null,
+      }
+      if (newDiagramKey !== undefined) {
+        input.diagramKey = newDiagramKey
+      }
+
       const result: any = await client.graphql({
         query: updateAssignmentQuestion,
-        variables: {
-          input: {
-            id: questionId,
-            questionText: editingQuestionForm.questionText.trim(),
-            questionType: editingQuestionForm.questionType,
-            choices: (editingQuestionForm.questionType === 'multiple_choice' || editingQuestionForm.questionType === 'multiple_choice_multi') && editingQuestionForm.choices.trim() ? editingQuestionForm.choices.trim() : null,
-            correctAnswer: (editingQuestionForm.questionType === 'number' || editingQuestionForm.questionType === 'multiple_choice' || editingQuestionForm.questionType === 'multiple_choice_multi') && editingQuestionForm.correctAnswer.trim() ? editingQuestionForm.correctAnswer.trim() : null,
-          }
-        }
+        variables: { input }
       })
       const updated = result.data.updateAssignmentQuestion
       setQuestions(prev => prev.map(q => q.id === questionId ? { ...q, ...updated } : q))
+
+      // Update diagram URL cache
+      if (newDiagramKey) {
+        try {
+          const res = await apiFetch('/api/view-submission', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key: newDiagramKey })
+          })
+          if (res.ok) {
+            const data = await res.json()
+            setDiagramUrls(prev => ({ ...prev, [questionId]: data.url }))
+          }
+        } catch { /* skip */ }
+      } else if (newDiagramKey === null) {
+        setDiagramUrls(prev => {
+          const next = { ...prev }
+          delete next[questionId]
+          return next
+        })
+      }
+
       setIsDirty(true)
       setEditingQuestionId(null)
+      setEditingDiagramFile(null)
+      setEditingDiagramPreview(null)
+      setEditingDiagramRemoved(false)
     } catch (err) {
       console.error('Error updating question:', err)
     } finally {
@@ -578,74 +692,142 @@ export default function LessonLibraryPage() {
   }
 
   async function previewWorksheet(lesson: LessonTemplate) {
-    const qs = questions.filter(q => q.lessonTemplateAssignmentQuestionsId === lesson.id || questions.length > 0)
-    if (qs.length === 0) { alert('No questions to preview.'); return }
+    const allQuestions = [...questions].sort((a, b) => a.order - b.order)
+    if (allQuestions.length === 0) { alert('No questions to preview.'); return }
 
-    // Only show show_work questions (and section headers that group them) — matching student print exactly
-    const sorted = [...qs].sort((a, b) => a.order - b.order)
-    // Determine which section headers have at least one show_work under them
-    const showWorkOnly: typeof sorted = []
-    let pendingHeader: (typeof sorted[0]) | null = null
-    for (const q of sorted) {
-      if (q.questionType === 'section_header') {
-        pendingHeader = q
-      } else if (q.questionType === 'show_work') {
-        if (pendingHeader) { showWorkOnly.push(pendingHeader); pendingHeader = null }
-        showWorkOnly.push(q)
-      }
-      // Skip all other types
+    const aType = editForm.assignmentType || lesson.assignmentType || 'upload'
+    const isWorksheetType = aType === 'worksheet' || aType === 'upload'
+
+    // For worksheet/upload type, show ALL questions (paper-only assignment)
+    // For digital or both, only show show_work questions
+    const filteredQuestions = isWorksheetType
+      ? allQuestions.filter(q => q.questionType !== 'section_header' || true) // keep headers + all question types
+      : (() => {
+          const result: typeof allQuestions = []
+          let pendingHeader: (typeof allQuestions[0]) | null = null
+          for (const q of allQuestions) {
+            if (q.questionType === 'section_header') { pendingHeader = q }
+            else if (q.questionType === 'show_work') {
+              if (pendingHeader) { result.push(pendingHeader); pendingHeader = null }
+              result.push(q)
+            }
+          }
+          return result
+        })()
+
+    const displayQuestions = filteredQuestions.filter(q => q.questionType !== 'section_header' || true)
+    if (displayQuestions.length === 0) {
+      alert('No questions to preview.')
+      return
     }
 
-    if (showWorkOnly.length === 0) {
-      alert('No show-work questions to preview. Add questions with type "Show Work" to see the worksheet preview.')
-      return
+    // Pre-fetch diagram images as base64 data URLs for embedding in print
+    const diagramDataUrls: Record<string, string> = {}
+    for (const q of displayQuestions) {
+      const url = diagramUrls[q.id]
+      if (!url) continue
+      try {
+        const res = await fetch(url)
+        const blob = await res.blob()
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = () => resolve(reader.result as string)
+          reader.onerror = reject
+          reader.readAsDataURL(blob)
+        })
+        diagramDataUrls[q.id] = dataUrl
+      } catch { /* skip if fetch fails */ }
     }
 
     const { default: katex } = await import('katex')
 
     function renderMath(text: string): string {
-      return text
-        .replace(/\\\[([\s\S]+?)\\\]/g, (_, m) => { try { return katex.renderToString(m, { displayMode: true, throwOnError: false }) } catch { return m } })
-        .replace(/\\\((.+?)\\\)/g, (_, m) => { try { return katex.renderToString(m, { throwOnError: false }) } catch { return m } })
+      const parts = text.split(/(\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\))/g)
+      return parts.map(part => {
+        if (part.startsWith('\\[') && part.endsWith('\\]')) {
+          return katex.renderToString(part.slice(2, -2), { displayMode: true, throwOnError: false })
+        }
+        if (part.startsWith('\\(') && part.endsWith('\\)')) {
+          return katex.renderToString(part.slice(2, -2), { displayMode: false, throwOnError: false })
+        }
+        return part.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      }).join('')
     }
 
-    // Preserve original question numbers from the full sorted list
+    // Preserve original question numbers
     let fullQNum = 0
     const origNums = new Map<string, number>()
-    for (const q of sorted) {
+    for (const q of allQuestions) {
       if (q.questionType !== 'section_header') { fullQNum++; origNums.set(q.id, fullQNum) }
     }
 
-    const questionsHTML = showWorkOnly.map(q => {
+    // Sort by problem number extracted from text (safety net)
+    displayQuestions.sort((a, b) => {
+      const numA = parseInt(a.questionText.match(/^(\d+)\./)?.[1] || '0')
+      const numB = parseInt(b.questionText.match(/^(\d+)\./)?.[1] || '0')
+      if (numA && numB) return numA - numB
+      return a.order - b.order
+    })
+
+    const questionsHTML = displayQuestions.map(q => {
       if (q.questionType === 'section_header') {
-        return `<div class="section-header">${q.questionText || 'Section Header'}</div>`
+        return `<div class="section-header">${renderMath(q.questionText || 'Section Header')}</div>`
       }
-      const qHtml = renderMath(q.questionText)
-      const answerBox = `<div class="work-box"></div>`
-      const bookNumMatch = q.questionText.match(/^(\d+\.)\s([\s\S]*)$/)
+      const bookNumMatch = q.questionText.match(/^(\d+\.)\s/)
       const qNumLabel = bookNumMatch ? bookNumMatch[1] : `${origNums.get(q.id) ?? ''}.`
-      const qBody = bookNumMatch ? renderMath(bookNumMatch[2]) : qHtml
-      return `<div class="question"><span class="qnum">${qNumLabel}</span><span class="qtext">${qBody}</span>${answerBox}</div>`
+      const qBody = renderMath(q.questionText.replace(/^\d+\.\s*/, ''))
+      const diagramSrc = diagramDataUrls[q.id]
+      const diagramHTML = diagramSrc
+        ? `<div class="diagram"><img src="${diagramSrc}" class="diagram-img" /></div>`
+        : ''
+      return `<div class="work-item">
+        <div class="work-label"><span class="qnum">${qNumLabel}</span> ${qBody}</div>
+        ${diagramHTML}
+        <div class="work-box"></div>
+      </div>`
     }).join('')
 
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
-    <title>Show Work — ${lesson.title}</title>
-    <style>
-      body{font-family:'Times New Roman',serif;font-size:14px;padding:40px;max-width:720px;margin:0 auto;color:#111}
-      h1{font-size:20px;margin-bottom:4px}.header{border-bottom:2px solid #333;padding-bottom:10px;margin-bottom:16px}
-      .note{font-size:11px;color:#555;margin-bottom:24px;padding:8px 12px;border-left:3px solid #7B4FA6}
-      .question{display:flex;align-items:flex-start;gap:8px;margin-bottom:0;page-break-inside:avoid}
-      .qnum{font-weight:700;min-width:22px;flex-shrink:0}.qtext{flex:1}
-      .work-box{border:1px solid #ccc;border-radius:4px;min-height:80px;margin:8px 0 18px;}
-      .section-header{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#5b2d8e;border-bottom:2px solid #d8b4fe;padding-bottom:5px;margin:28px 0 16px;page-break-after:avoid}
-      @media print{body{padding:20px}@page{margin:.75in}}
-    </style>
-  </head><body onload="setTimeout(function(){window.print()},1200)">
-    <div class="header"><h1>Show Work — ${lesson.title}</h1><div style="font-size:12px;color:#666">Lesson ${lesson.lessonNumber} · Teacher Preview</div></div>
-    <div class="note">Complete your digital answers online first, then print this sheet and show your work in the boxes below.</div>
-    ${questionsHTML}
-  </body></html>`
+    const hasDiagrams = Object.keys(diagramDataUrls).length > 0
+    const printDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+
+    const html = `<!DOCTYPE html><html><head>
+      <meta charset="utf-8">
+      <title>Show Work — ${lesson.title}</title>
+      <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+      <style>
+        *{box-sizing:border-box}
+        body{font-family:'Times New Roman',serif;max-width:720px;margin:0 auto;padding:40px;color:#111;font-size:15px}
+        .header{text-align:center;margin-bottom:24px;padding-bottom:14px;border-bottom:2px solid #333}
+        .header h1{font-size:22px;margin:0 0 2px}
+        .header .lessonnum{font-size:13px;color:#777;margin-bottom:2px}
+        .header .course{font-size:13px;color:#555;margin-bottom:6px}
+        .header .instruction{font-size:12px;color:#666;font-style:italic;margin-bottom:10px}
+        .header .fields{display:flex;justify-content:space-between;margin-top:10px;gap:24px}
+        .header .field{flex:1;font-size:13px;color:#333;padding-bottom:3px;border-bottom:1px solid #888}
+        .diagram{margin:8px 0 12px;max-width:320px}
+        .diagram-img{width:100%;border:1px solid #ccc;border-radius:4px;display:block}
+        .work-item{margin-bottom:18px;page-break-inside:avoid}
+        .work-label{display:flex;gap:8px;align-items:baseline;margin-bottom:6px;line-height:1.4}
+        .qnum{font-weight:bold;font-size:15px;min-width:22px;flex-shrink:0}
+        .work-box{border:1px solid #bbb;border-radius:4px;height:120px}
+        .section-header{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#5b2d8e;border-bottom:2px solid #d8b4fe;padding-bottom:5px;margin:28px 0 16px;page-break-after:avoid}
+        @media print{body{padding:20px}@page{margin:.6in}}
+      </style>
+    </head><body onload="setTimeout(function(){window.print()},1200)">
+      <div class="header">
+        <div class="lessonnum">Lesson ${lesson.lessonNumber}</div>
+        <h1>${lesson.title} — Show Work</h1>
+        ${course?.title ? `<div class="course">${course.title}</div>` : ''}
+        <div class="instruction">${hasDiagrams
+          ? 'Refer to the diagrams shown with each problem. Show your work in the boxes provided.'
+          : 'Complete your digital answers online first, then show your work in the boxes below.'}</div>
+        <div class="fields">
+          <div class="field">Name: ___________________________</div>
+          <div class="field">Date: ${printDate}</div>
+        </div>
+      </div>
+      ${questionsHTML}
+    </body></html>`
 
     const pw = window.open('', '_blank')
     if (!pw) return
@@ -1314,6 +1496,51 @@ export default function LessonLibraryPage() {
                                                       )}
                                                     </div>
                                                   )}
+                                                  {/* Diagram image upload */}
+                                                  <div style={{ marginBottom: '10px' }}>
+                                                    <label style={labelStyle}>Diagram Image (optional)</label>
+                                                    {/* Show existing diagram or new preview */}
+                                                    {editingDiagramPreview ? (
+                                                      <div style={{ marginBottom: '8px', maxWidth: '200px', position: 'relative' }}>
+                                                        <img src={editingDiagramPreview} alt="New diagram" style={{ width: '100%', borderRadius: '6px', border: '1px solid var(--gray-light)' }} />
+                                                        <button onClick={() => { setEditingDiagramFile(null); setEditingDiagramPreview(null) }}
+                                                          style={{ position: 'absolute', top: '4px', right: '4px', background: '#e05252', color: 'white', border: 'none', borderRadius: '50%', width: '22px', height: '22px', cursor: 'pointer', fontSize: '12px', lineHeight: '22px', textAlign: 'center' }}>
+                                                          x
+                                                        </button>
+                                                      </div>
+                                                    ) : !editingDiagramRemoved && q.diagramKey && diagramUrls[q.id] ? (
+                                                      <div style={{ marginBottom: '8px', maxWidth: '200px', position: 'relative' }}>
+                                                        <img src={diagramUrls[q.id]} alt="Current diagram" style={{ width: '100%', borderRadius: '6px', border: '1px solid var(--gray-light)' }} />
+                                                        <button onClick={() => setEditingDiagramRemoved(true)}
+                                                          style={{ position: 'absolute', top: '4px', right: '4px', background: '#e05252', color: 'white', border: 'none', borderRadius: '50%', width: '22px', height: '22px', cursor: 'pointer', fontSize: '12px', lineHeight: '22px', textAlign: 'center' }}>
+                                                          x
+                                                        </button>
+                                                      </div>
+                                                    ) : editingDiagramRemoved ? (
+                                                      <p style={{ fontSize: '12px', color: '#e05252', margin: '0 0 6px' }}>Diagram will be removed on save.</p>
+                                                    ) : null}
+                                                    <input
+                                                      ref={editDiagramInputRef}
+                                                      type="file"
+                                                      accept="image/jpeg,image/png"
+                                                      style={{ display: 'none' }}
+                                                      onChange={e => {
+                                                        const f = e.target.files?.[0]
+                                                        if (f) {
+                                                          setEditingDiagramFile(f)
+                                                          setEditingDiagramRemoved(false)
+                                                          const url = URL.createObjectURL(f)
+                                                          setEditingDiagramPreview(url)
+                                                        }
+                                                      }}
+                                                    />
+                                                    <button
+                                                      onClick={() => editDiagramInputRef.current?.click()}
+                                                      style={{ background: 'none', border: '1px dashed var(--gray-light)', color: 'var(--gray-mid)', borderRadius: '6px', padding: '6px 14px', cursor: 'pointer', fontSize: '12px', fontFamily: 'var(--font-body)' }}
+                                                    >
+                                                      {q.diagramKey && !editingDiagramRemoved ? 'Replace image...' : 'Add image...'}
+                                                    </button>
+                                                  </div>
                                                   <div style={{ display: 'flex', gap: '8px' }}>
                                                     <button onClick={() => handleUpdateQuestion(q.id)} disabled={savingQuestion || !editingQuestionForm.questionText.trim()}
                                                       style={{ background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '6px', padding: '7px 18px', cursor: 'pointer', fontSize: '13px', fontWeight: 500, fontFamily: 'var(--font-body)' }}>
@@ -1352,6 +1579,11 @@ export default function LessonLibraryPage() {
                                                 <div style={{ fontWeight: 700, color: 'var(--plum)', fontSize: '14px', minWidth: '24px', paddingTop: '1px' }}>{displayNum}.</div>
                                                 <div style={{ flex: 1, minWidth: 0 }}>
                                                   <div style={{ fontSize: '14px', color: 'var(--foreground)', marginBottom: '6px', lineHeight: '1.6' }}><MathRenderer text={q.questionText} /></div>
+                                                  {diagramUrls[q.id] && (
+                                                    <div style={{ marginTop: '6px', marginBottom: '8px', maxWidth: '240px' }}>
+                                                      <img src={diagramUrls[q.id]} alt="Diagram" style={{ width: '100%', borderRadius: '6px', border: '1px solid var(--gray-light)' }} />
+                                                    </div>
+                                                  )}
                                                   <span style={{ fontSize: '11px', fontWeight: 600, padding: '2px 8px', borderRadius: '12px', background: 'var(--background)', color: 'var(--gray-dark)', border: '1px solid var(--gray-light)' }}>
                                                     {QUESTION_TYPE_LABELS[q.questionType] || q.questionType}
                                                   </span>
@@ -1464,6 +1696,39 @@ export default function LessonLibraryPage() {
                                       )}
                                     </div>
                                   )}
+                                  {/* Diagram image upload */}
+                                  <div style={{ marginBottom: '12px' }}>
+                                    <label style={labelStyle}>Diagram Image (optional)</label>
+                                    {pendingDiagramPreview && (
+                                      <div style={{ marginBottom: '8px', maxWidth: '200px', position: 'relative' }}>
+                                        <img src={pendingDiagramPreview} alt="Diagram preview" style={{ width: '100%', borderRadius: '6px', border: '1px solid var(--gray-light)' }} />
+                                        <button onClick={() => { setPendingDiagramFile(null); setPendingDiagramPreview(null) }}
+                                          style={{ position: 'absolute', top: '4px', right: '4px', background: '#e05252', color: 'white', border: 'none', borderRadius: '50%', width: '22px', height: '22px', cursor: 'pointer', fontSize: '12px', lineHeight: '22px', textAlign: 'center' }}>
+                                          x
+                                        </button>
+                                      </div>
+                                    )}
+                                    <input
+                                      ref={diagramInputRef}
+                                      type="file"
+                                      accept="image/jpeg,image/png"
+                                      style={{ display: 'none' }}
+                                      onChange={e => {
+                                        const f = e.target.files?.[0]
+                                        if (f) {
+                                          setPendingDiagramFile(f)
+                                          const url = URL.createObjectURL(f)
+                                          setPendingDiagramPreview(url)
+                                        }
+                                      }}
+                                    />
+                                    <button
+                                      onClick={() => diagramInputRef.current?.click()}
+                                      style={{ background: 'none', border: '1px dashed var(--gray-light)', color: 'var(--gray-mid)', borderRadius: '6px', padding: '6px 14px', cursor: 'pointer', fontSize: '12px', fontFamily: 'var(--font-body)' }}
+                                    >
+                                      {pendingDiagramFile ? 'Replace image...' : 'Add image...'}
+                                    </button>
+                                  </div>
                                   <button
                                     onClick={() => handleAddQuestion(lesson.id)}
                                     disabled={addingQuestion || !newQuestion.questionText.trim()}
