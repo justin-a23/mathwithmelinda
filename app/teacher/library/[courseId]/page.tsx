@@ -845,11 +845,13 @@ export default function LessonLibraryPage() {
     const allQuestions = [...questions].sort((a, b) => a.order - b.order)
     if (allQuestions.length === 0) { alert('No questions to preview.'); return }
 
-    // Pre-fetch diagram images as base64 data URLs
-    const diagramDataUrls: Record<string, string> = {}
+    // Use presigned URLs directly for digital preview (not print, so no need for base64)
+    // Also try to convert to base64 as fallback for any CORS issues
+    const diagramSrcUrls: Record<string, string> = {}
     for (const q of allQuestions) {
       const url = diagramUrls[q.id]
       if (!url) continue
+      // Try base64 conversion first, fall back to direct URL
       try {
         const res = await fetch(url)
         const blob = await res.blob()
@@ -859,8 +861,11 @@ export default function LessonLibraryPage() {
           reader.onerror = reject
           reader.readAsDataURL(blob)
         })
-        diagramDataUrls[q.id] = dataUrl
-      } catch { /* skip */ }
+        diagramSrcUrls[q.id] = dataUrl
+      } catch {
+        // Fall back to direct presigned URL
+        diagramSrcUrls[q.id] = url
+      }
     }
 
     const { default: katex } = await import('katex')
@@ -889,8 +894,10 @@ export default function LessonLibraryPage() {
       }
 
       const numLabel = bookNumMatch ? bookNumMatch[1] : `${qNum}.`
-      const body = renderMath(bookNumMatch ? bookNumMatch[2] : q.questionText)
-      const diagramSrc = diagramDataUrls[q.id]
+      const rawText = bookNumMatch ? bookNumMatch[2] : q.questionText
+      const isImageOnly = rawText === '(see image)' && diagramSrcUrls[q.id]
+      const body = isImageOnly ? '' : renderMath(rawText)
+      const diagramSrc = diagramSrcUrls[q.id]
       const diagramHTML = diagramSrc
         ? `<div class="diagram"><img src="${diagramSrc}" /></div>`
         : ''
@@ -911,7 +918,7 @@ export default function LessonLibraryPage() {
       }
 
       return `<div class="question">
-        <div class="q-row"><span class="q-num">${numLabel}</span><div class="q-body">${body}</div></div>
+        ${body ? `<div class="q-row"><span class="q-num">${numLabel}</span><div class="q-body">${body}</div></div>` : `<div class="q-row"><span class="q-num">${numLabel}</span></div>`}
         ${diagramHTML}
         ${answerHTML}
       </div>`
