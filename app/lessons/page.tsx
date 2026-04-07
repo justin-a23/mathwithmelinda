@@ -269,7 +269,9 @@ function LessonPageInner() {
                     const d = await r.json()
                     return d.url as string
                   }))
-                  setScanPageUrls(urls.filter(Boolean))
+                  const filtered = urls.filter(Boolean)
+                  setScanPageUrls(filtered)
+                  if (filtered.length > 0) setScanPagesExpanded(true)
                 } catch { /* non-critical */ }
               }
             }
@@ -700,6 +702,24 @@ function LessonPageInner() {
     const showWorkQuestions = allQuestions.filter(q => q.questionType === 'show_work')
     if (showWorkQuestions.length === 0) return
 
+    // Pre-fetch scan page images as base64 data URLs so they embed in the popup window
+    const scanDataUrls: string[] = []
+    if (scanPageUrls.length > 0) {
+      for (const url of scanPageUrls) {
+        try {
+          const res = await fetch(url)
+          const blob = await res.blob()
+          const dataUrl = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader()
+            reader.onload = () => resolve(reader.result as string)
+            reader.onerror = reject
+            reader.readAsDataURL(blob)
+          })
+          scanDataUrls.push(dataUrl)
+        } catch { /* skip if fetch fails */ }
+      }
+    }
+
     const { default: katex } = await import('katex')
 
     function renderMath(text: string): string {
@@ -782,7 +802,12 @@ function LessonPageInner() {
         .qnum{font-weight:bold;min-width:22px;flex-shrink:0}
         .work-box{border:1px solid #bbb;border-radius:4px;height:110px;margin-left:22px}
         .section-header{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#5b2d8e;border-bottom:2px solid #d8b4fe;padding-bottom:5px;margin:24px 0 14px;page-break-after:avoid}
-        @media print{body{padding:20px}@page{margin:.75in}}
+        .ref-section{margin:28px 0;padding:16px;border:1px solid #c4b5fd;border-radius:6px;background:#faf5ff;page-break-inside:avoid}
+        .ref-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#5b2d8e;margin-bottom:12px}
+        .ref-pages{display:flex;flex-direction:column;gap:16px}
+        .ref-page-label{font-size:10px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px}
+        .ref-img{width:100%;border:1px solid #ddd;border-radius:4px;display:block}
+        @media print{body{padding:20px}@page{margin:.75in}.ref-section{break-inside:avoid}}
       </style>
     </head><body onload="setTimeout(function(){window.print()},1200)">
       <div class="header">
@@ -795,6 +820,19 @@ function LessonPageInner() {
           <div class="field">Date: ${printDate}</div>
         </div>
       </div>
+      ${scanDataUrls.length > 0 ? `
+        <div class="ref-section">
+          <div class="ref-title">📋 Worksheet Reference — use these to see the original diagrams and graphs</div>
+          <div class="ref-pages">
+            ${scanDataUrls.map((src, i) => `
+              <div>
+                ${scanDataUrls.length > 1 ? `<div class="ref-page-label">Page ${i + 1}</div>` : ''}
+                <img src="${src}" class="ref-img" alt="Worksheet page ${i + 1}" />
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      ` : ''}
       ${questionsHTML}
     </body></html>`
 
