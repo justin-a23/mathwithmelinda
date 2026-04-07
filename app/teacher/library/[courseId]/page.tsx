@@ -1559,7 +1559,7 @@ export default function LessonLibraryPage() {
                                                 <div style={{ flex: 1, minWidth: 0 }}>
                                                   <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--plum)', display: 'flex', alignItems: 'center', gap: '8px' }}>
                                                     <span style={{ fontSize: '10px', background: 'var(--plum)', color: 'white', padding: '1px 6px', borderRadius: '4px', letterSpacing: '0.5px', flexShrink: 0 }}>HEADER</span>
-                                                    <span style={{ textTransform: 'uppercase', letterSpacing: '0.6px' }}>{q.questionText}</span>
+                                                    <span style={{ textTransform: 'uppercase', letterSpacing: '0.6px' }}><MathRenderer text={q.questionText} /></span>
                                                   </div>
                                                 </div>
                                                 <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>

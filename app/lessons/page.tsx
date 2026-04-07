@@ -1059,7 +1059,7 @@ function LessonPageInner() {
                                         borderBottom: '2px solid var(--plum-mid)',
                                         paddingBottom: '6px', paddingTop: '4px'
                                       }}>
-                                        {q.questionText}
+                                        <MathRenderer text={q.questionText} />
                                       </div>
                                     </div>
                                   )
