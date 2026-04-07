@@ -27,11 +27,14 @@ export default function MathInput({ value, onChange, multiline = false, placehol
   const [showFraction, setShowFraction] = useState(false)
   const [showExponent, setShowExponent] = useState(false)
   const [showOverline, setShowOverline] = useState(false)
+  const [showRoot, setShowRoot] = useState(false)
   const [numerator, setNumerator] = useState('')
   const [denominator, setDenominator] = useState('')
   const [expBase, setExpBase] = useState('')
   const [expPower, setExpPower] = useState('')
   const [overlineDigits, setOverlineDigits] = useState('')
+  const [rootContent, setRootContent] = useState('')
+  const [rootDegree, setRootDegree] = useState('')
 
   function insertAtCursor(text: string) {
     const el = inputRef.current
@@ -71,6 +74,18 @@ export default function MathInput({ value, onChange, multiline = false, placehol
     setShowOverline(false)
   }
 
+  function insertRoot() {
+    if (!rootContent.trim()) return
+    const deg = rootDegree.trim()
+    const latex = deg && deg !== '2'
+      ? `\\(\\sqrt[${deg}]{${rootContent}}\\)`
+      : `\\(\\sqrt{${rootContent}}\\)`
+    insertAtCursor(latex)
+    setRootContent('')
+    setRootDegree('')
+    setShowRoot(false)
+  }
+
   const hasMath = value.includes('\\(') || value.includes('\\[')
 
   const fracPreview = (numerator || denominator)
@@ -83,6 +98,12 @@ export default function MathInput({ value, onChange, multiline = false, placehol
 
   const overlinePreview = overlineDigits
     ? `\\(\\overline{${overlineDigits}}\\)`
+    : null
+
+  const rootPreview = rootContent
+    ? (rootDegree.trim() && rootDegree.trim() !== '2'
+        ? `\\(\\sqrt[${rootDegree}]{${rootContent}}\\)`
+        : `\\(\\sqrt{${rootContent}}\\)`)
     : null
 
   const btnStyle: React.CSSProperties = {
@@ -305,6 +326,68 @@ export default function MathInput({ value, onChange, multiline = false, placehol
           )}
         </div>
 
+        {/* Root / radical button */}
+        <div style={{ position: 'relative' }}>
+          <button
+            type="button"
+            title="Insert square root or cube root"
+            style={{ ...btnStyle, fontWeight: 600, color: 'var(--plum)', borderColor: 'var(--plum-mid)', background: showRoot ? 'var(--plum-light)' : 'var(--background)' }}
+            onMouseDown={e => { e.preventDefault(); setShowRoot(v => !v); setShowFraction(false); setShowExponent(false); setShowOverline(false) }}
+          >
+            {'√'}
+          </button>
+          {showRoot && (
+            <div style={{
+              position: 'absolute', top: 'calc(100% + 6px)', left: 0,
+              background: 'var(--background)', border: '1px solid var(--gray-light)',
+              borderRadius: '8px', padding: '12px', zIndex: 50,
+              boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+              display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '220px',
+            }}>
+              <div style={{ fontSize: '11px', color: 'var(--gray-mid)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Insert Root</div>
+              <div>
+                <div style={{ fontSize: '11px', color: 'var(--gray-mid)', marginBottom: '4px' }}>What's inside the root</div>
+                <input
+                  autoFocus
+                  value={rootContent}
+                  onChange={e => setRootContent(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && insertRoot()}
+                  placeholder="e.g. 8 or n^{3}"
+                  style={popupInputStyle}
+                />
+              </div>
+              <div>
+                <div style={{ fontSize: '11px', color: 'var(--gray-mid)', marginBottom: '4px' }}>Root type</div>
+                <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
+                  <button type="button" onClick={() => setRootDegree('')} style={{ ...btnStyle, flex: 1, background: (!rootDegree || rootDegree === '2') ? 'var(--plum-light)' : 'var(--background)', borderColor: (!rootDegree || rootDegree === '2') ? 'var(--plum)' : 'var(--gray-light)', fontSize: '11px', padding: '4px 6px' }}>Square root</button>
+                  <button type="button" onClick={() => setRootDegree('3')} style={{ ...btnStyle, flex: 1, background: rootDegree === '3' ? 'var(--plum-light)' : 'var(--background)', borderColor: rootDegree === '3' ? 'var(--plum)' : 'var(--gray-light)', fontSize: '11px', padding: '4px 6px' }}>Cube root</button>
+                </div>
+                <input
+                  value={rootDegree}
+                  onChange={e => setRootDegree(e.target.value)}
+                  placeholder="or type custom (e.g. 4, 5, n)"
+                  style={{ ...popupInputStyle, fontSize: '12px', padding: '4px 8px' }}
+                />
+              </div>
+              {rootPreview && (
+                <div style={{ textAlign: 'center', fontSize: '20px', padding: '8px', background: 'var(--page-bg)', borderRadius: '6px', border: '1px solid var(--plum-mid)' }}>
+                  <MathRenderer text={rootPreview} />
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button type="button" onClick={insertRoot} disabled={!rootContent.trim()}
+                  style={{ flex: 1, background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '6px', padding: '7px', cursor: 'pointer', fontSize: '13px', fontWeight: 500, opacity: !rootContent.trim() ? 0.5 : 1 }}>
+                  Insert
+                </button>
+                <button type="button" onClick={() => { setShowRoot(false); setRootContent(''); setRootDegree('') }}
+                  style={{ background: 'transparent', color: 'var(--gray-mid)', border: '1px solid var(--gray-light)', borderRadius: '6px', padding: '7px 10px', cursor: 'pointer', fontSize: '13px' }}>
+                  ✕
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Divider */}
         <div style={{ width: '1px', height: '18px', background: 'var(--gray-light)', margin: '0 2px', flexShrink: 0 }} />
 
@@ -329,7 +412,7 @@ export default function MathInput({ value, onChange, multiline = false, placehol
         onChange={e => onChange(e.target.value)}
         placeholder={placeholder ?? 'Type your answer…'}
         rows={multiline ? 3 : 1}
-        onClick={() => { setShowFraction(false); setShowExponent(false); setShowOverline(false) }}
+        onClick={() => { setShowFraction(false); setShowExponent(false); setShowOverline(false); setShowRoot(false) }}
         style={{
           width: '100%',
           padding: '10px 12px',
