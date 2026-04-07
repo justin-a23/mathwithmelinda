@@ -58,12 +58,28 @@ Math formatting rules (CRITICAL — the renderer only processes \\(...\\) delimi
 Problem text rules:
 - Always prefix with the problem number exactly as printed: "51. ...", "39. ..."
 - Do NOT include blank answer lines (___) — just the question stem.
+- Output questions in ASCENDING numerical order (e.g., 45, 47, 49, 51, 53, 55).
+- The text MUST be a complete, self-contained sentence/question that makes sense on its own — even without the diagram.
+- NEVER output garbled fragments like "with , , ." or numbers on separate lines. Always write a coherent sentence.
 
-Image/diagram rules:
-- For triangle diagrams: set hasImage true. In the text, include ALL labeled measurements exactly as shown (exact numbers from the image, not approximations). Example: "51. \\(\\triangle ABC\\) with \\(AB = 35\\), \\(BC = 21\\), \\(AC = 28\\), right angle at \\(C\\). Find \\(\\sin \\angle A\\), \\(\\cos \\angle A\\), \\(\\tan \\angle A\\)."
-- For coordinate grid problems: set hasImage true. Read the EXACT grid coordinates of every labeled point — read along the grid lines carefully, do not estimate. Example: "55. Find the distance between \\((6, 7)\\) and \\((-6, -5)\\)."
+Image/diagram rules (CRITICAL — read carefully):
+The question text must FULLY describe the diagram so a student can understand the problem from the text alone. The cropped diagram image will also be shown, but the text must stand on its own.
+
+- For triangle diagrams: Write a complete description. Example:
+  "59. \\(\\triangle ABC\\) with \\(AB = 35\\), \\(BC = 21\\), \\(AC = 28\\), right angle at \\(B\\). Find \\(\\sin \\angle A\\), \\(\\cos \\angle A\\), \\(\\tan \\angle A\\)."
+  NOT: "59. with , , . 28 21 35 Find sin ∠A cos ∠A tan ∠A"
+
+- For coordinate grid problems: Read EXACT coordinates from the grid.
+  "55. Find the distance between \\((6, 7)\\) and \\((-6, -5)\\)."
+
+- For problems where the question text on the page is minimal and the diagram provides the key information (common in geometry): SYNTHESIZE both into one clear question. Read every vertex label, side length, angle mark, and measurement from the diagram and incorporate them into the text.
+
+- For right triangles: always identify which angle is the right angle (look for the small square symbol).
 - For all other diagram problems: set hasImage true and include every labeled value from the diagram.
 - For pure text/equation problems with no diagram: set hasImage false.
+
+Section headers:
+- If a line like "11.6 Find all three ratios for each indicated angle." appears, include it as a section_header. The problems under it inherit that context — so each problem's text should still be self-contained by repeating what's being asked (e.g., "Find sin, cos, tan of ∠A").
 
 Diagram crop region (CRITICAL for hasImage:true questions):
 When hasImage is true, you MUST also provide "cropRegion" — the bounding box of the diagram/figure on the page as fractions (0 to 1) of the page dimensions.

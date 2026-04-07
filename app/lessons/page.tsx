@@ -720,9 +720,10 @@ function LessonPageInner() {
   async function printShowWorkSheet() {
     const allQuestions = lessonTemplate?.questions?.items ?? []
     if (allQuestions.length === 0) return
-    const isWorksheetType = lessonTemplate?.assignmentType === 'worksheet'
-    // For worksheet type, print ALL questions (it's a paper-only assignment)
-    // For other types, only print show_work questions
+    const aType = lessonTemplate?.assignmentType || 'upload'
+    const isWorksheetType = aType === 'worksheet' || aType === 'upload'
+    // For worksheet/upload type, print ALL questions (it's a paper-only assignment)
+    // For digital questions or both, only print show_work questions
     const showWorkQuestions = isWorksheetType
       ? allQuestions.filter(q => q.questionType !== 'section_header')
       : allQuestions.filter(q => q.questionType === 'show_work')
@@ -765,6 +766,14 @@ function LessonPageInner() {
     const lessonNum = lessonTemplate?.lessonNumber ?? null
     const courseName = planItem?.weeklyPlan?.course?.title || ''
     const printDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+
+    // Sort by problem number extracted from text (safety net if extraction order was wrong)
+    showWorkQuestions.sort((a, b) => {
+      const numA = parseInt(a.questionText.match(/^(\d+)\./)?.[1] || '0')
+      const numB = parseInt(b.questionText.match(/^(\d+)\./)?.[1] || '0')
+      if (numA && numB) return numA - numB
+      return a.order - b.order
+    })
 
     // Build question HTML — each question shows its text, diagram (if any), and work box
     const questionsHTML = showWorkQuestions.map(q => {
@@ -958,9 +967,11 @@ function LessonPageInner() {
             ) : (() => {
               const assignmentType = lessonTemplate?.assignmentType || 'upload'
               const questions = lessonTemplate?.questions?.items || []
-              const isWorksheet = assignmentType === 'worksheet'
-              const showQuestions = ((assignmentType === 'questions' || assignmentType === 'both') && questions.length > 0) || (isWorksheet && questions.length > 0)
+              const isWorksheet = assignmentType === 'worksheet' || assignmentType === 'upload'
+              // Show questions section if there are questions — regardless of assignmentType
+              const showQuestions = questions.length > 0
               const hasShowWork = questions.some(q => q.questionType === 'show_work')
+              // Show upload for upload, both, worksheet — or any lesson with show_work questions
               const showUpload = assignmentType === 'upload' || assignmentType === 'both' || assignmentType === 'worksheet' || !lessonTemplate || hasShowWork
 
               return (

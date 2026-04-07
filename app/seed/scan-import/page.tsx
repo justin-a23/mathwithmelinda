@@ -261,11 +261,11 @@ export default function ScanImportPage() {
       }
 
       // Save Melinda's instructions + set assignment type to worksheet
-      const templateUpdates: Record<string, any> = { id: selectedLesson, assignmentType: 'worksheet' }
-      if (instructions.trim()) templateUpdates.instructions = instructions.trim()
+      const templateInput: any = { id: selectedLesson, assignmentType: 'worksheet' }
+      if (instructions.trim()) templateInput.instructions = instructions.trim()
       await client.graphql({
         query: updateLessonTemplate,
-        variables: { input: templateUpdates },
+        variables: { input: templateInput },
       })
 
       // Import questions — encode pageIndex into order field (pageIndex * 1000 + seq)
