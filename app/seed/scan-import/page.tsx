@@ -31,10 +31,48 @@ async function renderPdfToImages(file: File): Promise<Blob[]> {
   return blobs
 }
 
+/** Load a Blob (image) into an HTMLImageElement */
+function loadBlobAsImage(blob: Blob): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(blob)
+    const img = new Image()
+    img.onload = () => { URL.revokeObjectURL(url); resolve(img) }
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Failed to load image')) }
+    img.src = url
+  })
+}
+
+/** Crop a region from an image blob, returns a JPEG Blob */
+async function cropImageRegion(
+  sourceBlob: Blob,
+  region: { x: number; y: number; width: number; height: number },
+): Promise<Blob> {
+  const img = await loadBlobAsImage(sourceBlob)
+  const sx = Math.round(region.x * img.naturalWidth)
+  const sy = Math.round(region.y * img.naturalHeight)
+  const sw = Math.round(region.width * img.naturalWidth)
+  const sh = Math.round(region.height * img.naturalHeight)
+  const canvas = document.createElement('canvas')
+  canvas.width = sw
+  canvas.height = sh
+  const ctx = canvas.getContext('2d')!
+  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh)
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob(b => b ? resolve(b) : reject(new Error('Crop toBlob failed')), 'image/jpeg', 0.92)
+  })
+}
+
 const client = generateClient()
 
 type Course = { id: string; title: string }
 type Lesson = { id: string; lessonNumber: number; title: string }
+
+type CropRegion = {
+  x: number
+  y: number
+  width: number
+  height: number
+}
 
 type ExtractedQuestion = {
   type: 'show_work' | 'number' | 'multiple_choice' | 'section_header' | 'instructions'
@@ -43,6 +81,7 @@ type ExtractedQuestion = {
   choices?: string
   hasImage: boolean
   pageIndex: number
+  cropRegion?: CropRegion
 }
 
 const TYPE_BADGE: Record<string, { bg: string; color: string; label: string }> = {
@@ -164,7 +203,7 @@ export default function ScanImportPage() {
     setImporting(true)
     setImportError('')
     try {
-      // Upload scan pages to S3 — convert PDFs to images first so they render everywhere
+      // Convert all files (images + PDFs) into per-page image blobs for cropping
       const scanBlobs: { blob: Blob; name: string }[] = []
       for (const file of files) {
         if (file.type.startsWith('image/')) {
@@ -180,6 +219,8 @@ export default function ScanImportPage() {
           }
         }
       }
+
+      // Upload full scan pages to S3 for reference
       if (scanBlobs.length > 0) {
         const keys: string[] = []
         for (let i = 0; i < scanBlobs.length; i++) {
@@ -228,14 +269,36 @@ export default function ScanImportPage() {
       }
 
       // Import questions — encode pageIndex into order field (pageIndex * 1000 + seq)
-      // This lets the lesson viewer group questions by their source scan page
+      // For hasImage questions with cropRegion, crop the diagram from the scan page and upload
       const pageCounters: Record<number, number> = {}
+      let diagramCounter = 0
       for (const q of questions) {
         const validTypes = ['number', 'multiple_choice', 'show_work', 'section_header']
         const questionType = validTypes.includes(q.type) ? q.type : 'show_work'
         const pi = q.pageIndex ?? 0
         pageCounters[pi] = (pageCounters[pi] || 0) + 1
         const order = pi * 1000 + pageCounters[pi]
+
+        // Crop diagram if this question has an image with crop coordinates
+        let diagramKey: string | null = null
+        if (q.hasImage && q.cropRegion && scanBlobs[pi]) {
+          try {
+            const croppedBlob = await cropImageRegion(scanBlobs[pi].blob, q.cropRegion)
+            const fd = new FormData()
+            fd.append('file', new File([croppedBlob], `diagram-${diagramCounter}.jpg`, { type: 'image/jpeg' }))
+            fd.append('lessonId', selectedLesson)
+            fd.append('index', `diagram-${diagramCounter}`)
+            const r = await apiFetch('/api/scan-upload', { method: 'POST', body: fd })
+            if (r.ok) {
+              const { key } = await r.json()
+              diagramKey = key
+            }
+            diagramCounter++
+          } catch (err) {
+            console.error('Diagram crop failed for question:', q.text.slice(0, 40), err)
+          }
+        }
+
         await client.graphql({
           query: createAssignmentQuestion,
           variables: {
@@ -245,6 +308,7 @@ export default function ScanImportPage() {
               choices: questionType === 'multiple_choice' && q.choices ? q.choices : null,
               correctAnswer: q.answer || null,
               order,
+              diagramKey,
               lessonTemplateQuestionsId: selectedLesson,
             },
           },
@@ -485,13 +549,30 @@ export default function ScanImportPage() {
                         <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 6px', borderRadius: '4px', background: badge.bg, color: badge.color, flexShrink: 0, textTransform: 'uppercase', marginTop: '2px' }}>
                           {badge.label}
                         </span>
-                        <span style={{ color: 'var(--foreground)', flex: 1, lineHeight: '1.5', fontSize: '13px', fontWeight: isHeader ? 600 : 400 }}>
+                        <div style={{ flex: 1, lineHeight: '1.5', fontSize: '13px', fontWeight: isHeader ? 600 : 400, color: 'var(--foreground)' }}>
                           {q.text}
-                        </span>
+                          {/* Show crop preview for diagram questions */}
+                          {q.hasImage && q.cropRegion && previews[q.pageIndex ?? 0] && (
+                            <div style={{ marginTop: '8px', position: 'relative', width: '200px', height: '120px', overflow: 'hidden', borderRadius: '6px', border: '2px solid #f59e0b', background: '#fefce8' }}>
+                              <img
+                                src={previews[q.pageIndex ?? 0]}
+                                alt="Diagram crop preview"
+                                style={{
+                                  position: 'absolute',
+                                  left: `${-q.cropRegion.x / q.cropRegion.width * 200}px`,
+                                  top: `${-q.cropRegion.y / q.cropRegion.height * 120}px`,
+                                  width: `${200 / q.cropRegion.width}px`,
+                                  height: `${120 / q.cropRegion.height}px`,
+                                  objectFit: 'cover',
+                                }}
+                              />
+                            </div>
+                          )}
+                        </div>
                         <div style={{ display: 'flex', gap: '6px', flexShrink: 0, alignItems: 'center' }}>
                           {q.hasImage && (
-                            <span style={{ fontSize: '10px', background: '#fef3c7', color: '#92400e', padding: '2px 6px', borderRadius: '4px', fontWeight: 600, textTransform: 'uppercase' }}>
-                              diagram
+                            <span style={{ fontSize: '10px', background: q.cropRegion ? '#dcfce7' : '#fef3c7', color: q.cropRegion ? '#166534' : '#92400e', padding: '2px 6px', borderRadius: '4px', fontWeight: 600, textTransform: 'uppercase' }}>
+                              {q.cropRegion ? 'cropped' : 'diagram'}
                             </span>
                           )}
                           {q.answer && <span style={{ fontSize: '12px', color: 'var(--gray-mid)' }}>ans: {q.answer}</span>}

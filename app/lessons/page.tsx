@@ -63,6 +63,7 @@ const getLessonTemplateQuery = /* GraphQL */`
           questionType
           choices
           correctAnswer
+          diagramKey
         }
       }
     }
@@ -123,6 +124,7 @@ type AssignmentQuestion = {
   questionType: string
   choices: string | null
   correctAnswer: string | null
+  diagramKey: string | null
 }
 
 type LessonTemplateData = {
@@ -190,6 +192,7 @@ function LessonPageInner() {
   const [studentName, setStudentName] = useState('')
 
   const [scanPageUrls, setScanPageUrls] = useState<string[]>([])
+  const [diagramUrls, setDiagramUrls] = useState<Record<string, string>>({})  // questionId → presigned URL
 
   const [existingSubmissionId, setExistingSubmissionId] = useState<string | null>(null)
   const [isReturned, setIsReturned] = useState(false)
@@ -274,6 +277,22 @@ function LessonPageInner() {
                     return d.url as string
                   }))
                   setScanPageUrls(urls.filter(Boolean))
+                } catch { /* non-critical */ }
+              }
+              // Fetch presigned URLs for per-question cropped diagram images
+              const diagramQuestions = tpl.questions.items.filter(q => q.diagramKey)
+              if (diagramQuestions.length > 0) {
+                try {
+                  const entries = await Promise.all(diagramQuestions.map(async q => {
+                    const r = await apiFetch('/api/view-submission', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ key: q.diagramKey }),
+                    })
+                    const d = await r.json()
+                    return [q.id, d.url as string] as const
+                  }))
+                  setDiagramUrls(Object.fromEntries(entries.filter(([, url]) => url)))
                 } catch { /* non-critical */ }
               }
             }
@@ -704,22 +723,22 @@ function LessonPageInner() {
     const showWorkQuestions = allQuestions.filter(q => q.questionType === 'show_work')
     if (showWorkQuestions.length === 0) return
 
-    // Pre-fetch scan page images as base64 data URLs so they embed in the popup window
-    const scanDataUrls: string[] = []
-    if (scanPageUrls.length > 0) {
-      for (const url of scanPageUrls) {
-        try {
-          const res = await fetch(url)
-          const blob = await res.blob()
-          const dataUrl = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader()
-            reader.onload = () => resolve(reader.result as string)
-            reader.onerror = reject
-            reader.readAsDataURL(blob)
-          })
-          scanDataUrls.push(dataUrl)
-        } catch { /* skip if fetch fails */ }
-      }
+    // Pre-fetch per-question diagram images as base64 data URLs for embedding in print
+    const diagramDataUrls: Record<string, string> = {}
+    for (const q of showWorkQuestions) {
+      const url = diagramUrls[q.id]
+      if (!url) continue
+      try {
+        const res = await fetch(url)
+        const blob = await res.blob()
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = () => resolve(reader.result as string)
+          reader.onerror = reject
+          reader.readAsDataURL(blob)
+        })
+        diagramDataUrls[q.id] = dataUrl
+      } catch { /* skip if fetch fails */ }
     }
 
     const { default: katex } = await import('katex')
@@ -742,44 +761,19 @@ function LessonPageInner() {
     const courseName = planItem?.weeklyPlan?.course?.title || ''
     const printDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
 
-    // Group show-work questions by page index (derived from order field)
-    const grouped = new Map<number, typeof showWorkQuestions>()
-    for (const q of showWorkQuestions) {
-      const pi = pageIndexFromOrder(q.order)
-      if (!grouped.has(pi)) grouped.set(pi, [])
-      grouped.get(pi)!.push(q)
-    }
-    const pageIndices = [...grouped.keys()].sort((a, b) => a - b)
-    const hasScanImages = scanDataUrls.length > 0
-
-    // Build page-grouped HTML: each scan page full-size, then work boxes for its problems
-    const pagesHTML = pageIndices.map((pi, idx) => {
-      const qs = grouped.get(pi)!
-      const scanSrc = scanDataUrls[pi]
-
-      // If we have the scan image, show it full-size — this IS the problem content
-      const scanImgHTML = scanSrc
-        ? `<div class="scan-page"><img src="${scanSrc}" class="scan-img" /></div>`
+    // Build question HTML — each question shows its text, diagram (if any), and work box
+    const questionsHTML = showWorkQuestions.map(q => {
+      const bookNumMatch = q.questionText.match(/^(\d+\.)\s/)
+      const qNumLabel = bookNumMatch ? bookNumMatch[1] : `#${q.order % 1000}.`
+      const qBody = renderMath(q.questionText.replace(/^\d+\.\s*/, ''))
+      const diagramSrc = diagramDataUrls[q.id]
+      const diagramHTML = diagramSrc
+        ? `<div class="diagram"><img src="${diagramSrc}" class="diagram-img" /></div>`
         : ''
-
-      // Work boxes — just problem numbers referencing the scan image above
-      const workBoxesHTML = qs.map(q => {
-        const bookNumMatch = q.questionText.match(/^(\d+\.)\s/)
-        const qNumLabel = bookNumMatch ? bookNumMatch[1] : `#${q.order % 1000}.`
-        // If no scan image available, also show the text as fallback
-        const qBody = !scanSrc ? ` ${renderMath(q.questionText.replace(/^\d+\.\s*/, ''))}` : ''
-        return `<div class="work-item">
-          <div class="work-label"><span class="qnum">${qNumLabel}</span>${qBody}</div>
-          <div class="work-box"></div>
-        </div>`
-      }).join('')
-
-      return `<div class="page-group" ${idx > 0 ? 'style="page-break-before:always"' : ''}>
-        ${scanImgHTML}
-        <div class="work-section">
-          ${hasScanImages && pageIndices.length > 1 ? `<div class="page-label">Show Your Work — Page ${pi + 1}</div>` : ''}
-          ${workBoxesHTML}
-        </div>
+      return `<div class="work-item">
+        <div class="work-label"><span class="qnum">${qNumLabel}</span> ${qBody}</div>
+        ${diagramHTML}
+        <div class="work-box"></div>
       </div>`
     }).join('')
 
@@ -797,12 +791,9 @@ function LessonPageInner() {
         .header .instruction{font-size:12px;color:#666;font-style:italic;margin-bottom:10px}
         .header .fields{display:flex;justify-content:space-between;margin-top:10px;gap:24px}
         .header .field{flex:1;font-size:13px;color:#333;padding-bottom:3px;border-bottom:1px solid #888}
-        .scan-page{margin-bottom:20px}
-        .scan-img{width:100%;border:1px solid #ccc;display:block}
-        .page-group{margin-bottom:32px}
-        .page-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#5b2d8e;margin-bottom:12px;padding-bottom:4px;border-bottom:2px solid #d8b4fe}
-        .work-section{margin-top:16px}
-        .work-item{margin-bottom:14px;page-break-inside:avoid}
+        .diagram{margin:8px 0 12px;max-width:320px}
+        .diagram-img{width:100%;border:1px solid #ccc;border-radius:4px;display:block}
+        .work-item{margin-bottom:18px;page-break-inside:avoid}
         .work-label{display:flex;gap:8px;align-items:baseline;margin-bottom:6px;line-height:1.4}
         .qnum{font-weight:bold;font-size:15px;min-width:22px;flex-shrink:0}
         .work-box{border:1px solid #bbb;border-radius:4px;height:120px}
@@ -813,15 +804,15 @@ function LessonPageInner() {
         ${lessonNum != null ? `<div class="lessonnum">Lesson ${lessonNum}</div>` : ''}
         <h1>${title} — Show Work</h1>
         ${courseName ? `<div class="course">${courseName}</div>` : ''}
-        <div class="instruction">${hasScanImages
-          ? 'Refer to the worksheet images below. Show your work for each problem in the boxes provided.'
+        <div class="instruction">${Object.keys(diagramDataUrls).length > 0
+          ? 'Refer to the diagrams shown with each problem. Show your work in the boxes provided.'
           : 'Complete your digital answers online first, then show your work for these problems below.'}</div>
         <div class="fields">
           <div class="field">Name: ${studentName || '___________________________'}</div>
           <div class="field">Date: ${printDate}</div>
         </div>
       </div>
-      ${pagesHTML}
+      ${questionsHTML}
     </body></html>`
 
     const pw = window.open('', '_blank')
@@ -1023,31 +1014,13 @@ function LessonPageInner() {
                           pageGroups.get(pi)!.push(q)
                         }
                         const pageIndices = [...pageGroups.keys()].sort((a, b) => a - b)
-                        const hasScanPages = scanPageUrls.length > 0
-
                         let globalQNum = 0
 
                         return pageIndices.map(pi => {
                           const pageQs = pageGroups.get(pi)!
-                          const scanUrl = scanPageUrls[pi]
 
                           return (
                             <div key={`page-${pi}`} style={{ marginBottom: '32px' }}>
-                              {/* Scan page image as inline header for this group */}
-                              {scanUrl && (
-                                <div style={{ marginBottom: '24px' }}>
-                                  {pageIndices.length > 1 && (
-                                    <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--plum)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px' }}>
-                                      Worksheet Page {pi + 1}
-                                    </div>
-                                  )}
-                                  <img
-                                    src={scanUrl}
-                                    alt={`Worksheet page ${pi + 1}`}
-                                    style={{ width: '100%', borderRadius: '8px', border: '1px solid var(--gray-light)', display: 'block' }}
-                                  />
-                                </div>
-                              )}
 
                               {/* Questions for this page */}
                               {pageQs.map((q, idx) => {
@@ -1080,6 +1053,16 @@ function LessonPageInner() {
                                         <MathRenderer text={bookNumMatch ? bookNumMatch[2] : q.questionText} />
                                       </div>
                                     </div>
+                                    {/* Cropped diagram image for this question */}
+                                    {diagramUrls[q.id] && (
+                                      <div style={{ marginBottom: '14px', maxWidth: '360px' }}>
+                                        <img
+                                          src={diagramUrls[q.id]}
+                                          alt="Diagram"
+                                          style={{ width: '100%', borderRadius: '8px', border: '1px solid var(--gray-light)', display: 'block' }}
+                                        />
+                                      </div>
+                                    )}
                                     {q.questionType === 'number' && (
                                       <MathInput
                                         value={answers[q.id] || ''}

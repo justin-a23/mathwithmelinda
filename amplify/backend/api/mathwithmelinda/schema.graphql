@@ -157,6 +157,7 @@ type AssignmentQuestion @model {
   questionType: String!
   choices: String
   correctAnswer: String
+  diagramKey: String
   lessonTemplate: LessonTemplate @belongsTo
 }
 

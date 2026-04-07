@@ -86,6 +86,7 @@ export const getSemester = /* GraphQL */ `query GetSemester($id: ID!) {
     gradeB
     gradeC
     gradeD
+    semesterType
     createdAt
     updatedAt
     academicYearSemestersId
@@ -117,6 +118,7 @@ export const listSemesters = /* GraphQL */ `query ListSemesters(
       gradeB
       gradeC
       gradeD
+      semesterType
       createdAt
       updatedAt
       academicYearSemestersId
@@ -130,6 +132,62 @@ export const listSemesters = /* GraphQL */ `query ListSemesters(
 ` as GeneratedQuery<
   APITypes.ListSemestersQueryVariables,
   APITypes.ListSemestersQuery
+>;
+export const getStudentInvite = /* GraphQL */ `query GetStudentInvite($id: ID!) {
+  getStudentInvite(id: $id) {
+    id
+    token
+    firstName
+    lastName
+    email
+    courseId
+    courseTitle
+    semesterId
+    planType
+    parentFirstName
+    parentLastName
+    parentEmail
+    used
+    createdAt
+    updatedAt
+    __typename
+  }
+}
+` as GeneratedQuery<
+  APITypes.GetStudentInviteQueryVariables,
+  APITypes.GetStudentInviteQuery
+>;
+export const listStudentInvites = /* GraphQL */ `query ListStudentInvites(
+  $filter: ModelStudentInviteFilterInput
+  $limit: Int
+  $nextToken: String
+) {
+  listStudentInvites(filter: $filter, limit: $limit, nextToken: $nextToken) {
+    items {
+      id
+      token
+      firstName
+      lastName
+      email
+      courseId
+      courseTitle
+      semesterId
+      planType
+      parentFirstName
+      parentLastName
+      parentEmail
+      used
+      createdAt
+      updatedAt
+      __typename
+    }
+    nextToken
+    __typename
+  }
+}
+` as GeneratedQuery<
+  APITypes.ListStudentInvitesQueryVariables,
+  APITypes.ListStudentInvitesQuery
 >;
 export const getCourse = /* GraphQL */ `query GetCourse($id: ID!) {
   getCourse(id: $id) {
@@ -266,6 +324,7 @@ export const getWeeklyPlan = /* GraphQL */ `query GetWeeklyPlan($id: ID!) {
       gradeB
       gradeC
       gradeD
+      semesterType
       createdAt
       updatedAt
       academicYearSemestersId
@@ -623,6 +682,7 @@ export const getEnrollment = /* GraphQL */ `query GetEnrollment($id: ID!) {
       gradeB
       gradeC
       gradeD
+      semesterType
       createdAt
       updatedAt
       academicYearSemestersId
@@ -736,6 +796,7 @@ export const getAssignmentQuestion = /* GraphQL */ `query GetAssignmentQuestion(
     questionType
     choices
     correctAnswer
+    diagramKey
     lessonTemplate {
       id
       lessonNumber
@@ -778,6 +839,7 @@ export const listAssignmentQuestions = /* GraphQL */ `query ListAssignmentQuesti
       questionType
       choices
       correctAnswer
+      diagramKey
       createdAt
       updatedAt
       lessonTemplateQuestionsId
@@ -890,6 +952,9 @@ export const getParentInvite = /* GraphQL */ `query GetParentInvite($id: ID!) {
     studentEmail
     studentName
     used
+    parentEmail
+    parentFirstName
+    parentLastName
     createdAt
     updatedAt
     __typename
@@ -911,6 +976,9 @@ export const listParentInvites = /* GraphQL */ `query ListParentInvites(
       studentEmail
       studentName
       used
+      parentEmail
+      parentFirstName
+      parentLastName
       createdAt
       updatedAt
       __typename
@@ -1157,6 +1225,8 @@ export const getMessage = /* GraphQL */ `query GetMessage($id: ID!) {
     teacherReply
     repliedAt
     isArchivedByTeacher
+    isDeletedByStudent
+    isTeacherInitiated
     createdAt
     updatedAt
     __typename
@@ -1182,6 +1252,8 @@ export const listMessages = /* GraphQL */ `query ListMessages(
       teacherReply
       repliedAt
       isArchivedByTeacher
+      isDeletedByStudent
+      isTeacherInitiated
       createdAt
       updatedAt
       __typename
@@ -1291,4 +1363,50 @@ export const listZoomMeetings = /* GraphQL */ `query ListZoomMeetings(
 ` as GeneratedQuery<
   APITypes.ListZoomMeetingsQueryVariables,
   APITypes.ListZoomMeetingsQuery
+>;
+export const getAnnouncement = /* GraphQL */ `query GetAnnouncement($id: ID!) {
+  getAnnouncement(id: $id) {
+    id
+    subject
+    message
+    sentAt
+    recipientIds
+    recipientCount
+    courseId
+    courseTitle
+    createdAt
+    updatedAt
+    __typename
+  }
+}
+` as GeneratedQuery<
+  APITypes.GetAnnouncementQueryVariables,
+  APITypes.GetAnnouncementQuery
+>;
+export const listAnnouncements = /* GraphQL */ `query ListAnnouncements(
+  $filter: ModelAnnouncementFilterInput
+  $limit: Int
+  $nextToken: String
+) {
+  listAnnouncements(filter: $filter, limit: $limit, nextToken: $nextToken) {
+    items {
+      id
+      subject
+      message
+      sentAt
+      recipientIds
+      recipientCount
+      courseId
+      courseTitle
+      createdAt
+      updatedAt
+      __typename
+    }
+    nextToken
+    __typename
+  }
+}
+` as GeneratedQuery<
+  APITypes.ListAnnouncementsQueryVariables,
+  APITypes.ListAnnouncementsQuery
 >;

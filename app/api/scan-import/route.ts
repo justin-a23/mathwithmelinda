@@ -4,6 +4,13 @@ import { requireTeacher } from '@/app/lib/auth'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
+export type CropRegion = {
+  x: number      // left edge as fraction 0-1
+  y: number      // top edge as fraction 0-1
+  width: number   // width as fraction 0-1
+  height: number  // height as fraction 0-1
+}
+
 export type ExtractedQuestion = {
   type: 'show_work' | 'number' | 'multiple_choice' | 'section_header' | 'instructions'
   text: string
@@ -11,6 +18,7 @@ export type ExtractedQuestion = {
   choices?: string
   hasImage: boolean
   pageIndex: number
+  cropRegion?: CropRegion
 }
 
 export type ScanImportResult = {
@@ -31,7 +39,8 @@ Your job is to return a JSON object with this exact shape:
       "text": "the question text, with math in \\(...\\) delimiters",
       "answer": "the correct answer if visible (often not shown)",
       "choices": "for multiple_choice only: one choice per line",
-      "hasImage": true or false
+      "hasImage": true or false,
+      "cropRegion": { "x": 0.0, "y": 0.0, "width": 1.0, "height": 0.2 }
     }
   ]
 }
@@ -55,6 +64,17 @@ Image/diagram rules:
 - For coordinate grid problems: set hasImage true. Read the EXACT grid coordinates of every labeled point — read along the grid lines carefully, do not estimate. Example: "55. Find the distance between \\((6, 7)\\) and \\((-6, -5)\\)."
 - For all other diagram problems: set hasImage true and include every labeled value from the diagram.
 - For pure text/equation problems with no diagram: set hasImage false.
+
+Diagram crop region (CRITICAL for hasImage:true questions):
+When hasImage is true, you MUST also provide "cropRegion" — the bounding box of the diagram/figure on the page as fractions (0 to 1) of the page dimensions.
+- "x": left edge of the diagram as fraction of page width (0 = left edge, 1 = right edge)
+- "y": top edge of the diagram as fraction of page height (0 = top, 1 = bottom)
+- "width": width of the diagram as fraction of page width
+- "height": height of the diagram as fraction of page height
+- Add about 5% padding on each side so the crop isn't too tight.
+- Be precise — look carefully at where the diagram starts and ends relative to the full page.
+- Only include the diagram/figure itself, NOT the surrounding text or other problems.
+- Omit cropRegion entirely for hasImage:false questions.
 
 Return ONLY valid JSON. No markdown, no commentary, no code fences.`
 

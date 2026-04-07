@@ -23,7 +23,9 @@ export async function POST(request: NextRequest) {
     const ext = file.type === 'application/pdf' ? 'pdf'
       : file.type === 'image/png' ? 'png'
       : 'jpg'
-    const key = `scan-pages/${lessonId}/page${index || '0'}.${ext}`
+    // index can be "0", "1" (full pages) or "diagram-0", "diagram-1" (cropped diagrams)
+    const prefix = index?.startsWith('diagram') ? '' : 'page'
+    const key = `scan-pages/${lessonId}/${prefix}${index || '0'}.${ext}`
 
     await s3.send(new PutObjectCommand({
       Bucket: 'mathwithmelinda-submissions',
