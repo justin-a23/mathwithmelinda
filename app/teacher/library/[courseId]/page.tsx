@@ -1053,7 +1053,7 @@ export default function LessonLibraryPage() {
                               fontFamily: 'var(--font-body)',
                             }}
                           >
-                            {tab === 'details' ? 'Details' : `Questions${questions.length > 0 ? ` (${questions.length})` : ''}`}
+                            {tab === 'details' ? 'Details' : `Questions${questions.filter(q => q.questionType !== 'section_header' && q.questionType !== 'instructions').length > 0 ? ` (${questions.filter(q => q.questionType !== 'section_header' && q.questionType !== 'instructions').length})` : ''}`}
                           </button>
                         ))}
                       </div>
