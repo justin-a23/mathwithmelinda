@@ -62,7 +62,7 @@ export default function LessonLibraryIndex() {
                   {course.title}
                 </div>
                 {course.gradeLevel && (
-                  <div style={{ fontSize: '13px', color: 'var(--gray-mid)' }}>{course.gradeLevel}</div>
+                  <div style={{ fontSize: '13px', color: 'var(--gray-mid)' }}>Grade {course.gradeLevel}</div>
                 )}
               </div>
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
