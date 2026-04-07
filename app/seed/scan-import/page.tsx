@@ -18,6 +18,7 @@ type ExtractedQuestion = {
   answer?: string
   choices?: string
   hasImage: boolean
+  pageIndex: number
 }
 
 const TYPE_BADGE: Record<string, { bg: string; color: string; label: string }> = {
@@ -188,12 +189,15 @@ export default function ScanImportPage() {
         })
       }
 
-      // Import questions
-      let order = 0
+      // Import questions — encode pageIndex into order field (pageIndex * 1000 + seq)
+      // This lets the lesson viewer group questions by their source scan page
+      const pageCounters: Record<number, number> = {}
       for (const q of questions) {
         const validTypes = ['number', 'multiple_choice', 'show_work', 'section_header']
         const questionType = validTypes.includes(q.type) ? q.type : 'show_work'
-        order++
+        const pi = q.pageIndex ?? 0
+        pageCounters[pi] = (pageCounters[pi] || 0) + 1
+        const order = pi * 1000 + pageCounters[pi]
         await client.graphql({
           query: createAssignmentQuestion,
           variables: {
@@ -425,8 +429,16 @@ export default function ScanImportPage() {
                   {questions.map((q, i) => {
                     const badge = TYPE_BADGE[q.type] ?? { bg: 'var(--gray-light)', color: 'var(--foreground)', label: q.type }
                     const isHeader = q.type === 'section_header'
+                    const showPageDivider = i === 0 || (q.pageIndex ?? 0) !== (questions[i - 1]?.pageIndex ?? 0)
                     return (
-                      <div key={i} style={{
+                      <div key={i}><div key={`wrap-${i}`}>
+                      {showPageDivider && (
+                        <div style={{ padding: '8px 14px', background: '#7b4fa6', color: 'white', fontSize: '11px', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', borderBottom: '1px solid var(--gray-light)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/></svg>
+                          Scan Page {(q.pageIndex ?? 0) + 1}
+                        </div>
+                      )}
+                      <div style={{
                         padding: '10px 14px',
                         borderBottom: i < questions.length - 1 ? '1px solid var(--gray-light)' : 'none',
                         display: 'flex', alignItems: 'flex-start', gap: '10px',
@@ -447,6 +459,7 @@ export default function ScanImportPage() {
                           {q.answer && <span style={{ fontSize: '12px', color: 'var(--gray-mid)' }}>ans: {q.answer}</span>}
                         </div>
                       </div>
+                      </div></div>
                     )
                   })}
                 </div>

@@ -145,6 +145,11 @@ type UploadedFile = {
   warning?: string      // quality warning (landscape, low-res, etc.)
 }
 
+// Extract page index from order field: order = pageIndex * 1000 + sequence
+function pageIndexFromOrder(order: number): number {
+  return Math.floor(order / 1000)
+}
+
 function checkImageQuality(file: File): Promise<string | undefined> {
   return new Promise((resolve) => {
     const previewable = file.type === 'image/jpeg' || file.type === 'image/png' || file.type === 'image/webp' || file.type === 'image/gif'
@@ -185,7 +190,6 @@ function LessonPageInner() {
   const [studentName, setStudentName] = useState('')
 
   const [scanPageUrls, setScanPageUrls] = useState<string[]>([])
-  const [scanPagesExpanded, setScanPagesExpanded] = useState(false)
 
   const [existingSubmissionId, setExistingSubmissionId] = useState<string | null>(null)
   const [isReturned, setIsReturned] = useState(false)
@@ -269,9 +273,7 @@ function LessonPageInner() {
                     const d = await r.json()
                     return d.url as string
                   }))
-                  const filtered = urls.filter(Boolean)
-                  setScanPageUrls(filtered)
-                  if (filtered.length > 0) setScanPagesExpanded(true)
+                  setScanPageUrls(urls.filter(Boolean))
                 } catch { /* non-critical */ }
               }
             }
@@ -740,48 +742,46 @@ function LessonPageInner() {
     const courseName = planItem?.weeklyPlan?.course?.title || ''
     const printDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
 
-    // Sort all questions, assign sequential numbers (skipping headers),
-    // then only render the show_work ones — preserving the original question numbers
-    // so students can cross-reference with their digital answers.
-    const sorted = [...allQuestions].sort((a, b) => a.order - b.order)
-    let qCounter = 0
-    const numberedItems = sorted.map(q => {
-      if (q.questionType === 'section_header') return { ...q, qNum: 0 }
-      qCounter++
-      return { ...q, qNum: qCounter }
-    })
-
-    // Determine which section headers immediately precede at least one show_work question
-    const sectionsWithShowWork = new Set<string>()
-    for (let i = 0; i < numberedItems.length; i++) {
-      if (numberedItems[i].questionType === 'section_header') {
-        for (let j = i + 1; j < numberedItems.length; j++) {
-          if (numberedItems[j].questionType === 'section_header') break
-          if (numberedItems[j].questionType === 'show_work') {
-            sectionsWithShowWork.add(numberedItems[i].id)
-            break
-          }
-        }
-      }
+    // Group show-work questions by page index (derived from order field)
+    const grouped = new Map<number, typeof showWorkQuestions>()
+    for (const q of showWorkQuestions) {
+      const pi = pageIndexFromOrder(q.order)
+      if (!grouped.has(pi)) grouped.set(pi, [])
+      grouped.get(pi)!.push(q)
     }
+    const pageIndices = [...grouped.keys()].sort((a, b) => a - b)
+    const hasScanImages = scanDataUrls.length > 0
 
-    const questionsHTML = numberedItems
-      .filter(q => q.questionType === 'section_header' ? sectionsWithShowWork.has(q.id) : q.questionType === 'show_work')
-      .map(q => {
-        if (q.questionType === 'section_header') {
-          return `<div class="section-header">${renderMath(q.questionText)}</div>`
-        }
-        const bookNumMatch = q.questionText.match(/^(\d+\.)\s([\s\S]*)$/)
-        const qNumLabel = bookNumMatch ? bookNumMatch[1] : `${q.qNum}.`
-        const qBody = bookNumMatch ? renderMath(bookNumMatch[2]) : renderMath(q.questionText)
-        return `<div class="question">
-          <div class="question-text">
-            <span class="qnum">${qNumLabel}</span>
-            <span>${qBody}</span>
-          </div>
+    // Build page-grouped HTML: each scan page full-size, then work boxes for its problems
+    const pagesHTML = pageIndices.map((pi, idx) => {
+      const qs = grouped.get(pi)!
+      const scanSrc = scanDataUrls[pi]
+
+      // If we have the scan image, show it full-size — this IS the problem content
+      const scanImgHTML = scanSrc
+        ? `<div class="scan-page"><img src="${scanSrc}" class="scan-img" /></div>`
+        : ''
+
+      // Work boxes — just problem numbers referencing the scan image above
+      const workBoxesHTML = qs.map(q => {
+        const bookNumMatch = q.questionText.match(/^(\d+\.)\s/)
+        const qNumLabel = bookNumMatch ? bookNumMatch[1] : `#${q.order % 1000}.`
+        // If no scan image available, also show the text as fallback
+        const qBody = !scanSrc ? ` ${renderMath(q.questionText.replace(/^\d+\.\s*/, ''))}` : ''
+        return `<div class="work-item">
+          <div class="work-label"><span class="qnum">${qNumLabel}</span>${qBody}</div>
           <div class="work-box"></div>
         </div>`
       }).join('')
+
+      return `<div class="page-group" ${idx > 0 ? 'style="page-break-before:always"' : ''}>
+        ${scanImgHTML}
+        <div class="work-section">
+          ${hasScanImages && pageIndices.length > 1 ? `<div class="page-label">Show Your Work — Page ${pi + 1}</div>` : ''}
+          ${workBoxesHTML}
+        </div>
+      </div>`
+    }).join('')
 
     const html = `<!DOCTYPE html><html><head>
       <meta charset="utf-8">
@@ -790,50 +790,38 @@ function LessonPageInner() {
       <style>
         *{box-sizing:border-box}
         body{font-family:'Times New Roman',serif;max-width:720px;margin:0 auto;padding:40px;color:#111;font-size:15px}
-        .header{text-align:center;margin-bottom:20px;padding-bottom:14px;border-bottom:2px solid #333}
+        .header{text-align:center;margin-bottom:24px;padding-bottom:14px;border-bottom:2px solid #333}
         .header h1{font-size:22px;margin:0 0 2px}
         .header .lessonnum{font-size:13px;color:#777;margin-bottom:2px}
         .header .course{font-size:13px;color:#555;margin-bottom:6px}
         .header .instruction{font-size:12px;color:#666;font-style:italic;margin-bottom:10px}
         .header .fields{display:flex;justify-content:space-between;margin-top:10px;gap:24px}
         .header .field{flex:1;font-size:13px;color:#333;padding-bottom:3px;border-bottom:1px solid #888}
-        .question{margin-bottom:14px;page-break-inside:avoid}
-        .question-text{display:flex;gap:10px;margin-bottom:6px;line-height:1.4}
-        .qnum{font-weight:bold;min-width:22px;flex-shrink:0}
-        .work-box{border:1px solid #bbb;border-radius:4px;height:110px;margin-left:22px}
-        .section-header{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#5b2d8e;border-bottom:2px solid #d8b4fe;padding-bottom:5px;margin:24px 0 14px;page-break-after:avoid}
-        .ref-section{margin:28px 0;padding:16px;border:1px solid #c4b5fd;border-radius:6px;background:#faf5ff;page-break-inside:avoid}
-        .ref-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#5b2d8e;margin-bottom:12px}
-        .ref-pages{display:flex;flex-direction:column;gap:16px}
-        .ref-page-label{font-size:10px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px}
-        .ref-img{width:100%;border:1px solid #ddd;border-radius:4px;display:block}
-        @media print{body{padding:20px}@page{margin:.75in}.ref-section{break-inside:avoid}}
+        .scan-page{margin-bottom:20px}
+        .scan-img{width:100%;border:1px solid #ccc;display:block}
+        .page-group{margin-bottom:32px}
+        .page-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#5b2d8e;margin-bottom:12px;padding-bottom:4px;border-bottom:2px solid #d8b4fe}
+        .work-section{margin-top:16px}
+        .work-item{margin-bottom:14px;page-break-inside:avoid}
+        .work-label{display:flex;gap:8px;align-items:baseline;margin-bottom:6px;line-height:1.4}
+        .qnum{font-weight:bold;font-size:15px;min-width:22px;flex-shrink:0}
+        .work-box{border:1px solid #bbb;border-radius:4px;height:120px}
+        @media print{body{padding:20px}@page{margin:.6in}}
       </style>
     </head><body onload="setTimeout(function(){window.print()},1200)">
       <div class="header">
         ${lessonNum != null ? `<div class="lessonnum">Lesson ${lessonNum}</div>` : ''}
         <h1>${title} — Show Work</h1>
         ${courseName ? `<div class="course">${courseName}</div>` : ''}
-        <div class="instruction">Complete your digital answers online first, then show your work for these problems below.</div>
+        <div class="instruction">${hasScanImages
+          ? 'Refer to the worksheet images below. Show your work for each problem in the boxes provided.'
+          : 'Complete your digital answers online first, then show your work for these problems below.'}</div>
         <div class="fields">
           <div class="field">Name: ${studentName || '___________________________'}</div>
           <div class="field">Date: ${printDate}</div>
         </div>
       </div>
-      ${scanDataUrls.length > 0 ? `
-        <div class="ref-section">
-          <div class="ref-title">📋 Worksheet Reference — use these to see the original diagrams and graphs</div>
-          <div class="ref-pages">
-            ${scanDataUrls.map((src, i) => `
-              <div>
-                ${scanDataUrls.length > 1 ? `<div class="ref-page-label">Page ${i + 1}</div>` : ''}
-                <img src="${src}" class="ref-img" alt="Worksheet page ${i + 1}" />
-              </div>
-            `).join('')}
-          </div>
-        </div>
-      ` : ''}
-      ${questionsHTML}
+      ${pagesHTML}
     </body></html>`
 
     const pw = window.open('', '_blank')
@@ -963,61 +951,6 @@ function LessonPageInner() {
               </div>
             )}
 
-            {scanPageUrls.length > 0 && (
-              <div style={{ marginBottom: '32px' }}>
-                <button
-                  type="button"
-                  onClick={() => setScanPagesExpanded(e => !e)}
-                  style={{
-                    width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    background: 'var(--plum-light)', border: '1px solid var(--plum-mid)',
-                    borderRadius: scanPagesExpanded ? 'var(--radius) var(--radius) 0 0' : 'var(--radius)',
-                    padding: '14px 20px', cursor: 'pointer', transition: 'border-radius 0.15s',
-                  }}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '10px', fontFamily: 'var(--font-display)', fontSize: '16px', color: 'var(--plum)', fontWeight: 600 }}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>
-                    </svg>
-                    Worksheet Reference
-                    <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--plum)', opacity: 0.7 }}>
-                      ({scanPageUrls.length} {scanPageUrls.length === 1 ? 'page' : 'pages'})
-                    </span>
-                  </span>
-                  <svg
-                    width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--plum)" strokeWidth="2.5"
-                    style={{ transform: scanPagesExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s', flexShrink: 0 }}>
-                    <polyline points="6 9 12 15 18 9"/>
-                  </svg>
-                </button>
-                {scanPagesExpanded && (
-                  <div style={{
-                    border: '1px solid var(--plum-mid)', borderTop: 'none',
-                    borderRadius: '0 0 var(--radius) var(--radius)',
-                    padding: '20px', background: 'var(--background)',
-                    display: 'flex', flexDirection: 'column', gap: '20px',
-                  }}>
-                    <p style={{ margin: 0, fontSize: '12px', color: 'var(--gray-mid)' }}>
-                      Use these worksheet images to see the original problems, diagrams, and graphs.
-                    </p>
-                    {scanPageUrls.map((url, i) => (
-                      <div key={i}>
-                        {scanPageUrls.length > 1 && (
-                          <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--gray-mid)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '8px' }}>
-                            Page {i + 1}
-                          </div>
-                        )}
-                        <img
-                          src={url}
-                          alt={`Worksheet page ${i + 1}`}
-                          style={{ width: '100%', borderRadius: '8px', border: '1px solid var(--gray-light)', display: 'block' }}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
             {submitted ? (
               <div style={{ background: 'var(--plum-light)', border: '1px solid var(--plum-mid)', borderRadius: 'var(--radius)', padding: '32px', textAlign: 'center' }}>
                 <div style={{ fontFamily: 'var(--font-display)', fontSize: '24px', color: 'var(--plum)', marginBottom: '8px' }}>Submitted!</div>
@@ -1082,92 +1015,129 @@ function LessonPageInner() {
                   {showQuestions && (
                     <div style={{ marginBottom: '28px' }}>
                       {(() => {
-                        let qNum = 0
-                        return questions.map((q, idx) => {
-                          const isHeader = q.questionType === 'section_header'
-                          if (!isHeader) qNum++
-                          const displayNum = qNum
-                          const bookNumMatch = !isHeader && q.questionText.match(/^(\d+\.)\s([\s\S]*)$/)
-                          const hasBookNum = !!bookNumMatch
-                          if (isHeader) {
-                            return (
-                              <div key={q.id} style={{ marginTop: idx === 0 ? 0 : '28px', marginBottom: '16px' }}>
-                                <div style={{
-                                  fontSize: '13px', fontWeight: 700, color: 'var(--plum)',
-                                  textTransform: 'uppercase', letterSpacing: '0.8px',
-                                  borderBottom: '2px solid var(--plum-mid)',
-                                  paddingBottom: '6px', paddingTop: '4px'
-                                }}>
-                                  {q.questionText}
-                                </div>
-                              </div>
-                            )
-                          }
+                        // Group questions by page index for inline scan page display
+                        const pageGroups = new Map<number, typeof questions>()
+                        for (const q of questions) {
+                          const pi = pageIndexFromOrder(q.order)
+                          if (!pageGroups.has(pi)) pageGroups.set(pi, [])
+                          pageGroups.get(pi)!.push(q)
+                        }
+                        const pageIndices = [...pageGroups.keys()].sort((a, b) => a - b)
+                        const hasScanPages = scanPageUrls.length > 0
+
+                        let globalQNum = 0
+
+                        return pageIndices.map(pi => {
+                          const pageQs = pageGroups.get(pi)!
+                          const scanUrl = scanPageUrls[pi]
+
                           return (
-                          <div key={q.id} style={{ marginBottom: '24px', paddingBottom: '24px', borderBottom: idx < questions.length - 1 ? '1px solid var(--gray-light)' : 'none' }}>
-                          <div style={{ display: 'flex', gap: '12px', marginBottom: '12px' }}>
-                            <span style={{ fontWeight: 700, color: 'var(--plum)', fontSize: '16px', minWidth: '28px', flexShrink: 0 }}>
-                              {bookNumMatch ? bookNumMatch[1] : `${displayNum}.`}
-                            </span>
-                            <div style={{ fontSize: '15px', color: 'var(--foreground)', lineHeight: '1.6', flex: 1 }}>
-                              <MathRenderer text={bookNumMatch ? bookNumMatch[2] : q.questionText} />
-                            </div>
-                          </div>
-                          {q.questionType === 'number' && (
-                            <MathInput
-                              value={answers[q.id] || ''}
-                              onChange={val => setAnswers(prev => ({ ...prev, [q.id]: val }))}
-                              placeholder="Your answer…"
-                            />
-                          )}
-                          {q.questionType === 'short_text' && (
-                            <MathInput
-                              value={answers[q.id] || ''}
-                              onChange={val => setAnswers(prev => ({ ...prev, [q.id]: val }))}
-                              multiline
-                              placeholder="Your answer…"
-                            />
-                          )}
-                          {q.questionType === 'multiple_choice' && q.choices && (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                              {q.choices.split('\n').filter(Boolean).map((choice, ci) => (
-                                <label key={ci} style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontSize: '14px', color: 'var(--foreground)' }}>
-                                  <input type="radio" name={`q-${q.id}`} value={choice} checked={answers[q.id] === choice} onChange={() => setAnswers(prev => ({ ...prev, [q.id]: choice }))} />
-                                  <MathRenderer text={choice} />
-                                </label>
-                              ))}
-                            </div>
-                          )}
-                          {q.questionType === 'multiple_choice_multi' && q.choices && (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                              <div style={{ fontSize: '11px', color: 'var(--gray-mid)', marginBottom: '4px' }}>Select all that apply</div>
-                              {q.choices.split('\n').filter(Boolean).map((choice, ci) => {
-                                const selected: string[] = answers[q.id] ? answers[q.id].split('||') : []
-                                const isChecked = selected.includes(choice)
+                            <div key={`page-${pi}`} style={{ marginBottom: '32px' }}>
+                              {/* Scan page image as inline header for this group */}
+                              {scanUrl && (
+                                <div style={{ marginBottom: '24px' }}>
+                                  {pageIndices.length > 1 && (
+                                    <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--plum)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px' }}>
+                                      Worksheet Page {pi + 1}
+                                    </div>
+                                  )}
+                                  <img
+                                    src={scanUrl}
+                                    alt={`Worksheet page ${pi + 1}`}
+                                    style={{ width: '100%', borderRadius: '8px', border: '1px solid var(--gray-light)', display: 'block' }}
+                                  />
+                                </div>
+                              )}
+
+                              {/* Questions for this page */}
+                              {pageQs.map((q, idx) => {
+                                const isHeader = q.questionType === 'section_header'
+                                if (!isHeader) globalQNum++
+                                const displayNum = globalQNum
+                                const bookNumMatch = !isHeader && q.questionText.match(/^(\d+\.)\s([\s\S]*)$/)
+
+                                if (isHeader) {
+                                  return (
+                                    <div key={q.id} style={{ marginTop: idx === 0 ? 0 : '28px', marginBottom: '16px' }}>
+                                      <div style={{
+                                        fontSize: '13px', fontWeight: 700, color: 'var(--plum)',
+                                        textTransform: 'uppercase', letterSpacing: '0.8px',
+                                        borderBottom: '2px solid var(--plum-mid)',
+                                        paddingBottom: '6px', paddingTop: '4px'
+                                      }}>
+                                        {q.questionText}
+                                      </div>
+                                    </div>
+                                  )
+                                }
                                 return (
-                                  <label key={ci} style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontSize: '14px', color: 'var(--foreground)' }}>
-                                    <input
-                                      type="checkbox"
-                                      value={choice}
-                                      checked={isChecked}
-                                      onChange={() => {
-                                        const next = isChecked ? selected.filter(s => s !== choice) : [...selected, choice]
-                                        setAnswers(prev => ({ ...prev, [q.id]: next.join('||') }))
-                                      }}
-                                    />
-                                    <MathRenderer text={choice} />
-                                  </label>
+                                  <div key={q.id} style={{ marginBottom: '24px', paddingBottom: '24px', borderBottom: '1px solid var(--gray-light)' }}>
+                                    <div style={{ display: 'flex', gap: '12px', marginBottom: '12px' }}>
+                                      <span style={{ fontWeight: 700, color: 'var(--plum)', fontSize: '16px', minWidth: '28px', flexShrink: 0 }}>
+                                        {bookNumMatch ? bookNumMatch[1] : `${displayNum}.`}
+                                      </span>
+                                      <div style={{ fontSize: '15px', color: 'var(--foreground)', lineHeight: '1.6', flex: 1 }}>
+                                        <MathRenderer text={bookNumMatch ? bookNumMatch[2] : q.questionText} />
+                                      </div>
+                                    </div>
+                                    {q.questionType === 'number' && (
+                                      <MathInput
+                                        value={answers[q.id] || ''}
+                                        onChange={val => setAnswers(prev => ({ ...prev, [q.id]: val }))}
+                                        placeholder="Your answer…"
+                                      />
+                                    )}
+                                    {q.questionType === 'short_text' && (
+                                      <MathInput
+                                        value={answers[q.id] || ''}
+                                        onChange={val => setAnswers(prev => ({ ...prev, [q.id]: val }))}
+                                        multiline
+                                        placeholder="Your answer…"
+                                      />
+                                    )}
+                                    {q.questionType === 'multiple_choice' && q.choices && (
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                        {q.choices.split('\n').filter(Boolean).map((choice, ci) => (
+                                          <label key={ci} style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontSize: '14px', color: 'var(--foreground)' }}>
+                                            <input type="radio" name={`q-${q.id}`} value={choice} checked={answers[q.id] === choice} onChange={() => setAnswers(prev => ({ ...prev, [q.id]: choice }))} />
+                                            <MathRenderer text={choice} />
+                                          </label>
+                                        ))}
+                                      </div>
+                                    )}
+                                    {q.questionType === 'multiple_choice_multi' && q.choices && (
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                        <div style={{ fontSize: '11px', color: 'var(--gray-mid)', marginBottom: '4px' }}>Select all that apply</div>
+                                        {q.choices.split('\n').filter(Boolean).map((choice, ci) => {
+                                          const selected: string[] = answers[q.id] ? answers[q.id].split('||') : []
+                                          const isChecked = selected.includes(choice)
+                                          return (
+                                            <label key={ci} style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontSize: '14px', color: 'var(--foreground)' }}>
+                                              <input
+                                                type="checkbox"
+                                                value={choice}
+                                                checked={isChecked}
+                                                onChange={() => {
+                                                  const next = isChecked ? selected.filter(s => s !== choice) : [...selected, choice]
+                                                  setAnswers(prev => ({ ...prev, [q.id]: next.join('||') }))
+                                                }}
+                                              />
+                                              <MathRenderer text={choice} />
+                                            </label>
+                                          )
+                                        })}
+                                      </div>
+                                    )}
+                                    {q.questionType === 'show_work' && (
+                                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'var(--plum-light)', border: '1px solid var(--plum-mid)', borderRadius: '6px', padding: '5px 10px', marginTop: '4px' }}>
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--plum)" strokeWidth="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                                        <span style={{ fontSize: '12px', color: 'var(--plum)', fontWeight: 500 }}>Show work on printed sheet</span>
+                                      </div>
+                                    )}
+                                  </div>
                                 )
                               })}
                             </div>
-                          )}
-                          {q.questionType === 'show_work' && (
-                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'var(--plum-light)', border: '1px solid var(--plum-mid)', borderRadius: '6px', padding: '5px 10px', marginTop: '4px' }}>
-                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--plum)" strokeWidth="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
-                              <span style={{ fontSize: '12px', color: 'var(--plum)', fontWeight: 500 }}>Show work on printed sheet</span>
-                            </div>
-                          )}
-                        </div>
                           )
                         })
                       })()}

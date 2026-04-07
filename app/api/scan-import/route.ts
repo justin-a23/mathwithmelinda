@@ -10,6 +10,7 @@ export type ExtractedQuestion = {
   answer?: string
   choices?: string
   hasImage: boolean
+  pageIndex: number
 }
 
 export type ScanImportResult = {
@@ -73,7 +74,8 @@ export async function POST(req: NextRequest) {
     const allQuestions: ExtractedQuestion[] = []
     let globalInstructions: string | undefined
 
-    for (const file of files) {
+    for (let fileIndex = 0; fileIndex < files.length; fileIndex++) {
+      const file = files[fileIndex]
       const isPdf = file.type === 'application/pdf'
       const isImage = file.type.startsWith('image/')
 
@@ -146,7 +148,8 @@ export async function POST(req: NextRequest) {
         globalInstructions = parsed.instructions
       }
       if (Array.isArray(parsed.questions)) {
-        allQuestions.push(...parsed.questions)
+        const tagged = parsed.questions.map(q => ({ ...q, pageIndex: fileIndex }))
+        allQuestions.push(...tagged)
       }
     }
 
