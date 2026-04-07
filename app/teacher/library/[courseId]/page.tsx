@@ -1714,7 +1714,7 @@ export default function LessonLibraryPage() {
                                               </div>
                                             ) : (
                                               <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-                                                <div style={{ color: 'var(--gray-mid)', fontSize: '16px', cursor: 'grab', paddingTop: '2px', userSelect: 'none' }}>⠿</div>
+                                                <div draggable={true} onDragStart={() => setDragIndex(i)} style={{ color: 'var(--gray-mid)', fontSize: '16px', cursor: 'grab', paddingTop: '2px', userSelect: 'none' }}>⠿</div>
                                                 <div style={{ fontWeight: 700, color: 'var(--plum)', fontSize: '14px', minWidth: '24px', paddingTop: '1px' }}>{displayNum}.</div>
                                                 <div style={{ flex: 1, minWidth: 0 }}>
                                                   <div style={{ fontSize: '14px', color: 'var(--foreground)', marginBottom: '6px', lineHeight: '1.6' }}><MathRenderer text={q.questionText} /></div>
