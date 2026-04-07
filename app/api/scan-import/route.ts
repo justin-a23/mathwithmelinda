@@ -87,10 +87,12 @@ When hasImage is true, you MUST also provide "cropRegion" — the bounding box o
 - "y": top edge of the diagram as fraction of page height (0 = top, 1 = bottom)
 - "width": width of the diagram as fraction of page width
 - "height": height of the diagram as fraction of page height
-- IMPORTANT: Be GENEROUS with the crop region. Include the ENTIRE diagram plus ALL labels, numbers, angle marks, and any text that is part of the figure. It is much better to include a little extra space than to cut off part of the diagram.
-- Add at least 10-15% padding on ALL sides beyond the outermost marks/labels of the diagram.
+- IMPORTANT: Be VERY GENEROUS with the crop region. It is much better to include extra whitespace than to cut off ANY part of the diagram. A cropped-off diagram is completely useless.
+- Add at least 15-20% padding on ALL sides beyond the outermost marks/labels.
+- COORDINATE GRIDS / GRAPHS: These are typically WIDE and TALL. Make sure to include the ENTIRE grid — all axis labels, all tick marks, all plotted points, and the axis numbers on BOTH ends. Grids often span nearly the full page width. When in doubt, make the crop wider.
+- TRIANGLES: Include all vertex labels (A, B, C), all side length numbers, angle marks, and the right-angle square symbol.
 - If the problem number (e.g. "51.") is directly adjacent to the diagram, include it in the crop.
-- The student needs to see the COMPLETE figure to solve the problem — a cropped-off diagram is useless.
+- The student needs to see the COMPLETE figure to solve the problem.
 - Only include the diagram/figure region, NOT unrelated problems above/below.
 - Omit cropRegion entirely for hasImage:false questions.
 

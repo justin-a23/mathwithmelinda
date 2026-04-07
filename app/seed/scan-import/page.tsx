@@ -42,16 +42,25 @@ function loadBlobAsImage(blob: Blob): Promise<HTMLImageElement> {
   })
 }
 
-/** Crop a region from an image blob, returns a JPEG Blob */
+/** Crop a region from an image blob, returns a JPEG Blob.
+ *  Adds 10% padding on each side (clamped to image bounds) as a safety net
+ *  so diagrams are never cut off even if Claude's coordinates are slightly tight. */
 async function cropImageRegion(
   sourceBlob: Blob,
   region: { x: number; y: number; width: number; height: number },
 ): Promise<Blob> {
   const img = await loadBlobAsImage(sourceBlob)
-  const sx = Math.round(region.x * img.naturalWidth)
-  const sy = Math.round(region.y * img.naturalHeight)
-  const sw = Math.round(region.width * img.naturalWidth)
-  const sh = Math.round(region.height * img.naturalHeight)
+  // Add 10% padding on each side, clamped to [0, 1]
+  const padX = region.width * 0.10
+  const padY = region.height * 0.10
+  const x = Math.max(0, region.x - padX)
+  const y = Math.max(0, region.y - padY)
+  const w = Math.min(1 - x, region.width + padX * 2)
+  const h = Math.min(1 - y, region.height + padY * 2)
+  const sx = Math.round(x * img.naturalWidth)
+  const sy = Math.round(y * img.naturalHeight)
+  const sw = Math.round(w * img.naturalWidth)
+  const sh = Math.round(h * img.naturalHeight)
   const canvas = document.createElement('canvas')
   canvas.width = sw
   canvas.height = sh
