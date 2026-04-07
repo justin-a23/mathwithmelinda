@@ -689,9 +689,10 @@ export default function LessonLibraryPage() {
     { value: 'questions', label: 'Digital Questions' },
     { value: 'upload', label: 'Upload Only' },
     { value: 'both', label: 'Questions + Upload' },
+    { value: 'worksheet', label: 'Print Worksheet' },
   ]
 
-  const showQuestionBuilder = editForm.assignmentType === 'questions' || editForm.assignmentType === 'both'
+  const showQuestionBuilder = editForm.assignmentType === 'questions' || editForm.assignmentType === 'both' || editForm.assignmentType === 'worksheet'
 
   if (checking) return null
 
@@ -1128,7 +1129,7 @@ export default function LessonLibraryPage() {
                               <div style={{ padding: '32px 0', textAlign: 'center' }}>
                                 <div style={{ fontSize: '14px', color: 'var(--gray-mid)', marginBottom: '16px', lineHeight: '1.7' }}>
                                   Assignment type is set to <strong>{editForm.assignmentType === 'none' ? 'No Assignment' : 'Upload Only'}</strong>.<br />
-                                  Switch to "Digital Questions" or "Questions + Upload" on the Details tab to enable the question builder.
+                                  Switch to "Digital Questions", "Questions + Upload", or "Print Worksheet" on the Details tab to enable the question builder.
                                 </div>
                                 <button
                                   onClick={() => setActiveTab('details')}

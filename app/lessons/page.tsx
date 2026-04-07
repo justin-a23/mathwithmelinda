@@ -596,7 +596,7 @@ function LessonPageInner() {
 
   function handleSubmit() {
     const assignmentType = lessonTemplate?.assignmentType || 'upload'
-    const needsUpload = assignmentType === 'upload' || assignmentType === 'both'
+    const needsUpload = assignmentType === 'upload' || assignmentType === 'both' || assignmentType === 'worksheet'
     const needsAnswers = assignmentType === 'questions' || assignmentType === 'both'
     const stillUploading = files.some(f => f.status === 'uploading')
 
@@ -720,7 +720,12 @@ function LessonPageInner() {
   async function printShowWorkSheet() {
     const allQuestions = lessonTemplate?.questions?.items ?? []
     if (allQuestions.length === 0) return
-    const showWorkQuestions = allQuestions.filter(q => q.questionType === 'show_work')
+    const isWorksheetType = lessonTemplate?.assignmentType === 'worksheet'
+    // For worksheet type, print ALL questions (it's a paper-only assignment)
+    // For other types, only print show_work questions
+    const showWorkQuestions = isWorksheetType
+      ? allQuestions.filter(q => q.questionType !== 'section_header')
+      : allQuestions.filter(q => q.questionType === 'show_work')
     if (showWorkQuestions.length === 0) return
 
     // Pre-fetch per-question diagram images as base64 data URLs for embedding in print
@@ -953,9 +958,10 @@ function LessonPageInner() {
             ) : (() => {
               const assignmentType = lessonTemplate?.assignmentType || 'upload'
               const questions = lessonTemplate?.questions?.items || []
-              const showQuestions = (assignmentType === 'questions' || assignmentType === 'both') && questions.length > 0
+              const isWorksheet = assignmentType === 'worksheet'
+              const showQuestions = ((assignmentType === 'questions' || assignmentType === 'both') && questions.length > 0) || (isWorksheet && questions.length > 0)
               const hasShowWork = questions.some(q => q.questionType === 'show_work')
-              const showUpload = assignmentType === 'upload' || assignmentType === 'both' || !lessonTemplate || hasShowWork
+              const showUpload = assignmentType === 'upload' || assignmentType === 'both' || assignmentType === 'worksheet' || !lessonTemplate || hasShowWork
 
               return (
                 <div style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', padding: '24px' }}>
@@ -976,25 +982,29 @@ function LessonPageInner() {
                     <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '20px', color: 'var(--foreground)', margin: 0 }}>
                       {showQuestions ? 'Assignment' : 'Submit Your Work'}
                     </h2>
-                    {hasShowWork && (
+                    {(hasShowWork || isWorksheet) && (
                       <button
                         type="button"
                         onClick={printShowWorkSheet}
                         style={{ background: 'var(--plum)', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
-                        Print Show Work Sheet
+                        {isWorksheet ? 'Print Worksheet' : 'Print Show Work Sheet'}
                       </button>
                     )}
                   </div>
 
-                  {showQuestions && hasShowWork && (
+                  {showQuestions && (hasShowWork || isWorksheet) && (
                     <div style={{ background: 'var(--plum-light)', border: '1px solid var(--plum-mid)', borderRadius: '8px', padding: '14px 18px', marginBottom: '22px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                       <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--plum)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '2px' }}>How to complete this assignment</div>
-                      {[
+                      {(isWorksheet ? [
+                        'Watch the video above',
+                        'Click "Print Worksheet" to print — complete all problems on paper',
+                        'Take a photo of your completed work and upload below',
+                      ] : [
                         'Watch the video above',
                         'Answer the questions below digitally',
                         'Click "Print Show Work Sheet" to print just the problems that need work shown — complete on paper, take a photo, and upload below',
-                      ].map((step, i) => (
+                      ]).map((step, i) => (
                         <div key={i} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
                           <span style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'var(--plum)', color: 'white', fontSize: '11px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: '1px' }}>{i + 1}</span>
                           <span style={{ fontSize: '13px', color: 'var(--foreground)', lineHeight: 1.5 }}>{step}</span>

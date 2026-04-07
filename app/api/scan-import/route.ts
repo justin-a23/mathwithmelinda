@@ -71,9 +71,11 @@ When hasImage is true, you MUST also provide "cropRegion" — the bounding box o
 - "y": top edge of the diagram as fraction of page height (0 = top, 1 = bottom)
 - "width": width of the diagram as fraction of page width
 - "height": height of the diagram as fraction of page height
-- Add about 5% padding on each side so the crop isn't too tight.
-- Be precise — look carefully at where the diagram starts and ends relative to the full page.
-- Only include the diagram/figure itself, NOT the surrounding text or other problems.
+- IMPORTANT: Be GENEROUS with the crop region. Include the ENTIRE diagram plus ALL labels, numbers, angle marks, and any text that is part of the figure. It is much better to include a little extra space than to cut off part of the diagram.
+- Add at least 10-15% padding on ALL sides beyond the outermost marks/labels of the diagram.
+- If the problem number (e.g. "51.") is directly adjacent to the diagram, include it in the crop.
+- The student needs to see the COMPLETE figure to solve the problem — a cropped-off diagram is useless.
+- Only include the diagram/figure region, NOT unrelated problems above/below.
 - Omit cropRegion entirely for hasImage:false questions.
 
 Return ONLY valid JSON. No markdown, no commentary, no code fences.`

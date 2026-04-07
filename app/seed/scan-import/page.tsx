@@ -237,7 +237,7 @@ export default function ScanImportPage() {
         if (keys.length > 0) {
           await client.graphql({
             query: updateLessonTemplate,
-            variables: { input: { id: selectedLesson, worksheetUrl: JSON.stringify(keys) } },
+            variables: { input: { id: selectedLesson, worksheetUrl: JSON.stringify(keys), assignmentType: 'worksheet' } },
           })
         }
       }
@@ -260,13 +260,13 @@ export default function ScanImportPage() {
         }
       }
 
-      // Save Melinda's instructions
-      if (instructions.trim()) {
-        await client.graphql({
-          query: updateLessonTemplate,
-          variables: { input: { id: selectedLesson, instructions: instructions.trim() } },
-        })
-      }
+      // Save Melinda's instructions + set assignment type to worksheet
+      const templateUpdates: Record<string, any> = { id: selectedLesson, assignmentType: 'worksheet' }
+      if (instructions.trim()) templateUpdates.instructions = instructions.trim()
+      await client.graphql({
+        query: updateLessonTemplate,
+        variables: { input: templateUpdates },
+      })
 
       // Import questions — encode pageIndex into order field (pageIndex * 1000 + seq)
       // For hasImage questions with cropRegion, crop the diagram from the scan page and upload
