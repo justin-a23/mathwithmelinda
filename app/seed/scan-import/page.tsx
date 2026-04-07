@@ -6,6 +6,31 @@ import { apiFetch } from '@/app/lib/apiFetch'
 import { useRoleGuard } from '@/app/hooks/useRoleGuard'
 import { listCourses, listLessonTemplates } from '../../../src/graphql/queries'
 import { createAssignmentQuestion, updateLessonTemplate } from '../../../src/graphql/mutations'
+import * as pdfjsLib from 'pdfjs-dist'
+
+// Use the bundled worker to avoid CDN dependency
+pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`
+
+/** Render every page of a PDF File to JPEG Blobs at 2x resolution */
+async function renderPdfToImages(file: File): Promise<Blob[]> {
+  const arrayBuffer = await file.arrayBuffer()
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+  const blobs: Blob[] = []
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i)
+    const viewport = page.getViewport({ scale: 2 }) // 2x for print quality
+    const canvas = document.createElement('canvas')
+    canvas.width = viewport.width
+    canvas.height = viewport.height
+    const ctx = canvas.getContext('2d')!
+    await page.render({ canvasContext: ctx, viewport }).promise
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(b => b ? resolve(b) : reject(new Error('Canvas toBlob failed')), 'image/jpeg', 0.92)
+    })
+    blobs.push(blob)
+  }
+  return blobs
+}
 
 const client = generateClient()
 
@@ -140,13 +165,27 @@ export default function ScanImportPage() {
     setImporting(true)
     setImportError('')
     try {
-      // Upload scan pages to S3 first (if any images — skip PDFs for scan pages)
-      const imageFiles = files.filter(f => f.type.startsWith('image/'))
-      if (imageFiles.length > 0) {
+      // Upload scan pages to S3 — convert PDFs to images first so they render everywhere
+      const scanBlobs: { blob: Blob; name: string }[] = []
+      for (const file of files) {
+        if (file.type.startsWith('image/')) {
+          scanBlobs.push({ blob: file, name: file.name })
+        } else if (file.type === 'application/pdf') {
+          try {
+            const pageImages = await renderPdfToImages(file)
+            pageImages.forEach((blob, pi) => {
+              scanBlobs.push({ blob, name: `${file.name}-page${pi + 1}.jpg` })
+            })
+          } catch (err) {
+            console.error('PDF to image conversion failed:', err)
+          }
+        }
+      }
+      if (scanBlobs.length > 0) {
         const keys: string[] = []
-        for (let i = 0; i < imageFiles.length; i++) {
+        for (let i = 0; i < scanBlobs.length; i++) {
           const fd = new FormData()
-          fd.append('file', imageFiles[i])
+          fd.append('file', new File([scanBlobs[i].blob], scanBlobs[i].name, { type: 'image/jpeg' }))
           fd.append('lessonId', selectedLesson)
           fd.append('index', String(i))
           const r = await apiFetch('/api/scan-upload', { method: 'POST', body: fd })
