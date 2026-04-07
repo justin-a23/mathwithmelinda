@@ -1875,19 +1875,33 @@ export default function LessonLibraryPage() {
                                       {pendingDiagramFile ? 'Replace image...' : 'Add image...'}
                                     </button>
                                   </div>
-                                  <button
-                                    onClick={() => handleAddQuestion(lesson.id)}
-                                    disabled={addingQuestion || (!newQuestion.questionText.trim() && !pendingDiagramFile)}
-                                    style={{
-                                      background: (newQuestion.questionText.trim() || pendingDiagramFile) ? 'var(--plum)' : 'var(--gray-light)',
-                                      color: (newQuestion.questionText.trim() || pendingDiagramFile) ? 'white' : 'var(--gray-mid)',
-                                      border: 'none', borderRadius: '6px', padding: '8px 20px',
-                                      cursor: (newQuestion.questionText.trim() || pendingDiagramFile) ? 'pointer' : 'not-allowed',
-                                      fontSize: '13px', fontWeight: 500, fontFamily: 'var(--font-body)'
-                                    }}
-                                  >
-                                    {addingQuestion ? 'Adding...' : 'Add Question'}
-                                  </button>
+                                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                                    <button
+                                      onClick={() => handleAddQuestion(lesson.id)}
+                                      disabled={addingQuestion || (!newQuestion.questionText.trim() && !pendingDiagramFile)}
+                                      style={{
+                                        background: (newQuestion.questionText.trim() || pendingDiagramFile) ? 'var(--plum)' : 'var(--gray-light)',
+                                        color: (newQuestion.questionText.trim() || pendingDiagramFile) ? 'white' : 'var(--gray-mid)',
+                                        border: 'none', borderRadius: '6px', padding: '8px 20px',
+                                        cursor: (newQuestion.questionText.trim() || pendingDiagramFile) ? 'pointer' : 'not-allowed',
+                                        fontSize: '13px', fontWeight: 500, fontFamily: 'var(--font-body)'
+                                      }}
+                                    >
+                                      {addingQuestion ? 'Adding...' : 'Add Question'}
+                                    </button>
+                                    <span style={{ color: 'var(--gray-light)', fontSize: '13px' }}>or</span>
+                                    <button
+                                      onClick={() => handleAddSectionHeader(lesson.id)}
+                                      disabled={addingQuestion}
+                                      style={{
+                                        background: 'none', border: '1px dashed var(--plum)', color: 'var(--plum)',
+                                        borderRadius: '6px', padding: '7px 16px', cursor: addingQuestion ? 'not-allowed' : 'pointer',
+                                        fontSize: '13px', fontWeight: 600, fontFamily: 'var(--font-body)',
+                                      }}
+                                    >
+                                      § Add Section Header
+                                    </button>
+                                  </div>
                                 </div>
 
                                 {/* Save / Cancel row — bottom of Questions tab */}
