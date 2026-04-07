@@ -6,13 +6,12 @@ import { apiFetch } from '@/app/lib/apiFetch'
 import { useRoleGuard } from '@/app/hooks/useRoleGuard'
 import { listCourses, listLessonTemplates } from '../../../src/graphql/queries'
 import { createAssignmentQuestion, updateLessonTemplate } from '../../../src/graphql/mutations'
-import * as pdfjsLib from 'pdfjs-dist'
-
-// Use the bundled worker to avoid CDN dependency
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`
-
 /** Render every page of a PDF File to JPEG Blobs at 2x resolution */
 async function renderPdfToImages(file: File): Promise<Blob[]> {
+  // Dynamic import — pdfjs-dist uses DOMMatrix which doesn't exist during SSR
+  const pdfjsLib = await import('pdfjs-dist')
+  pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`
+
   const arrayBuffer = await file.arrayBuffer()
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
   const blobs: Blob[] = []
