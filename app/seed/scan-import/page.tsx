@@ -277,19 +277,45 @@ export default function ScanImportPage() {
         variables: { input: templateInput },
       })
 
-      // Import questions — encode pageIndex into order field (pageIndex * 1000 + seq)
-      // For hasImage questions with cropRegion, crop the diagram from the scan page and upload
-      const pageCounters: Record<number, number> = {}
+      // Sort questions by problem number before importing so order matches
+      // the actual numbering (1,3,5,7...) not page appearance order.
+      // Headers stay attached to the first question that follows them.
+      const sortedQuestions = [...questions]
+      // Assign each question a sort key based on its problem number
+      // Headers inherit the number of the next non-header question
+      function extractProblemNum(text: string): number {
+        const m = text.match(/^(\d+)[\.\)]/)
+        return m ? parseInt(m[1]) : 9999
+      }
+      // First pass: tag headers with the problem number of the next question
+      const sortKeys: number[] = new Array(sortedQuestions.length).fill(9999)
+      for (let i = sortedQuestions.length - 1; i >= 0; i--) {
+        if (sortedQuestions[i].type === 'section_header') {
+          // Look ahead for the next non-header question's number
+          sortKeys[i] = (i + 1 < sortedQuestions.length) ? sortKeys[i + 1] : 9999
+          // Subtract 0.5 so header sorts before its first question
+          sortKeys[i] -= 0.5
+        } else {
+          sortKeys[i] = extractProblemNum(sortedQuestions[i].text)
+        }
+      }
+      // Create index pairs and sort
+      const indexed = sortedQuestions.map((q, i) => ({ q, sk: sortKeys[i], origIdx: i }))
+      indexed.sort((a, b) => a.sk - b.sk || a.origIdx - b.origIdx)
+      const orderedQuestions = indexed.map(x => x.q)
+
+      // Import questions with sequential order
+      let orderCounter = 0
       let diagramCounter = 0
-      for (const q of questions) {
+      for (const q of orderedQuestions) {
+        orderCounter++
         const validTypes = ['number', 'multiple_choice', 'show_work', 'section_header']
         const questionType = validTypes.includes(q.type) ? q.type : 'show_work'
-        const pi = q.pageIndex ?? 0
-        pageCounters[pi] = (pageCounters[pi] || 0) + 1
-        const order = pi * 1000 + pageCounters[pi]
+        const order = orderCounter
 
         // Crop diagram if this question has an image with crop coordinates
         let diagramKey: string | null = null
+        const pi = q.pageIndex ?? 0
         if (q.hasImage && q.cropRegion && scanBlobs[pi]) {
           try {
             const croppedBlob = await cropImageRegion(scanBlobs[pi].blob, q.cropRegion)
