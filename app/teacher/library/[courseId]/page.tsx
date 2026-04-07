@@ -428,6 +428,10 @@ export default function LessonLibraryPage() {
   }
 
   async function saveEdit(id: string) {
+    // Auto-add the in-progress question if the form has content
+    if (newQuestion.questionText.trim() || pendingDiagramFile) {
+      await handleAddQuestion(id)
+    }
     setSaving(true)
     try {
       await (client.graphql({
@@ -467,7 +471,7 @@ export default function LessonLibraryPage() {
   }
 
   async function handleAddQuestion(lessonId: string) {
-    if (!newQuestion.questionText.trim()) return
+    if (!newQuestion.questionText.trim() && !pendingDiagramFile) return
     setAddingQuestion(true)
     try {
       // Upload diagram image first if one is pending
@@ -488,7 +492,7 @@ export default function LessonLibraryPage() {
         query: createAssignmentQuestion,
         variables: {
           input: {
-            questionText: newQuestion.questionText.trim(),
+            questionText: newQuestion.questionText.trim() || '(see image)',
             questionType: newQuestion.questionType,
             choices: (newQuestion.questionType === 'multiple_choice' || newQuestion.questionType === 'multiple_choice_multi') && newQuestion.choices.trim() ? newQuestion.choices.trim() : null,
             correctAnswer: (newQuestion.questionType === 'number' || newQuestion.questionType === 'multiple_choice' || newQuestion.questionType === 'multiple_choice_multi') && newQuestion.correctAnswer.trim() ? newQuestion.correctAnswer.trim() : null,
@@ -621,7 +625,9 @@ export default function LessonLibraryPage() {
 
 
   async function handleUpdateQuestion(questionId: string) {
-    if (!editingQuestionForm.questionText.trim()) return
+    const existingQ = questions.find(q => q.id === questionId)
+    const hasDiagram = editingDiagramFile || (existingQ?.diagramKey && !editingDiagramRemoved)
+    if (!editingQuestionForm.questionText.trim() && !hasDiagram) return
     setSavingQuestion(true)
     try {
       // Upload new diagram if one was selected
@@ -642,7 +648,7 @@ export default function LessonLibraryPage() {
 
       const input: any = {
         id: questionId,
-        questionText: editingQuestionForm.questionText.trim(),
+        questionText: editingQuestionForm.questionText.trim() || '(see image)',
         questionType: editingQuestionForm.questionType,
         choices: (editingQuestionForm.questionType === 'multiple_choice' || editingQuestionForm.questionType === 'multiple_choice_multi') && editingQuestionForm.choices.trim() ? editingQuestionForm.choices.trim() : null,
         correctAnswer: (editingQuestionForm.questionType === 'number' || editingQuestionForm.questionType === 'multiple_choice' || editingQuestionForm.questionType === 'multiple_choice_multi') && editingQuestionForm.correctAnswer.trim() ? editingQuestionForm.correctAnswer.trim() : null,
@@ -825,6 +831,128 @@ export default function LessonLibraryPage() {
           <div class="field">Name: ___________________________</div>
           <div class="field">Date: ${printDate}</div>
         </div>
+      </div>
+      ${questionsHTML}
+    </body></html>`
+
+    const pw = window.open('', '_blank')
+    if (!pw) return
+    pw.document.write(html)
+    pw.document.close()
+  }
+
+  async function previewDigital(lesson: LessonTemplate) {
+    const allQuestions = [...questions].sort((a, b) => a.order - b.order)
+    if (allQuestions.length === 0) { alert('No questions to preview.'); return }
+
+    // Pre-fetch diagram images as base64 data URLs
+    const diagramDataUrls: Record<string, string> = {}
+    for (const q of allQuestions) {
+      const url = diagramUrls[q.id]
+      if (!url) continue
+      try {
+        const res = await fetch(url)
+        const blob = await res.blob()
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = () => resolve(reader.result as string)
+          reader.onerror = reject
+          reader.readAsDataURL(blob)
+        })
+        diagramDataUrls[q.id] = dataUrl
+      } catch { /* skip */ }
+    }
+
+    const { default: katex } = await import('katex')
+
+    function renderMath(text: string): string {
+      const parts = text.split(/(\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\))/g)
+      return parts.map(part => {
+        if (part.startsWith('\\[') && part.endsWith('\\]')) {
+          return katex.renderToString(part.slice(2, -2), { displayMode: true, throwOnError: false })
+        }
+        if (part.startsWith('\\(') && part.endsWith('\\)')) {
+          return katex.renderToString(part.slice(2, -2), { displayMode: false, throwOnError: false })
+        }
+        return part.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      }).join('')
+    }
+
+    let qNum = 0
+    const questionsHTML = allQuestions.map(q => {
+      const isHeader = q.questionType === 'section_header'
+      if (!isHeader) qNum++
+      const bookNumMatch = !isHeader && q.questionText.match(/^(\d+\.)\s([\s\S]*)$/)
+
+      if (isHeader) {
+        return `<div class="section-header">${renderMath(q.questionText)}</div>`
+      }
+
+      const numLabel = bookNumMatch ? bookNumMatch[1] : `${qNum}.`
+      const body = renderMath(bookNumMatch ? bookNumMatch[2] : q.questionText)
+      const diagramSrc = diagramDataUrls[q.id]
+      const diagramHTML = diagramSrc
+        ? `<div class="diagram"><img src="${diagramSrc}" /></div>`
+        : ''
+
+      let answerHTML = ''
+      if (q.questionType === 'number' || q.questionType === 'short_text') {
+        answerHTML = `<div class="answer-input">${q.questionType === 'short_text' ? '<textarea rows="2" disabled placeholder="Student types answer here..."></textarea>' : '<input type="text" disabled placeholder="Student types answer here..." />'}</div>`
+      } else if ((q.questionType === 'multiple_choice' || q.questionType === 'multiple_choice_multi') && q.choices) {
+        const inputType = q.questionType === 'multiple_choice' ? 'radio' : 'checkbox'
+        const note = q.questionType === 'multiple_choice_multi' ? '<div class="mc-note">Select all that apply</div>' : ''
+        const choicesHTML = q.choices.split('\n').filter(Boolean).map((c, i) => {
+          const letter = String.fromCharCode(65 + i)
+          return `<label class="choice"><input type="${inputType}" disabled /> <span class="choice-letter">${letter}.</span> ${renderMath(c)}</label>`
+        }).join('')
+        answerHTML = `${note}<div class="choices">${choicesHTML}</div>`
+      } else if (q.questionType === 'show_work') {
+        answerHTML = '<div class="show-work-note">Student uploads a photo of their work</div>'
+      }
+
+      return `<div class="question">
+        <div class="q-row"><span class="q-num">${numLabel}</span><div class="q-body">${body}</div></div>
+        ${diagramHTML}
+        ${answerHTML}
+      </div>`
+    }).join('')
+
+    const html = `<!DOCTYPE html><html><head>
+      <meta charset="utf-8">
+      <title>Digital Preview — ${lesson.title}</title>
+      <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+      <style>
+        *{box-sizing:border-box;margin:0;padding:0}
+        body{font-family:'DM Sans',-apple-system,sans-serif;max-width:640px;margin:0 auto;padding:40px 24px;background:#fafafa;color:#1a1a2e}
+        .header{margin-bottom:32px}
+        .header .lesson-num{font-size:12px;color:#888;font-weight:500;margin-bottom:2px}
+        .header h1{font-size:22px;font-weight:700;font-family:'DM Serif Display',serif;margin-bottom:4px}
+        .header .course{font-size:13px;color:#666}
+        .header .instructions{font-size:13px;color:#555;margin-top:12px;padding:10px 14px;background:#fff;border:1px solid #e5e5e5;border-radius:8px;line-height:1.6}
+        .section-header{font-size:13px;font-weight:700;color:#7B4FA6;text-transform:uppercase;letter-spacing:0.8px;border-bottom:2px solid #d8b4fe;padding-bottom:6px;padding-top:4px;margin-top:28px;margin-bottom:16px}
+        .question{margin-bottom:24px;padding-bottom:24px;border-bottom:1px solid #e5e5e5}
+        .q-row{display:flex;gap:12px;margin-bottom:12px}
+        .q-num{font-weight:700;color:#7B4FA6;font-size:16px;min-width:28px;flex-shrink:0}
+        .q-body{font-size:15px;line-height:1.6;flex:1}
+        .diagram{margin-bottom:14px;max-width:360px}
+        .diagram img{width:100%;border-radius:8px;border:1px solid #e5e5e5;display:block}
+        .answer-input input,.answer-input textarea{width:100%;padding:10px 12px;border:1px solid #e5e5e5;border-radius:6px;font-size:15px;font-family:'DM Sans',sans-serif;background:#fff;color:#999}
+        .answer-input textarea{resize:vertical}
+        .choices{display:flex;flex-direction:column;gap:8px}
+        .choice{display:flex;align-items:center;gap:10px;cursor:default;font-size:14px}
+        .choice input{margin:0}
+        .choice-letter{font-weight:600;color:#7B4FA6;min-width:18px}
+        .mc-note{font-size:11px;color:#888;margin-bottom:6px}
+        .show-work-note{font-size:13px;color:#888;font-style:italic;padding:12px;background:#fff;border:1px dashed #d5d5d5;border-radius:6px;text-align:center}
+        .preview-badge{position:fixed;top:12px;right:12px;background:#7B4FA6;color:#fff;font-size:11px;font-weight:600;padding:6px 14px;border-radius:20px;letter-spacing:0.5px;z-index:100}
+      </style>
+    </head><body>
+      <div class="preview-badge">TEACHER PREVIEW</div>
+      <div class="header">
+        <div class="lesson-num">Lesson ${lesson.lessonNumber}</div>
+        <h1>${lesson.title}</h1>
+        ${course?.title ? `<div class="course">${course.title}</div>` : ''}
+        ${editForm.instructions ? `<div class="instructions">${renderMath(editForm.instructions)}</div>` : ''}
       </div>
       ${questionsHTML}
     </body></html>`
@@ -1349,13 +1477,24 @@ export default function LessonLibraryPage() {
                                   >
                                     § Section Header
                                   </button>
-                                  <button
-                                    onClick={() => previewWorksheet(lesson)}
-                                    disabled={questions.length === 0}
-                                    style={{ background: 'transparent', border: '1px solid var(--gray-light)', color: 'var(--gray-mid)', padding: '7px 14px', borderRadius: '6px', cursor: questions.length === 0 ? 'not-allowed' : 'pointer', fontSize: '13px', fontFamily: 'var(--font-body)', marginLeft: 'auto' }}
-                                  >
-                                    🖨 Preview
-                                  </button>
+                                  {(editForm.assignmentType === 'questions' || editForm.assignmentType === 'both') && (
+                                    <button
+                                      onClick={() => previewDigital(lesson)}
+                                      disabled={questions.length === 0}
+                                      style={{ background: 'transparent', border: '1px solid var(--gray-light)', color: 'var(--gray-mid)', padding: '7px 14px', borderRadius: '6px', cursor: questions.length === 0 ? 'not-allowed' : 'pointer', fontSize: '13px', fontFamily: 'var(--font-body)', marginLeft: 'auto' }}
+                                    >
+                                      👁 Student View
+                                    </button>
+                                  )}
+                                  {(editForm.assignmentType === 'worksheet' || editForm.assignmentType === 'upload' || editForm.assignmentType === 'both') && (
+                                    <button
+                                      onClick={() => previewWorksheet(lesson)}
+                                      disabled={questions.length === 0}
+                                      style={{ background: 'transparent', border: '1px solid var(--gray-light)', color: 'var(--gray-mid)', padding: '7px 14px', borderRadius: '6px', cursor: questions.length === 0 ? 'not-allowed' : 'pointer', fontSize: '13px', fontFamily: 'var(--font-body)', ...(editForm.assignmentType === 'both' ? {} : { marginLeft: 'auto' }) }}
+                                    >
+                                      🖨 Worksheet
+                                    </button>
+                                  )}
                                 </div>
 
                                 {/* Existing questions list */}
@@ -1731,12 +1870,12 @@ export default function LessonLibraryPage() {
                                   </div>
                                   <button
                                     onClick={() => handleAddQuestion(lesson.id)}
-                                    disabled={addingQuestion || !newQuestion.questionText.trim()}
+                                    disabled={addingQuestion || (!newQuestion.questionText.trim() && !pendingDiagramFile)}
                                     style={{
-                                      background: newQuestion.questionText.trim() ? 'var(--plum)' : 'var(--gray-light)',
-                                      color: newQuestion.questionText.trim() ? 'white' : 'var(--gray-mid)',
+                                      background: (newQuestion.questionText.trim() || pendingDiagramFile) ? 'var(--plum)' : 'var(--gray-light)',
+                                      color: (newQuestion.questionText.trim() || pendingDiagramFile) ? 'white' : 'var(--gray-mid)',
                                       border: 'none', borderRadius: '6px', padding: '8px 20px',
-                                      cursor: newQuestion.questionText.trim() ? 'pointer' : 'not-allowed',
+                                      cursor: (newQuestion.questionText.trim() || pendingDiagramFile) ? 'pointer' : 'not-allowed',
                                       fontSize: '13px', fontWeight: 500, fontFamily: 'var(--font-body)'
                                     }}
                                   >
