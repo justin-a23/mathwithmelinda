@@ -767,13 +767,19 @@ function LessonPageInner() {
     const courseName = planItem?.weeklyPlan?.course?.title || ''
     const printDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
 
-    // Sort by problem number extracted from text (safety net if extraction order was wrong)
-    showWorkQuestions.sort((a, b) => {
-      const numA = parseInt(a.questionText.match(/^(\d+)\./)?.[1] || '0')
-      const numB = parseInt(b.questionText.match(/^(\d+)\./)?.[1] || '0')
-      if (numA && numB) return numA - numB
-      return a.order - b.order
-    })
+    // Sort by problem number, keeping headers attached to their following questions
+    const swSortKeys = new Map<string, number>()
+    for (let i = showWorkQuestions.length - 1; i >= 0; i--) {
+      const q = showWorkQuestions[i]
+      if (q.questionType === 'section_header') {
+        const nextKey = (i + 1 < showWorkQuestions.length) ? (swSortKeys.get(showWorkQuestions[i + 1].id) ?? showWorkQuestions[i + 1].order) : q.order
+        swSortKeys.set(q.id, nextKey - 0.5)
+      } else {
+        const num = parseInt(q.questionText.match(/^(\d+)\./)?.[1] || '0')
+        swSortKeys.set(q.id, num > 0 ? num : q.order + 10000)
+      }
+    }
+    showWorkQuestions.sort((a, b) => (swSortKeys.get(a.id) ?? 0) - (swSortKeys.get(b.id) ?? 0))
 
     // Build question HTML — each question shows its text, diagram (if any), and work box
     const questionsHTML = showWorkQuestions.map(q => {

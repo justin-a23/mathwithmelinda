@@ -770,13 +770,22 @@ export default function LessonLibraryPage() {
       if (q.questionType !== 'section_header') { fullQNum++; origNums.set(q.id, fullQNum) }
     }
 
-    // Sort by problem number extracted from text (safety net)
-    displayQuestions.sort((a, b) => {
-      const numA = parseInt(a.questionText.match(/^(\d+)\./)?.[1] || '0')
-      const numB = parseInt(b.questionText.match(/^(\d+)\./)?.[1] || '0')
-      if (numA && numB) return numA - numB
-      return a.order - b.order
-    })
+    // Sort by problem number, keeping headers attached to the questions that follow them.
+    // Each header gets the sort key of the next non-header question minus 0.5
+    // so it appears right before its questions.
+    const sortKeys = new Map<string, number>()
+    for (let i = displayQuestions.length - 1; i >= 0; i--) {
+      const q = displayQuestions[i]
+      if (q.questionType === 'section_header') {
+        // Look ahead for the next non-header's sort key
+        const nextKey = (i + 1 < displayQuestions.length) ? (sortKeys.get(displayQuestions[i + 1].id) ?? displayQuestions[i + 1].order) : q.order
+        sortKeys.set(q.id, nextKey - 0.5)
+      } else {
+        const num = parseInt(q.questionText.match(/^(\d+)\./)?.[1] || '0')
+        sortKeys.set(q.id, num > 0 ? num : q.order + 10000)
+      }
+    }
+    displayQuestions.sort((a, b) => (sortKeys.get(a.id) ?? 0) - (sortKeys.get(b.id) ?? 0))
 
     const questionsHTML = displayQuestions.map(q => {
       if (q.questionType === 'section_header') {
