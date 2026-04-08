@@ -277,8 +277,9 @@ export default function Dashboard() {
             }
           }
         } else {
-          // No profile found — student was deleted or revoked. Sign them out.
-          signOut()
+          // No profile found — could be newly approved, not yet created, or a transient error.
+          // Redirect to profile setup instead of signing out.
+          router.replace('/profile/setup')
           return
         }
 
@@ -310,7 +311,7 @@ export default function Dashboard() {
             if (!p.assignedStudentIds) return true
             try {
               const ids: string[] = JSON.parse(p.assignedStudentIds)
-              return ids.length === 0 || ids.includes(userId)
+              return ids.length === 0 || ids.includes(userId) || (loginId && ids.includes(loginId))
             } catch { return true }
           })
           .sort((a, b) => new Date(a.weekStartDate).getTime() - new Date(b.weekStartDate).getTime())

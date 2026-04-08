@@ -20,10 +20,19 @@ export function useRoleGuard(requiredRole: Role): { checking: boolean } {
 
   useEffect(() => {
     let cancelled = false
-    fetchAuthSession()
-      .then(session => {
+    let attempts = 0
+
+    async function checkAuth() {
+      try {
+        const session = await fetchAuthSession()
         if (cancelled) return
         if (!session.tokens?.accessToken) {
+          // On first attempt, Amplify may not have restored session yet — retry once
+          if (attempts < 2) {
+            attempts++
+            setTimeout(checkAuth, 500)
+            return
+          }
           router.replace('/login')
           return
         }
@@ -31,23 +40,27 @@ export function useRoleGuard(requiredRole: Role): { checking: boolean } {
         const isTeacher = groups.includes('teacher')
 
         if (requiredRole === 'teacher' && !isTeacher) {
-          // Student trying to access teacher area → send to their dashboard
           router.replace('/dashboard')
           return
         }
         if (requiredRole === 'student' && isTeacher) {
-          // Teacher trying to access student area → send to teacher dashboard
           router.replace('/teacher')
           return
         }
         setChecking(false)
-      })
-      .catch(() => {
-        if (!cancelled) {
-          // Not authenticated at all
-          router.replace('/login')
+      } catch {
+        if (cancelled) return
+        // On first attempt, retry — Amplify session may still be initializing
+        if (attempts < 2) {
+          attempts++
+          setTimeout(checkAuth, 500)
+          return
         }
-      })
+        router.replace('/login')
+      }
+    }
+
+    checkAuth()
     return () => { cancelled = true }
   }, [requiredRole, router])
 
