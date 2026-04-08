@@ -315,8 +315,9 @@ export default function Dashboard() {
             }
           }
         } else {
-          // No profile found — redirect to setup so student can create one
-          router.replace('/profile/setup')
+          // No profile found — show setup prompt (don't redirect to avoid loops)
+          setHasProfile(false)
+          setLoading(false)
           return
         }
 
@@ -872,10 +873,15 @@ export default function Dashboard() {
             <div style={{ width: '56px', height: '56px', background: 'var(--plum-light)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--plum)" strokeWidth="1.8"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
             </div>
-            <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', color: 'var(--foreground)', marginBottom: '8px' }}>Not enrolled yet</h2>
-            <p style={{ color: 'var(--gray-mid)', fontSize: '14px', lineHeight: '1.6', margin: '0 auto' }}>
-              Your account is set up but you haven't been added to a course yet. Reach out to your teacher to get enrolled — your lessons will appear here once you're set up.
+            <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', color: 'var(--foreground)', marginBottom: '8px' }}>Welcome!</h2>
+            <p style={{ color: 'var(--gray-mid)', fontSize: '14px', lineHeight: '1.6', margin: '0 auto 24px' }}>
+              Let&apos;s get you set up. Complete your profile so your teacher can enroll you in a course.
             </p>
+            <button
+              onClick={() => router.push('/profile/setup')}
+              style={{ background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '8px', padding: '12px 28px', cursor: 'pointer', fontSize: '15px', fontWeight: 600, fontFamily: 'var(--font-body)' }}>
+              Set Up Profile
+            </button>
           </div>
         ) : weeklyPlans.length === 0 ? (
           <p style={{ color: 'var(--gray-mid)' }}>No lessons scheduled yet. Check back soon!</p>
