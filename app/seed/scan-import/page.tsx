@@ -31,6 +31,84 @@ async function renderPdfToImages(file: File): Promise<Blob[]> {
   return blobs
 }
 
+/** Render a DOCX file to JPEG page images by converting to HTML and capturing via iframe+canvas */
+async function renderDocxToImages(file: File): Promise<Blob[]> {
+  const mammoth = await import('mammoth')
+  const arrayBuffer = await file.arrayBuffer()
+  const result = await mammoth.convertToHtml({ arrayBuffer })
+  const html = result.value
+
+  // Create an offscreen iframe to render the HTML, then capture pages as images
+  const iframe = document.createElement('iframe')
+  iframe.style.cssText = 'position:fixed;left:-9999px;top:0;width:816px;border:none;visibility:hidden'
+  document.body.appendChild(iframe)
+
+  try {
+    const doc = iframe.contentDocument!
+    doc.open()
+    doc.write(`<!DOCTYPE html><html><head><style>
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body { font-family: 'Times New Roman', serif; font-size: 14px; padding: 48px; width: 816px;
+             color: #000; background: #fff; line-height: 1.6; }
+      p { margin-bottom: 8px; }
+      table { border-collapse: collapse; margin: 12px 0; width: 100%; }
+      td, th { border: 1px solid #999; padding: 6px 10px; text-align: left; }
+      h1 { font-size: 20px; margin-bottom: 12px; }
+      h2 { font-size: 17px; margin-bottom: 10px; }
+      h3 { font-size: 15px; margin-bottom: 8px; }
+      img { max-width: 100%; }
+      ol, ul { margin-left: 24px; margin-bottom: 8px; }
+    </style></head><body>${html}</body></html>`)
+    doc.close()
+
+    // Wait for content to render
+    await new Promise(r => setTimeout(r, 500))
+
+    const body = doc.body
+    const totalHeight = Math.max(body.scrollHeight, body.offsetHeight)
+    const pageWidth = 816
+    const pageHeight = 1056 // US Letter proportions at 96dpi
+
+    const blobs: Blob[] = []
+    const { default: html2canvas } = await import('html2canvas')
+
+    // Capture full body as one canvas, then slice into pages
+    const fullCanvas = await html2canvas(body, {
+      width: pageWidth,
+      height: totalHeight,
+      windowWidth: pageWidth,
+      windowHeight: totalHeight,
+      scale: 2,
+      useCORS: true,
+      logging: false,
+    })
+
+    const numPages = Math.ceil(totalHeight / pageHeight)
+    for (let p = 0; p < numPages; p++) {
+      const canvas = document.createElement('canvas')
+      canvas.width = pageWidth * 2
+      canvas.height = pageHeight * 2
+      const ctx = canvas.getContext('2d')!
+      ctx.fillStyle = '#ffffff'
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
+      ctx.drawImage(
+        fullCanvas,
+        0, p * pageHeight * 2,
+        pageWidth * 2, pageHeight * 2,
+        0, 0,
+        pageWidth * 2, pageHeight * 2
+      )
+      const blob = await new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob(b => b ? resolve(b) : reject(new Error('toBlob failed')), 'image/jpeg', 0.92)
+      })
+      blobs.push(blob)
+    }
+    return blobs
+  } finally {
+    document.body.removeChild(iframe)
+  }
+}
+
 /** Load a Blob (image) into an HTMLImageElement */
 function loadBlobAsImage(blob: Blob): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -160,16 +238,21 @@ export default function ScanImportPage() {
 
   // ── File handling ─────────────────────────────────────────────────────────
   function addFiles(newFiles: FileList | File[]) {
-    const arr = Array.from(newFiles).filter(f => f.type.startsWith('image/') || f.type === 'application/pdf')
+    const arr = Array.from(newFiles).filter(f => f.type.startsWith('image/') || f.type === 'application/pdf' || f.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || f.name.endsWith('.docx'))
     if (!arr.length) return
     setFiles(prev => [...prev, ...arr])
     setQuestions([])
     setExtractError('')
     setImportDone(false)
     arr.forEach(f => {
-      const reader = new FileReader()
-      reader.onload = e => setPreviews(prev => [...prev, e.target?.result as string])
-      reader.readAsDataURL(f)
+      if (f.name.endsWith('.docx') || f.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+        // DOCX files can't be previewed as images — use a placeholder
+        setPreviews(prev => [...prev, 'docx-placeholder'])
+      } else {
+        const reader = new FileReader()
+        reader.onload = e => setPreviews(prev => [...prev, e.target?.result as string])
+        reader.readAsDataURL(f)
+      }
     })
   }
 
@@ -192,8 +275,25 @@ export default function ScanImportPage() {
     setExtractError('')
     setQuestions([])
     try {
+      // Convert any DOCX files to images before sending to extraction API
       const formData = new FormData()
-      files.forEach(f => formData.append('images', f))
+      for (const f of files) {
+        if (f.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || f.name.endsWith('.docx')) {
+          try {
+            const pageImages = await renderDocxToImages(f)
+            pageImages.forEach((blob, pi) => {
+              formData.append('images', new File([blob], `${f.name}-page${pi + 1}.jpg`, { type: 'image/jpeg' }))
+            })
+          } catch (err) {
+            console.error('DOCX conversion failed:', err)
+            setExtractError('Failed to convert DOCX file. Try saving as PDF first.')
+            setExtracting(false)
+            return
+          }
+        } else {
+          formData.append('images', f)
+        }
+      }
       if (instructions.trim()) formData.append('instructions', instructions.trim())
       const res = await apiFetch('/api/scan-import', { method: 'POST', body: formData })
       const json = await res.json()
@@ -225,6 +325,15 @@ export default function ScanImportPage() {
             })
           } catch (err) {
             console.error('PDF to image conversion failed:', err)
+          }
+        } else if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || file.name.endsWith('.docx')) {
+          try {
+            const pageImages = await renderDocxToImages(file)
+            pageImages.forEach((blob, pi) => {
+              scanBlobs.push({ blob, name: `${file.name}-page${pi + 1}.jpg` })
+            })
+          } catch (err) {
+            console.error('DOCX to image conversion failed:', err)
           }
         }
       }
@@ -479,13 +588,13 @@ export default function ScanImportPage() {
                   transition: 'all 0.15s',
                   marginBottom: files.length ? '16px' : 0,
                 }}>
-                <input ref={fileInputRef} type="file" accept="image/*,application/pdf" multiple style={{ display: 'none' }}
+                <input ref={fileInputRef} type="file" accept="image/*,application/pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple style={{ display: 'none' }}
                   onChange={e => e.target.files && addFiles(e.target.files)} />
                 <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--gray-mid)" strokeWidth="1.5" style={{ marginBottom: '8px' }}>
                   <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
                 </svg>
                 <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--foreground)', marginBottom: '3px' }}>Drop scans here or click to select</div>
-                <div style={{ fontSize: '12px', color: 'var(--gray-mid)' }}>JPG, PNG, HEIC, PDF · drop all pages at once</div>
+                <div style={{ fontSize: '12px', color: 'var(--gray-mid)' }}>JPG, PNG, HEIC, PDF, DOCX · drop all pages at once</div>
               </div>
 
               {/* Thumbnails */}
@@ -493,7 +602,15 @@ export default function ScanImportPage() {
                 <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                   {previews.map((src, i) => (
                     <div key={i} style={{ position: 'relative', width: '110px' }}>
-                      <img src={src} alt={`Page ${i + 1}`} style={{ width: '110px', height: '148px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--gray-light)', display: 'block' }} />
+                      {src === 'docx-placeholder' ? (
+                        <div style={{ width: '110px', height: '148px', borderRadius: '6px', border: '1px solid var(--gray-light)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#e8f0fe', gap: '4px' }}>
+                          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#2b5797" strokeWidth="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                          <div style={{ fontSize: '10px', fontWeight: 700, color: '#2b5797' }}>DOCX</div>
+                          <div style={{ fontSize: '9px', color: '#555', maxWidth: '90px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'center' }}>{files[i]?.name}</div>
+                        </div>
+                      ) : (
+                        <img src={src} alt={`Page ${i + 1}`} style={{ width: '110px', height: '148px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--gray-light)', display: 'block' }} />
+                      )}
                       <div style={{ position: 'absolute', top: '4px', left: '4px', background: 'rgba(0,0,0,0.55)', color: 'white', fontSize: '10px', fontWeight: 700, padding: '2px 5px', borderRadius: '3px' }}>
                         p.{i + 1}
                       </div>
