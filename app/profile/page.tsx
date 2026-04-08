@@ -7,6 +7,7 @@ import { generateClient } from 'aws-amplify/api'
 import ImageCropper from '../components/ImageCropper'
 import StudentNav from '../components/StudentNav'
 import { apiFetch } from '@/app/lib/apiFetch'
+import { useRoleGuard } from '@/app/hooks/useRoleGuard'
 
 const client = generateClient()
 
@@ -90,6 +91,7 @@ const readOnlyStyle: React.CSSProperties = {
 }
 
 export default function ProfilePage() {
+  const { checking } = useRoleGuard('student')
   const { user, signOut } = useAuthenticator()
   const router = useRouter()
 
@@ -115,8 +117,8 @@ export default function ProfilePage() {
   const [passSaved, setPassSaved] = useState(false)
 
   useEffect(() => {
-    if (user === null) router.replace('/login')
-  }, [user, router])
+    if (!checking && user === null) router.replace('/login')
+  }, [checking, user, router])
 
   useEffect(() => {
     const userId = user?.userId || user?.username || ''

@@ -8,6 +8,7 @@ import MathRenderer from '../components/MathRenderer'
 import MathInput from '../components/MathInput'
 import StudentNav from '../components/StudentNav'
 import { apiFetch } from '@/app/lib/apiFetch'
+import { useRoleGuard } from '@/app/hooks/useRoleGuard'
 
 const CLOUDFRONT_URL = 'https://dgmfzo1xk5r4e.cloudfront.net'
 
@@ -175,6 +176,7 @@ function checkImageQuality(file: File): Promise<string | undefined> {
 }
 
 function LessonPageInner() {
+  const { checking } = useRoleGuard('student')
   const { user } = useAuthenticator()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -237,8 +239,8 @@ function LessonPageInner() {
   userRef.current = user
 
   useEffect(() => {
-    if (user === null) router.replace('/login')
-  }, [user, router])
+    if (!checking && user === null) router.replace('/login')
+  }, [checking, user, router])
 
   useEffect(() => {
     if (!itemId) {
