@@ -4,7 +4,7 @@ import { useAuthenticator } from '@aws-amplify/ui-react'
 import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import { generateClient } from 'aws-amplify/api'
-import { getCurrentUser, fetchAuthSession } from 'aws-amplify/auth'
+import { getCurrentUser } from 'aws-amplify/auth'
 import StudentNav from '../components/StudentNav'
 import { apiFetch } from '@/app/lib/apiFetch'
 import { useRoleGuard } from '@/app/hooks/useRoleGuard'
@@ -273,14 +273,7 @@ export default function Dashboard() {
     async function loadDashboard() {
       const currentUser = await getCurrentUser()
       const userId = currentUser.userId
-      // Get email from ID token (always available) — signInDetails.loginId can be empty after session restore
-      let loginId = currentUser.signInDetails?.loginId || ''
-      if (!loginId) {
-        try {
-          const session = await fetchAuthSession()
-          loginId = (session.tokens?.idToken?.payload?.email as string) || ''
-        } catch { /* use empty loginId */ }
-      }
+      const loginId = currentUser.signInDetails?.loginId || ''
       try {
         // 1. Fetch profile first — we need courseId before we can filter plans
         const profileResult = await client.graphql({ query: getStudentProfileQuery, variables: { userId } }) as any
