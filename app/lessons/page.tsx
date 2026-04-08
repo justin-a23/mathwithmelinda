@@ -721,6 +721,32 @@ function LessonPageInner() {
 
   async function printShowWorkSheet() {
     const allQuestions = lessonTemplate?.questions?.items ?? []
+
+    // If there's an attached worksheet PDF and no questions, open the PDF directly
+    if (allQuestions.length === 0 && lessonTemplate?.worksheetUrl) {
+      const wsUrl = lessonTemplate.worksheetUrl
+      if (wsUrl.startsWith('http')) {
+        window.open(wsUrl, '_blank')
+      } else if (wsUrl.startsWith('[')) {
+        // Scan pages — open first page (already fetched as presigned URLs)
+        if (scanPageUrls.length > 0) window.open(scanPageUrls[0], '_blank')
+      } else {
+        // S3 key — get presigned URL
+        try {
+          const res = await apiFetch('/api/view-submission', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key: wsUrl })
+          })
+          if (res.ok) {
+            const data = await res.json()
+            window.open(data.url, '_blank')
+          }
+        } catch { /* ignore */ }
+      }
+      return
+    }
+
     if (allQuestions.length === 0) return
     const aType = lessonTemplate?.assignmentType || 'upload'
     const isWorksheetType = aType === 'worksheet' || aType === 'upload'
@@ -1001,7 +1027,7 @@ function LessonPageInner() {
                     <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '20px', color: 'var(--foreground)', margin: 0 }}>
                       {showQuestions ? 'Assignment' : 'Submit Your Work'}
                     </h2>
-                    {(hasShowWork || isWorksheet) && (
+                    {(hasShowWork || (isWorksheet && (questions.length > 0 || !!lessonTemplate?.worksheetUrl))) && (
                       <button
                         type="button"
                         onClick={printShowWorkSheet}

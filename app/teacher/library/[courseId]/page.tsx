@@ -718,7 +718,48 @@ export default function LessonLibraryPage() {
 
   async function previewWorksheet(lesson: LessonTemplate) {
     const allQuestions = [...questions].sort((a, b) => a.order - b.order)
-    if (allQuestions.length === 0) { alert('No questions to preview.'); return }
+
+    // If no questions but a worksheet PDF is attached, open the PDF directly
+    if (allQuestions.length === 0) {
+      const wsUrl = editForm.worksheetUrl || lesson.worksheetUrl
+      if (wsUrl) {
+        if (wsUrl.startsWith('http')) {
+          window.open(wsUrl, '_blank')
+        } else if (wsUrl.startsWith('[')) {
+          // Scan pages — open first page
+          try {
+            const keys: string[] = JSON.parse(wsUrl)
+            if (keys.length > 0) {
+              const res = await apiFetch('/api/view-submission', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key: keys[0] })
+              })
+              if (res.ok) {
+                const data = await res.json()
+                window.open(data.url, '_blank')
+              }
+            }
+          } catch { /* ignore */ }
+        } else {
+          // S3 key — get presigned URL
+          try {
+            const res = await apiFetch('/api/view-submission', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ key: wsUrl })
+            })
+            if (res.ok) {
+              const data = await res.json()
+              window.open(data.url, '_blank')
+            }
+          } catch { /* ignore */ }
+        }
+      } else {
+        alert('No questions or worksheet to preview.')
+      }
+      return
+    }
 
     const aType = editForm.assignmentType === 'worksheet' ? 'upload' : (editForm.assignmentType || lesson.assignmentType || 'upload')
     const isWorksheetType = aType === 'upload'
@@ -1534,14 +1575,18 @@ export default function LessonLibraryPage() {
                                       👁 Student View
                                     </button>
                                   )}
-                                  {(effectiveAssignmentType === 'upload' || effectiveAssignmentType === 'both') && (
+                                  {(effectiveAssignmentType === 'upload' || effectiveAssignmentType === 'both') && (() => {
+                                    const hasWorksheet = !!(editForm.worksheetUrl || lesson.worksheetUrl)
+                                    const canPreview = questions.length > 0 || hasWorksheet
+                                    return (
                                     <button
                                       onClick={() => previewWorksheet(lesson)}
-                                      disabled={questions.length === 0}
-                                      style={{ background: 'transparent', border: '1px solid var(--gray-light)', color: 'var(--gray-mid)', padding: '7px 14px', borderRadius: '6px', cursor: questions.length === 0 ? 'not-allowed' : 'pointer', fontSize: '13px', fontFamily: 'var(--font-body)', ...(effectiveAssignmentType === 'both' ? {} : { marginLeft: 'auto' }) }}
+                                      disabled={!canPreview}
+                                      style={{ background: 'transparent', border: '1px solid var(--gray-light)', color: 'var(--gray-mid)', padding: '7px 14px', borderRadius: '6px', cursor: !canPreview ? 'not-allowed' : 'pointer', fontSize: '13px', fontFamily: 'var(--font-body)', ...(effectiveAssignmentType === 'both' ? {} : { marginLeft: 'auto' }) }}
                                     >
-                                      🖨 Worksheet
-                                    </button>
+                                      🖨 {hasWorksheet && questions.length === 0 ? 'View Worksheet' : 'Worksheet'}
+                                    </button>)
+                                    })(
                                   )}
                                 </div>
 
