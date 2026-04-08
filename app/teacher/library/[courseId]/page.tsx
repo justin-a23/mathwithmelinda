@@ -416,16 +416,32 @@ export default function LessonLibraryPage() {
 
   async function handleWorksheetUpload(lesson: LessonTemplate) {
     if (!worksheetFile || !course) return
+    setWorksheetUpload({ uploading: true, progress: 0, error: '' })
     try {
-      const courseFolder = COURSE_FOLDERS[course.title] || course.title.toLowerCase().replace(/\s+/g, '')
-      const filename = worksheetFile.name
-      const key = await uploadFile(worksheetFile, `worksheets/${courseFolder}`, filename, 'application/pdf', setWorksheetUpload)
-      const url = `${CLOUDFRONT}/worksheets/${courseFolder}/${filename}`
-      setEditForm(f => ({ ...f, worksheetUrl: url }))
+      const formData = new FormData()
+      formData.append('file', worksheetFile)
+      formData.append('lessonId', lesson.id)
+      formData.append('index', `worksheet-${Date.now()}`)
+      const res = await apiFetch('/api/scan-upload', { method: 'POST', body: formData })
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        throw new Error(errData.error || `Upload failed (${res.status})`)
+      }
+      const { key } = await res.json()
+      // Generate a presigned view URL for the worksheet
+      const viewRes = await apiFetch('/api/view-submission', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key })
+      })
+      const viewUrl = viewRes.ok ? (await viewRes.json()).url : key
+      setEditForm(f => ({ ...f, worksheetUrl: key }))
       setIsDirty(true)
       setWorksheetFile(null)
-    } catch (err) {
-      setWorksheetUpload({ uploading: false, progress: 0, error: 'Upload failed. Please try again.' })
+      setWorksheetUpload({ uploading: false, progress: 100, error: '' })
+    } catch (err: any) {
+      console.error('Worksheet upload error:', err)
+      setWorksheetUpload({ uploading: false, progress: 0, error: err?.message || 'Upload failed. Please try again.' })
     }
   }
 
@@ -1400,7 +1416,29 @@ export default function LessonLibraryPage() {
                                   <div style={{ fontSize: '12px', fontWeight: 600, color: '#2e7d32', marginBottom: '2px' }}>✓ Worksheet attached</div>
                                   {editForm.worksheetUrl.startsWith('[')
                                     ? <span style={{ fontSize: '11px', color: 'var(--gray-mid)', fontFamily: 'monospace' }}>Scan pages imported ({(() => { try { return JSON.parse(editForm.worksheetUrl).length } catch { return '?' } })()} pages)</span>
-                                    : <a href={editForm.worksheetUrl} target="_blank" rel="noreferrer" style={{ fontSize: '11px', color: 'var(--plum)', fontFamily: 'monospace' }}>View PDF ↗</a>}
+                                    : <button
+                                        onClick={async (e) => {
+                                          e.preventDefault()
+                                          const url = editForm.worksheetUrl
+                                          if (url.startsWith('http')) {
+                                            window.open(url, '_blank')
+                                          } else {
+                                            // S3 key — get presigned URL
+                                            try {
+                                              const res = await apiFetch('/api/view-submission', {
+                                                method: 'POST',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({ key: url })
+                                              })
+                                              if (res.ok) {
+                                                const data = await res.json()
+                                                window.open(data.url, '_blank')
+                                              }
+                                            } catch { /* ignore */ }
+                                          }
+                                        }}
+                                        style={{ fontSize: '11px', color: 'var(--plum)', fontFamily: 'monospace', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+                                      >View PDF ↗</button>}
                                 </div>
                                 <button onClick={() => { if (window.confirm('Are you sure you want to remove this worksheet?')) setEditForm(f => ({ ...f, worksheetUrl: '' })) }} style={{ background: 'none', border: '1px solid #e05252', color: '#e05252', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', padding: '4px 10px', whiteSpace: 'nowrap', marginLeft: '16px' }}>
                                   Remove
