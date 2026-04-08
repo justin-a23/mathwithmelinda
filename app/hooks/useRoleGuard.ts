@@ -1,10 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { fetchAuthSession } from 'aws-amplify/auth'
 
-type Role = 'teacher' | 'student'
+type Role = 'teacher' | 'student' | 'parent'
 
 /**
  * Redirects users who don't belong to the required role.
@@ -17,20 +17,22 @@ type Role = 'teacher' | 'student'
 export function useRoleGuard(requiredRole: Role): { checking: boolean } {
   const router = useRouter()
   const [checking, setChecking] = useState(true)
+  const didRun = useRef(false)
 
   useEffect(() => {
-    let cancelled = false
-    let attempts = 0
+    if (didRun.current) return
+    didRun.current = true
 
-    async function checkAuth() {
+    let cancelled = false
+
+    async function checkAuth(attempt: number) {
       try {
         const session = await fetchAuthSession()
         if (cancelled) return
         if (!session.tokens?.accessToken) {
-          // On first attempt, Amplify may not have restored session yet — retry once
-          if (attempts < 2) {
-            attempts++
-            setTimeout(checkAuth, 500)
+          // Amplify may not have restored session yet — retry once after a brief delay
+          if (attempt < 2) {
+            setTimeout(() => checkAuth(attempt + 1), 600)
             return
           }
           router.replace('/login')
@@ -47,22 +49,21 @@ export function useRoleGuard(requiredRole: Role): { checking: boolean } {
           router.replace('/teacher')
           return
         }
-        setChecking(false)
+        if (!cancelled) setChecking(false)
       } catch {
         if (cancelled) return
-        // On first attempt, retry — Amplify session may still be initializing
-        if (attempts < 2) {
-          attempts++
-          setTimeout(checkAuth, 500)
+        if (attempt < 2) {
+          setTimeout(() => checkAuth(attempt + 1), 600)
           return
         }
         router.replace('/login')
       }
     }
 
-    checkAuth()
+    checkAuth(0)
     return () => { cancelled = true }
-  }, [requiredRole, router])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   return { checking }
 }

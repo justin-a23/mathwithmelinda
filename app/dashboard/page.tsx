@@ -277,9 +277,12 @@ export default function Dashboard() {
             }
           }
         } else {
-          // No profile found — could be newly approved, not yet created, or a transient error.
-          // Redirect to profile setup instead of signing out.
-          router.replace('/profile/setup')
+          // No profile found — this can happen if:
+          // 1. Student was deleted/revoked
+          // 2. Transient DynamoDB consistency issue on page load
+          // Show an error state instead of signing out or redirecting (avoids loops)
+          setLoadError(true)
+          setLoading(false)
           return
         }
 
