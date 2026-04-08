@@ -596,7 +596,7 @@ function LessonPageInner() {
 
   function handleSubmit() {
     const assignmentType = lessonTemplate?.assignmentType || 'upload'
-    const needsUpload = assignmentType === 'upload' || assignmentType === 'both' || assignmentType === 'worksheet'
+    const needsUpload = assignmentType === 'upload' || assignmentType === 'both' || assignmentType === 'worksheet' // worksheet is legacy
     const needsAnswers = assignmentType === 'questions' || assignmentType === 'both'
     const stillUploading = files.some(f => f.status === 'uploading')
 
@@ -1005,7 +1005,7 @@ function LessonPageInner() {
                         onClick={printShowWorkSheet}
                         style={{ background: 'var(--plum)', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
-                        {isWorksheet ? 'Print Worksheet' : 'Print Show Work Sheet'}
+                        {isWorksheet ? 'Print Worksheet' : 'Print Show Work'}
                       </button>
                     )}
                   </div>
@@ -1020,7 +1020,7 @@ function LessonPageInner() {
                       ] : [
                         'Watch the video above',
                         'Answer the questions below digitally',
-                        'Click "Print Show Work Sheet" to print just the problems that need work shown — complete on paper, take a photo, and upload below',
+                        'Click "Print Show Work" to print just the problems that need work shown — complete on paper, take a photo, and upload below',
                       ]).map((step, i) => (
                         <div key={i} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
                           <span style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'var(--plum)', color: 'white', fontSize: '11px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: '1px' }}>{i + 1}</span>

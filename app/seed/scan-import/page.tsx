@@ -355,7 +355,7 @@ export default function ScanImportPage() {
         if (keys.length > 0) {
           await client.graphql({
             query: updateLessonTemplate,
-            variables: { input: { id: selectedLesson, worksheetUrl: JSON.stringify(keys), assignmentType: 'worksheet' } },
+            variables: { input: { id: selectedLesson, worksheetUrl: JSON.stringify(keys), assignmentType: 'upload' } },
           })
         }
       }
@@ -379,7 +379,7 @@ export default function ScanImportPage() {
       }
 
       // Save Melinda's instructions + set assignment type to worksheet
-      const templateInput: any = { id: selectedLesson, assignmentType: 'worksheet' }
+      const templateInput: any = { id: selectedLesson, assignmentType: 'upload' }
       if (instructions.trim()) templateInput.instructions = instructions.trim()
       await client.graphql({
         query: updateLessonTemplate,

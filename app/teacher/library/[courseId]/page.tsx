@@ -720,8 +720,8 @@ export default function LessonLibraryPage() {
     const allQuestions = [...questions].sort((a, b) => a.order - b.order)
     if (allQuestions.length === 0) { alert('No questions to preview.'); return }
 
-    const aType = editForm.assignmentType || lesson.assignmentType || 'upload'
-    const isWorksheetType = aType === 'worksheet' || aType === 'upload'
+    const aType = editForm.assignmentType === 'worksheet' ? 'upload' : (editForm.assignmentType || lesson.assignmentType || 'upload')
+    const isWorksheetType = aType === 'upload'
 
     // For worksheet/upload type, show ALL questions (paper-only assignment)
     // For digital or both, only show show_work questions
@@ -1030,14 +1030,16 @@ export default function LessonLibraryPage() {
   }
 
   const assignmentTypes = [
-    { value: 'none', label: 'No Assignment' },
-    { value: 'questions', label: 'Digital Questions' },
-    { value: 'upload', label: 'Upload Only' },
-    { value: 'both', label: 'Questions + Upload' },
-    { value: 'worksheet', label: 'Print Worksheet' },
+    { value: 'none', label: 'Video Only' },
+    { value: 'questions', label: 'Online Questions' },
+    { value: 'upload', label: 'Photo Submission' },
+    { value: 'both', label: 'Online + Photo' },
   ]
 
-  const showQuestionBuilder = editForm.assignmentType === 'questions' || editForm.assignmentType === 'both' || editForm.assignmentType === 'worksheet'
+  // Treat legacy 'worksheet' as 'upload'
+  const effectiveAssignmentType = editForm.assignmentType === 'worksheet' ? 'upload' : editForm.assignmentType
+
+  const showQuestionBuilder = effectiveAssignmentType !== 'none'
 
   if (checking) return null
 
@@ -1303,9 +1305,9 @@ export default function LessonLibraryPage() {
                                     style={{
                                       padding: '8px 16px', borderRadius: '8px', border: '1px solid', cursor: 'pointer',
                                       fontSize: '13px', fontWeight: 500, fontFamily: 'var(--font-body)',
-                                      borderColor: editForm.assignmentType === at.value ? 'var(--plum)' : 'var(--gray-light)',
-                                      background: editForm.assignmentType === at.value ? 'var(--plum)' : 'var(--white)',
-                                      color: editForm.assignmentType === at.value ? 'white' : 'var(--gray-dark)'
+                                      borderColor: effectiveAssignmentType === at.value ? 'var(--plum)' : 'var(--gray-light)',
+                                      background: effectiveAssignmentType === at.value ? 'var(--plum)' : 'var(--white)',
+                                      color: effectiveAssignmentType === at.value ? 'white' : 'var(--gray-dark)'
                                     }}
                                   >
                                     {at.label}
@@ -1495,8 +1497,8 @@ export default function LessonLibraryPage() {
                             {!showQuestionBuilder ? (
                               <div style={{ padding: '32px 0', textAlign: 'center' }}>
                                 <div style={{ fontSize: '14px', color: 'var(--gray-mid)', marginBottom: '16px', lineHeight: '1.7' }}>
-                                  Assignment type is set to <strong>{editForm.assignmentType === 'none' ? 'No Assignment' : 'Upload Only'}</strong>.<br />
-                                  Switch to "Digital Questions", "Questions + Upload", or "Print Worksheet" on the Details tab to enable the question builder.
+                                  Assignment type is set to <strong>Video Only</strong>.<br />
+                                  Switch to any assignment type on the Details tab to enable the question builder.
                                 </div>
                                 <button
                                   onClick={() => setActiveTab('details')}
@@ -1523,7 +1525,7 @@ export default function LessonLibraryPage() {
                                   >
                                     + Add New ↓
                                   </button>
-                                  {(editForm.assignmentType === 'questions' || editForm.assignmentType === 'both') && (
+                                  {(effectiveAssignmentType === 'questions' || effectiveAssignmentType === 'both') && (
                                     <button
                                       onClick={() => previewDigital(lesson)}
                                       disabled={questions.length === 0}
@@ -1532,11 +1534,11 @@ export default function LessonLibraryPage() {
                                       👁 Student View
                                     </button>
                                   )}
-                                  {(editForm.assignmentType === 'worksheet' || editForm.assignmentType === 'upload' || editForm.assignmentType === 'both') && (
+                                  {(effectiveAssignmentType === 'upload' || effectiveAssignmentType === 'both') && (
                                     <button
                                       onClick={() => previewWorksheet(lesson)}
                                       disabled={questions.length === 0}
-                                      style={{ background: 'transparent', border: '1px solid var(--gray-light)', color: 'var(--gray-mid)', padding: '7px 14px', borderRadius: '6px', cursor: questions.length === 0 ? 'not-allowed' : 'pointer', fontSize: '13px', fontFamily: 'var(--font-body)', ...(editForm.assignmentType === 'both' ? {} : { marginLeft: 'auto' }) }}
+                                      style={{ background: 'transparent', border: '1px solid var(--gray-light)', color: 'var(--gray-mid)', padding: '7px 14px', borderRadius: '6px', cursor: questions.length === 0 ? 'not-allowed' : 'pointer', fontSize: '13px', fontFamily: 'var(--font-body)', ...(effectiveAssignmentType === 'both' ? {} : { marginLeft: 'auto' }) }}
                                     >
                                       🖨 Worksheet
                                     </button>
