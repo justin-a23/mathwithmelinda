@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react'
 import { generateClient } from 'aws-amplify/api'
 import TeacherNav from '../../components/TeacherNav'
 import { useRoleGuard } from '../../hooks/useRoleGuard'
+import { apiFetch } from '../../lib/apiFetch'
 
 const client = generateClient()
 
@@ -165,7 +166,7 @@ export default function TeacherSyllabusPage() {
   async function loadViewerUrl(key: string) {
     setViewerLoading(true)
     try {
-      const res = await fetch(`/api/syllabus-pdf?action=view&key=${encodeURIComponent(key)}`)
+      const res = await apiFetch(`/api/syllabus-pdf?action=view&key=${encodeURIComponent(key)}`)
       const data = await res.json()
       setViewerUrl(data.url ?? null)
     } catch {
@@ -188,7 +189,7 @@ export default function TeacherSyllabusPage() {
 
     try {
       // 1. Get presigned upload URL
-      const res = await fetch(`/api/syllabus-pdf?action=upload&semesterId=${encodeURIComponent(selectedSemesterId)}`)
+      const res = await apiFetch(`/api/syllabus-pdf?action=upload&semesterId=${encodeURIComponent(selectedSemesterId)}`)
       const resData = await res.json()
       if (!res.ok) throw new Error(resData.error || 'Failed to get upload URL')
       const { uploadUrl, key } = resData
