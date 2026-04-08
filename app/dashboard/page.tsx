@@ -131,6 +131,29 @@ const getStudentProfileQuery = /* GraphQL */`
   }
 `
 
+const getStudentProfileByEmailQuery = /* GraphQL */`
+  query GetStudentProfileByEmail($email: String!) {
+    listStudentProfiles(filter: { email: { eq: $email } }, limit: 1) {
+      items {
+        id
+        firstName
+        lastName
+        preferredName
+        profilePictureKey
+        status
+        statusReason
+        courseId
+      }
+    }
+  }
+`
+
+const updateStudentProfileUserIdMutation = /* GraphQL */`
+  mutation UpdateStudentProfileUserId($input: UpdateStudentProfileInput!) {
+    updateStudentProfile(input: $input) { id userId }
+  }
+`
+
 function getDueStatus(weekStartDate: string, dayOfWeek: string, dueTime: string | null): 'overdue' | 'due-today' | null {
   if (!dueTime) return null
   const now = new Date()
@@ -254,8 +277,23 @@ export default function Dashboard() {
       try {
         // 1. Fetch profile first — we need courseId before we can filter plans
         const profileResult = await client.graphql({ query: getStudentProfileQuery, variables: { userId } }) as any
-        const profileItems = profileResult.data.listStudentProfiles.items
+        let profileItems = profileResult.data.listStudentProfiles.items
         let studentCourseId = ''
+
+        // Fallback: if no profile found by userId, try by email (handles re-created accounts)
+        if (profileItems.length === 0 && loginId) {
+          const emailResult = await client.graphql({ query: getStudentProfileByEmailQuery, variables: { email: loginId } }) as any
+          profileItems = emailResult.data.listStudentProfiles.items
+          // If found by email, update the profile's userId to the current one
+          if (profileItems.length > 0) {
+            try {
+              await client.graphql({
+                query: updateStudentProfileUserIdMutation,
+                variables: { input: { id: profileItems[0].id, userId } }
+              })
+            } catch (e) { console.error('Failed to update profile userId:', e) }
+          }
+        }
 
         if (profileItems.length > 0) {
           const p = profileItems[0]
@@ -277,12 +315,8 @@ export default function Dashboard() {
             }
           }
         } else {
-          // No profile found — this can happen if:
-          // 1. Student was deleted/revoked
-          // 2. Transient DynamoDB consistency issue on page load
-          // Show an error state instead of signing out or redirecting (avoids loops)
-          setLoadError(true)
-          setLoading(false)
+          // No profile found — redirect to setup so student can create one
+          router.replace('/profile/setup')
           return
         }
 

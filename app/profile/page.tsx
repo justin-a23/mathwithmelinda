@@ -27,6 +27,29 @@ const getProfileQuery = /* GraphQL */`
   }
 `
 
+const getProfileByEmailQuery = /* GraphQL */`
+  query GetProfileByEmail($email: String!) {
+    listStudentProfiles(filter: { email: { eq: $email } }, limit: 1) {
+      items {
+        id
+        firstName
+        lastName
+        preferredName
+        email
+        gradeLevel
+        courseId
+        profilePictureKey
+      }
+    }
+  }
+`
+
+const updateProfileUserIdMutation = /* GraphQL */`
+  mutation UpdateProfileUserId($input: UpdateStudentProfileInput!) {
+    updateStudentProfile(input: $input) { id userId }
+  }
+`
+
 const listCoursesQuery = /* GraphQL */`
   query ListCourses {
     listCourses(limit: 100) {
@@ -98,13 +121,30 @@ export default function ProfilePage() {
   useEffect(() => {
     const userId = user?.userId || user?.username || ''
     if (!userId) return
+    const loginId = user?.signInDetails?.loginId || ''
     async function load() {
       try {
         const [profileRes, courseRes] = await Promise.all([
           client.graphql({ query: getProfileQuery, variables: { userId } }) as any,
           client.graphql({ query: listCoursesQuery }) as any,
         ])
-        const items = profileRes.data.listStudentProfiles.items
+        let items = profileRes.data.listStudentProfiles.items
+
+        // Fallback: if no profile found by userId, try by email (handles re-created accounts)
+        if (items.length === 0 && loginId) {
+          const emailRes = await client.graphql({ query: getProfileByEmailQuery, variables: { email: loginId } }) as any
+          items = emailRes.data.listStudentProfiles.items
+          // Update the profile's userId to the current one so future queries work directly
+          if (items.length > 0) {
+            try {
+              await client.graphql({
+                query: updateProfileUserIdMutation,
+                variables: { input: { id: items[0].id, userId } }
+              })
+            } catch (e) { console.error('Failed to update profile userId:', e) }
+          }
+        }
+
         if (items.length > 0) {
           const p = items[0] as Profile
           setProfile(p)
@@ -124,6 +164,10 @@ export default function ProfilePage() {
             const match = courses.find(c => c.id === p.courseId)
             if (match) setCourseName(match.title)
           }
+        } else {
+          // No profile at all — redirect to setup
+          router.replace('/profile/setup')
+          return
         }
       } catch (err) {
         console.error('Error loading profile:', err)

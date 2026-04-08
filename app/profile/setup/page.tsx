@@ -46,6 +46,20 @@ const MARK_INVITE_USED = /* GraphQL */`
   }
 `
 
+const LIST_PROFILES_BY_EMAIL = /* GraphQL */`
+  query ListProfilesByEmail($filter: ModelStudentProfileFilterInput) {
+    listStudentProfiles(filter: $filter) {
+      items { id userId firstName lastName status }
+    }
+  }
+`
+
+const UPDATE_PROFILE_USERID = /* GraphQL */`
+  mutation UpdateProfileUserId($input: UpdateStudentProfileInput!) {
+    updateStudentProfile(input: $input) { id userId }
+  }
+`
+
 const CREATE_ENROLLMENT = /* GraphQL */`
   mutation CreateEnrollment($input: CreateEnrollmentInput!) {
     createEnrollment(input: $input) { id studentId }
@@ -121,7 +135,26 @@ function ProfileSetupInner() {
         query: LIST_STUDENT_PROFILES,
         variables: { filter: { userId: { eq: u.userId } } }
       }) as any
-      const items = result.data.listStudentProfiles.items
+      let items = result.data.listStudentProfiles.items
+
+      // Fallback: if no profile found by userId, try by email (handles re-created accounts)
+      if ((!items || items.length === 0) && u.signInDetails?.loginId) {
+        const emailResult = await client.graphql({
+          query: LIST_PROFILES_BY_EMAIL,
+          variables: { filter: { email: { eq: u.signInDetails.loginId } } }
+        }) as any
+        items = emailResult.data.listStudentProfiles.items
+        // Update the profile's userId to the current one
+        if (items && items.length > 0) {
+          try {
+            await client.graphql({
+              query: UPDATE_PROFILE_USERID,
+              variables: { input: { id: items[0].id, userId: u.userId } }
+            })
+          } catch (e) { console.error('Failed to update profile userId:', e) }
+        }
+      }
+
       if (items && items.length > 0) {
         const profile = items[0]
         if (profile.status === 'pending') {
