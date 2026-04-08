@@ -18,7 +18,7 @@ const LIST_MY_MESSAGES = /* GraphQL */ `
 
 const GET_STUDENT_PROFILE = /* GraphQL */ `
   query GetStudentProfile($userId: String!) {
-    listStudentProfiles(filter: { userId: { eq: $userId } }, limit: 1) {
+    listStudentProfiles(filter: { userId: { eq: $userId } }, limit: 500) {
       items { firstName profilePictureKey }
     }
   }

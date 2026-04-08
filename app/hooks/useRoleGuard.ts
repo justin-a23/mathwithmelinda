@@ -11,7 +11,7 @@ const client = generateClient()
 
 const LIST_STUDENT_PROFILES = /* GraphQL */`
   query ListStudentProfiles($filter: ModelStudentProfileFilterInput) {
-    listStudentProfiles(filter: $filter, limit: 1) {
+    listStudentProfiles(filter: $filter, limit: 500) {
       items { id status }
     }
   }
@@ -69,7 +69,11 @@ export function useRoleGuard(requiredRole: Role): { checking: boolean } {
           try {
             const currentUser = await getCurrentUser()
             const userId = currentUser.userId
-            const loginId = currentUser.signInDetails?.loginId || ''
+            // Get email from ID token (always available) — signInDetails.loginId can be empty after session restore
+            let loginId = currentUser.signInDetails?.loginId || ''
+            if (!loginId) {
+              loginId = (session.tokens?.idToken?.payload?.email as string) || ''
+            }
 
             // Check by userId first
             const result = await client.graphql({

@@ -16,7 +16,7 @@ const client = generateClient()
 
 const getStudentNameQuery = /* GraphQL */`
   query GetStudentName($userId: String!) {
-    listStudentProfiles(filter: { userId: { eq: $userId } }, limit: 1) {
+    listStudentProfiles(filter: { userId: { eq: $userId } }, limit: 500) {
       items { firstName lastName preferredName }
     }
   }

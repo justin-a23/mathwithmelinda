@@ -51,7 +51,7 @@ const LIST_LESSON_TEMPLATES = /* GraphQL */ `
 
 const LIST_STUDENT_PROFILE = /* GraphQL */ `
   query ListStudentProfile($filter: ModelStudentProfileFilterInput) {
-    listStudentProfiles(filter: $filter, limit: 1) {
+    listStudentProfiles(filter: $filter, limit: 500) {
       items { id userId email firstName lastName courseId }
     }
   }

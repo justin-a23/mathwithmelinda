@@ -13,7 +13,7 @@ const client = generateClient()
 
 const getProfileQuery = /* GraphQL */`
   query GetProfile($userId: String!) {
-    listStudentProfiles(filter: { userId: { eq: $userId } }, limit: 1) {
+    listStudentProfiles(filter: { userId: { eq: $userId } }, limit: 500) {
       items {
         id
         firstName
@@ -30,7 +30,7 @@ const getProfileQuery = /* GraphQL */`
 
 const getProfileByEmailQuery = /* GraphQL */`
   query GetProfileByEmail($email: String!) {
-    listStudentProfiles(filter: { email: { eq: $email } }, limit: 1) {
+    listStudentProfiles(filter: { email: { eq: $email } }, limit: 500) {
       items {
         id
         firstName
@@ -122,9 +122,17 @@ export default function ProfilePage() {
 
   useEffect(() => {
     const userId = user?.userId || user?.username || ''
-    if (!userId) return
-    const loginId = user?.signInDetails?.loginId || ''
+    if (!userId || checking) return
     async function load() {
+      // Get email from ID token (always available) — signInDetails.loginId can be empty after session restore
+      let loginId = user?.signInDetails?.loginId || ''
+      if (!loginId) {
+        try {
+          const { fetchAuthSession } = await import('aws-amplify/auth')
+          const session = await fetchAuthSession()
+          loginId = (session.tokens?.idToken?.payload?.email as string) || ''
+        } catch { /* use empty loginId */ }
+      }
       try {
         const [profileRes, courseRes] = await Promise.all([
           client.graphql({ query: getProfileQuery, variables: { userId } }) as any,
