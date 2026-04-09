@@ -1046,11 +1046,11 @@ function LessonPageInner() {
                     <div style={{ background: 'var(--plum-light)', border: '1px solid var(--plum-mid)', borderRadius: '8px', padding: '14px 18px', marginBottom: '22px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                       <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--plum)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '2px' }}>How to complete this assignment</div>
                       {(isWorksheet ? [
-                        'Watch the video above',
+                        ...(videoSrc ? ['Watch the video above'] : []),
                         'Click "Print Worksheet" to print — complete all problems on paper',
                         'Take a photo of your completed work and upload below',
                       ] : [
-                        'Watch the video above',
+                        ...(videoSrc ? ['Watch the video above'] : []),
                         'Answer the questions below digitally',
                         'Click "Print Show Work" to print just the problems that need work shown — complete on paper, take a photo, and upload below',
                       ]).map((step, i) => (

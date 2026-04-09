@@ -1294,14 +1294,14 @@ export default function LessonLibraryPage() {
                                 <div style={{ marginTop: '8px', padding: '10px 14px', background: 'var(--plum-light)', border: '1px solid var(--plum-mid)', borderRadius: '8px' }}>
                                   <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--plum)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Students automatically see:</div>
                                   {(effectiveAssignmentType === 'upload' ? [
-                                    'Watch the video above',
+                                    ...(editForm.videoUrl ? ['Watch the video above'] : []),
                                     'Click "Print Worksheet" to print — complete all problems on paper',
                                     'Take a photo of your completed work and upload below',
                                   ] : effectiveAssignmentType === 'questions' ? [
-                                    'Watch the video above',
+                                    ...(editForm.videoUrl ? ['Watch the video above'] : []),
                                     'Answer the questions below digitally',
                                   ] : effectiveAssignmentType === 'both' ? [
-                                    'Watch the video above',
+                                    ...(editForm.videoUrl ? ['Watch the video above'] : []),
                                     'Answer the questions below digitally',
                                     'Click "Print Show Work" to print problems that need work shown — complete on paper, take a photo, and upload below',
                                   ] : []).map((step, i) => (
