@@ -946,7 +946,7 @@ export default function Dashboard() {
                               Due {item.dayOfWeek} by {dueLabel}
                             </div>
                             <span style={{ background: isOverdue ? '#b91c1c' : 'var(--plum)', color: 'white', fontSize: '12px', padding: '4px 12px', borderRadius: '20px' }}>
-                              {isOverdue ? 'Submit Late →' : 'Watch →'}
+                              {isOverdue ? 'Open Late →' : 'Watch →'}
                             </span>
                           </div>
                         </div>

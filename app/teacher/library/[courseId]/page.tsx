@@ -1286,10 +1286,33 @@ export default function LessonLibraryPage() {
                               <textarea
                                 value={editForm.instructions}
                                 onChange={e => setEditForm(f => ({ ...f, instructions: e.target.value }))}
-                                placeholder="Student-facing instructions for this lesson"
-                                rows={5}
+                                placeholder="Additional instructions for this lesson (optional)"
+                                rows={3}
                                 style={{ ...inputStyle, resize: 'vertical' }}
                               />
+                              {editForm.assignmentType !== 'none' && (
+                                <div style={{ marginTop: '8px', padding: '10px 14px', background: 'var(--plum-light)', border: '1px solid var(--plum-mid)', borderRadius: '8px' }}>
+                                  <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--plum)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Students automatically see:</div>
+                                  {(effectiveAssignmentType === 'upload' ? [
+                                    'Watch the video above',
+                                    'Click "Print Worksheet" to print — complete all problems on paper',
+                                    'Take a photo of your completed work and upload below',
+                                  ] : effectiveAssignmentType === 'questions' ? [
+                                    'Watch the video above',
+                                    'Answer the questions below digitally',
+                                  ] : effectiveAssignmentType === 'both' ? [
+                                    'Watch the video above',
+                                    'Answer the questions below digitally',
+                                    'Click "Print Show Work" to print problems that need work shown — complete on paper, take a photo, and upload below',
+                                  ] : []).map((step, i) => (
+                                    <div key={i} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', marginBottom: '3px' }}>
+                                      <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--plum)', minWidth: '14px' }}>{i + 1}.</span>
+                                      <span style={{ fontSize: '11px', color: 'var(--foreground)', lineHeight: 1.4 }}>{step}</span>
+                                    </div>
+                                  ))}
+                                  <div style={{ fontSize: '10px', color: 'var(--gray-mid)', marginTop: '4px', fontStyle: 'italic' }}>No need to repeat these in your instructions above</div>
+                                </div>
+                              )}
                             </div>
 
                             <div style={{ marginBottom: '16px' }}>
