@@ -757,7 +757,8 @@ function LessonPageInner() {
       : allQuestions.filter(q => q.questionType === 'show_work')
     if (showWorkQuestions.length === 0) return
 
-    // Pre-fetch per-question diagram images as base64 data URLs for embedding in print
+    // Get diagram image URLs for embedding in print
+    // Try base64 conversion first (works offline), fall back to presigned URL (requires network)
     const diagramDataUrls: Record<string, string> = {}
     for (const q of showWorkQuestions) {
       const url = diagramUrls[q.id]
@@ -772,7 +773,10 @@ function LessonPageInner() {
           reader.readAsDataURL(blob)
         })
         diagramDataUrls[q.id] = dataUrl
-      } catch { /* skip if fetch fails */ }
+      } catch {
+        // CORS may block fetch — use presigned URL directly as fallback
+        diagramDataUrls[q.id] = url
+      }
     }
 
     const { default: katex } = await import('katex')
@@ -847,7 +851,7 @@ function LessonPageInner() {
         .work-box{border:1px solid #bbb;border-radius:4px;height:120px}
         @media print{body{padding:20px}@page{margin:.6in}}
       </style>
-    </head><body onload="setTimeout(function(){window.print()},1200)">
+    </head><body onload="var imgs=document.images;if(imgs.length===0){setTimeout(function(){window.print()},800)}else{var loaded=0;function chk(){loaded++;if(loaded>=imgs.length)setTimeout(function(){window.print()},400)}for(var i=0;i<imgs.length;i++){if(imgs[i].complete)chk();else{imgs[i].onload=chk;imgs[i].onerror=chk}}}">
       <div class="header">
         ${lessonNum != null ? `<div class="lessonnum">Lesson ${lessonNum}</div>` : ''}
         <h1>${title} — Show Work</h1>

@@ -943,7 +943,7 @@ export default function Dashboard() {
                           </div>
                           <div style={{ textAlign: 'right', flexShrink: 0 }}>
                             <div style={{ fontSize: '12px', color: isOverdue ? '#b91c1c' : 'var(--gray-mid)', marginBottom: '8px' }}>
-                              Due by {dueLabel}
+                              Due {item.dayOfWeek} by {dueLabel}
                             </div>
                             <span style={{ background: isOverdue ? '#b91c1c' : 'var(--plum)', color: 'white', fontSize: '12px', padding: '4px 12px', borderRadius: '20px' }}>
                               {isOverdue ? 'Submit Late →' : 'Watch →'}
