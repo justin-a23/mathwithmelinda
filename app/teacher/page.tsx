@@ -286,6 +286,12 @@ PENDING STUDENT APPROVALS:
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ context }),
       })
+      if (!res.ok) {
+        const text = await res.text()
+        console.error('Briefing API response error:', res.status, text)
+        setBriefing('Could not load briefing — check that the API key is configured.')
+        return
+      }
       const data = await res.json()
       if (data.error) {
         console.error('Briefing API error:', data.error)
@@ -298,7 +304,7 @@ PENDING STUDENT APPROVALS:
       }
     } catch (err: any) {
       console.error('Briefing fetch error:', err)
-      setBriefing('Could not load briefing — ' + (err.message || 'please try again.'))
+      setBriefing('Could not load briefing — please try again.')
     } finally {
       setBriefingLoading(false)
     }
