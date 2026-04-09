@@ -218,19 +218,22 @@ export default function TeacherDashboard() {
       const nextMonday = new Date(monday); nextMonday.setDate(monday.getDate() + 7)
       const nextMondayStr = nextMonday.toISOString().slice(0, 10)
 
-      // Fetch everything needed for the briefing in parallel
+      // Fetch everything needed for the briefing in parallel — each query is wrapped
+      // so one failure doesn't crash the whole briefing
+      const safe = (p: Promise<any>) => p.then(r => r).catch(() => null)
       const [meetingsRes, subsRes, studentsRes, plansRes, pendingRes] = await Promise.all([
-        client.graphql({ query: `query { listZoomMeetings(limit: 100) { items { id topic startTime durationMinutes startUrl joinUrl } } }` }) as any,
-        client.graphql({ query: listAllSubmissionsForAlertsQuery }) as any,
-        client.graphql({ query: listActiveStudentsQuery }) as any,
-        client.graphql({ query: listWeeklyPlansQuery }) as any,
-        client.graphql({ query: listPendingStudentsQuery }) as any,
+        safe(client.graphql({ query: `query { listZoomMeetings(limit: 100) { items { id topic startTime durationMinutes startUrl joinUrl } } }` }) as any),
+        safe(client.graphql({ query: listAllSubmissionsForAlertsQuery }) as any),
+        safe(client.graphql({ query: listActiveStudentsQuery }) as any),
+        safe(client.graphql({ query: listWeeklyPlansQuery }) as any),
+        safe(client.graphql({ query: listPendingStudentsQuery }) as any),
       ])
 
       // Today's meetings
       const dayStart = new Date(now); dayStart.setHours(0,0,0,0)
       const dayEnd = new Date(now); dayEnd.setHours(23,59,59,999)
-      const meetsToday = (meetingsRes.data.listZoomMeetings.items as any[])
+      const meetingItems = meetingsRes?.data?.listZoomMeetings?.items ?? []
+      const meetsToday = (meetingItems as any[])
         .filter(m => { const s = new Date(m.startTime); return s >= dayStart && s <= dayEnd })
         .sort((a: any, b: any) => a.startTime.localeCompare(b.startTime))
       setTodayMeetings(meetsToday)
@@ -246,24 +249,25 @@ export default function TeacherDashboard() {
           }).join('\n')
 
       // Ungraded submissions
-      const allSubs = subsRes.data.listSubmissions.items
+      const allSubs = subsRes?.data?.listSubmissions?.items ?? []
       const ungradedThisWeek = allSubs.filter((s: any) => !s.isArchived && !s.grade && s.submittedAt && new Date(s.submittedAt).getTime() >= weekStartMs)
       const staleUngraded = allSubs.filter((s: any) => !s.isArchived && !s.grade && s.submittedAt && new Date(s.submittedAt) < new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000))
 
       // Students who haven't submitted this week
       const submittedThisWeek = new Set(allSubs.filter((s: any) => !s.isArchived && s.submittedAt && new Date(s.submittedAt).getTime() >= weekStartMs).map((s: any) => s.studentId))
-      const activeStudents: any[] = studentsRes.data.listStudentProfiles.items
+      const activeStudents: any[] = studentsRes?.data?.listStudentProfiles?.items ?? []
       const notSubmitted = activeStudents.filter(s => !submittedThisWeek.has(s.userId) && !submittedThisWeek.has(s.email))
 
       // Next week planned?
-      const weeklyPlans: any[] = plansRes.data.listWeeklyPlans.items
+      const weeklyPlans: any[] = plansRes?.data?.listWeeklyPlans?.items ?? []
       const nextWeekPlanned = weeklyPlans.some((p: any) => p.weekStart === nextMondayStr || p.weekStartDate === nextMondayStr)
       const dayOfWeek = now.getDay()
       const isEndOfWeek = dayOfWeek === 4 || dayOfWeek === 5 || dayOfWeek === 0 || dayOfWeek === 6
 
       // Pending students
-      const pendingCount = pendingRes.data.listStudentProfiles.items.length
-      const pendingNames = pendingRes.data.listStudentProfiles.items.slice(0, 3).map((s: any) => `${s.firstName} ${s.lastName}`).join(', ')
+      const pendingItems = pendingRes?.data?.listStudentProfiles?.items ?? []
+      const pendingCount = pendingItems.length
+      const pendingNames = pendingItems.slice(0, 3).map((s: any) => `${s.firstName} ${s.lastName}`).join(', ')
 
       const context = `Current date/time: ${todayStr}
 
@@ -334,17 +338,18 @@ PENDING STUDENT APPROVALS:
       const dayOfWeek = now.getDay() // 0=Sun,1=Mon...5=Fri,6=Sat
       const newAlerts: Alert[] = []
 
+      const safeQ = (p: Promise<any>) => p.then(r => r).catch(() => null)
       const [subsResult, studentsResult, plansResult] = await Promise.all([
-        client.graphql({ query: listAllSubmissionsForAlertsQuery }) as any,
-        client.graphql({ query: listActiveStudentsQuery }) as any,
-        client.graphql({ query: listWeeklyPlansQuery }) as any,
+        safeQ(client.graphql({ query: listAllSubmissionsForAlertsQuery }) as any),
+        safeQ(client.graphql({ query: listActiveStudentsQuery }) as any),
+        safeQ(client.graphql({ query: listWeeklyPlansQuery }) as any),
       ])
 
-      const allSubs = subsResult.data.listSubmissions.items
+      const allSubs = subsResult?.data?.listSubmissions?.items ?? []
       const activeStudents: { id: string; userId: string; email: string; firstName: string; lastName: string }[] =
-        studentsResult.data.listStudentProfiles.items
+        studentsResult?.data?.listStudentProfiles?.items ?? []
       const weeklyPlans: { id: string; weekStart: string; courseId: string }[] =
-        plansResult.data.listWeeklyPlans.items
+        plansResult?.data?.listWeeklyPlans?.items ?? []
 
       const fiveDaysAgo = new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000)
       const weekStartMs = monday.getTime()
