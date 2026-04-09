@@ -42,9 +42,10 @@ const LIST_WEEKLY_PLANS = /* GraphQL */ `
 `
 
 const LIST_LESSON_TEMPLATES = /* GraphQL */ `
-  query ListLessonTemplates($filter: ModelLessonTemplateFilterInput) {
-    listLessonTemplates(filter: $filter, limit: 200) {
+  query ListLessonTemplates($filter: ModelLessonTemplateFilterInput, $limit: Int, $nextToken: String) {
+    listLessonTemplates(filter: $filter, limit: $limit, nextToken: $nextToken) {
       items { id lessonCategory lessonNumber }
+      nextToken
     }
   }
 `
@@ -254,16 +255,20 @@ function ReportCardInner() {
         }
       }
 
-      // 6. Load lesson templates
+      // 6. Load lesson templates (paginated)
       const templateMap = new Map<string, LessonTemplate>()
       if (templateIds.size > 0) {
-        const tmplRes = await (client.graphql({
-          query: LIST_LESSON_TEMPLATES,
-          variables: { filter: { courseLessonTemplatesId: { eq: sem.courseId } } },
-        }) as any)
-        for (const t of tmplRes.data.listLessonTemplates.items as LessonTemplate[]) {
-          templateMap.set(t.id, t)
-        }
+        let tmplNextToken: string | null = null
+        do {
+          const tmplRes = await (client.graphql({
+            query: LIST_LESSON_TEMPLATES,
+            variables: { filter: { courseLessonTemplatesId: { eq: sem.courseId } }, limit: 500, nextToken: tmplNextToken },
+          }) as any)
+          for (const t of tmplRes.data.listLessonTemplates.items as LessonTemplate[]) {
+            templateMap.set(t.id, t)
+          }
+          tmplNextToken = tmplRes.data.listLessonTemplates.nextToken
+        } while (tmplNextToken)
       }
 
       // 7. Build columns
