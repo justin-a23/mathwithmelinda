@@ -6,6 +6,10 @@ export async function POST(req: NextRequest) {
   if (auth instanceof NextResponse) return auth
 
   try {
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return NextResponse.json({ error: 'ANTHROPIC_API_KEY is not configured' }, { status: 500 })
+    }
+
     const { context } = await req.json()
 
     const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -16,7 +20,7 @@ export async function POST(req: NextRequest) {
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-haiku-4-5',
+        model: 'claude-haiku-4-5-20251001',
         max_tokens: 200,
         system: `You are a helpful assistant for Melinda, a homeschool math teacher.
 She checks her dashboard each morning to see what needs her attention.
