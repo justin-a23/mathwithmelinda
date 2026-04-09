@@ -286,14 +286,25 @@ PENDING STUDENT APPROVALS:
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ context }),
       })
-      const data = await res.json()
-      if (data.briefing) {
-        setBriefing(data.briefing)
-        // Cache with today's date
-        localStorage.setItem(BRIEFING_CACHE_KEY, JSON.stringify({ date: today, text: data.briefing }))
+      if (!res.ok) {
+        const text = await res.text()
+        console.error('Briefing API response error:', res.status, text)
+        setBriefing('Could not load briefing — check that the API key is configured.')
+        return
       }
-    } catch (err) {
+      const data = await res.json()
+      if (data.error) {
+        console.error('Briefing API error:', data.error)
+        setBriefing('Could not load briefing — check that the API key is configured.')
+      } else if (data.briefing) {
+        setBriefing(data.briefing)
+        localStorage.setItem(BRIEFING_CACHE_KEY, JSON.stringify({ date: today, text: data.briefing }))
+      } else {
+        setBriefing('All clear today, Melinda — no urgent items to flag.')
+      }
+    } catch (err: any) {
       console.error('Briefing fetch error:', err)
+      setBriefing('Could not load briefing — please try again.')
     } finally {
       setBriefingLoading(false)
     }
