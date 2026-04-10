@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 
 type PhotoEntry = {
@@ -11,6 +11,18 @@ type PhotoEntry = {
 }
 
 export default function SnapPage() {
+  return (
+    <Suspense fallback={
+      <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F5F3F8', fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+        <p style={{ color: '#7A7A96' }}>Loading...</p>
+      </div>
+    }>
+      <SnapPageInner />
+    </Suspense>
+  )
+}
+
+function SnapPageInner() {
   const searchParams = useSearchParams()
   const token = searchParams.get('token') || ''
 
