@@ -131,6 +131,14 @@ const listWeeklyPlansQuery = /* GraphQL */`
   }
 `
 
+const listAssignmentCountQuery = /* GraphQL */`
+  query ListAssignmentCount {
+    listAssignments(limit: 1) {
+      items { id }
+    }
+  }
+`
+
 
 type Alert = {
   id: string
@@ -221,13 +229,16 @@ export default function TeacherDashboard() {
       // Fetch everything needed for the briefing in parallel — each query is wrapped
       // so one failure doesn't crash the whole briefing
       const safe = (p: Promise<any>) => p.then(r => r).catch(() => null)
-      const [meetingsRes, subsRes, studentsRes, plansRes, pendingRes] = await Promise.all([
+      const [meetingsRes, subsRes, studentsRes, plansRes, pendingRes, assignRes] = await Promise.all([
         safe(client.graphql({ query: `query { listZoomMeetings(limit: 100) { items { id topic startTime durationMinutes startUrl joinUrl } } }` }) as any),
         safe(client.graphql({ query: listAllSubmissionsForAlertsQuery }) as any),
         safe(client.graphql({ query: listActiveStudentsQuery }) as any),
         safe(client.graphql({ query: listWeeklyPlansQuery }) as any),
         safe(client.graphql({ query: listPendingStudentsQuery }) as any),
+        safe(client.graphql({ query: listAssignmentCountQuery }) as any),
       ])
+
+      const hasAssignments = (assignRes?.data?.listAssignments?.items?.length ?? 0) > 0
 
       // Today's meetings
       const dayStart = new Date(now); dayStart.setHours(0,0,0,0)
@@ -269,15 +280,20 @@ export default function TeacherDashboard() {
       const pendingCount = pendingItems.length
       const pendingNames = pendingItems.slice(0, 3).map((s: any) => `${s.firstName} ${s.lastName}`).join(', ')
 
+      const gradingSection = hasAssignments
+        ? `GRADING:
+- Ungraded submissions this week: ${ungradedThisWeek.length}
+- Submissions ungraded for 5+ days: ${staleUngraded.length}
+- Active students who haven't submitted anything this week: ${notSubmitted.length}${notSubmitted.length > 0 ? ` (${notSubmitted.slice(0,3).map((s:any)=>s.firstName).join(', ')})` : ''}`
+        : `GRADING:
+- No assignments have been created yet — nothing to grade.`
+
       const context = `Current date/time: ${todayStr}
 
 TODAY'S ZOOM MEETINGS:
 ${meetingLines}
 
-GRADING:
-- Ungraded submissions this week: ${ungradedThisWeek.length}
-- Submissions ungraded for 5+ days: ${staleUngraded.length}
-- Active students who haven't submitted anything this week: ${notSubmitted.length}${notSubmitted.length > 0 ? ` (${notSubmitted.slice(0,3).map((s:any)=>s.firstName).join(', ')})` : ''}
+${gradingSection}
 
 PLANNING:
 - Next week's assignments planned: ${nextWeekPlanned ? 'Yes' : 'No'}${!nextWeekPlanned && isEndOfWeek ? ' (it is end of week — this needs attention)' : ''}
@@ -339,10 +355,11 @@ PENDING STUDENT APPROVALS:
       const newAlerts: Alert[] = []
 
       const safeQ = (p: Promise<any>) => p.then(r => r).catch(() => null)
-      const [subsResult, studentsResult, plansResult] = await Promise.all([
+      const [subsResult, studentsResult, plansResult, assignResult] = await Promise.all([
         safeQ(client.graphql({ query: listAllSubmissionsForAlertsQuery }) as any),
         safeQ(client.graphql({ query: listActiveStudentsQuery }) as any),
         safeQ(client.graphql({ query: listWeeklyPlansQuery }) as any),
+        safeQ(client.graphql({ query: listAssignmentCountQuery }) as any),
       ])
 
       const allSubs = subsResult?.data?.listSubmissions?.items ?? []
@@ -350,39 +367,43 @@ PENDING STUDENT APPROVALS:
         studentsResult?.data?.listStudentProfiles?.items ?? []
       const weeklyPlans: { id: string; weekStart: string; courseId: string }[] =
         plansResult?.data?.listWeeklyPlans?.items ?? []
+      const hasAnyAssignments = (assignResult?.data?.listAssignments?.items?.length ?? 0) > 0
 
       const fiveDaysAgo = new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000)
       const weekStartMs = monday.getTime()
 
-      // 1. Ungraded submissions older than 5 days
-      const staleUngraded = allSubs.filter((s: any) =>
-        !s.isArchived && !s.grade && s.submittedAt && new Date(s.submittedAt) < fiveDaysAgo
-      )
-      if (staleUngraded.length > 0) {
-        newAlerts.push({
-          id: 'stale-ungraded',
-          level: 'urgent',
-          message: `${staleUngraded.length} submission${staleUngraded.length > 1 ? 's have' : ' has'} been waiting to be graded for 5+ days`,
-          href: '/teacher/grades',
-        })
-      }
+      // Only show submission-related alerts if assignments have been created
+      if (hasAnyAssignments) {
+        // 1. Ungraded submissions older than 5 days
+        const staleUngraded = allSubs.filter((s: any) =>
+          !s.isArchived && !s.grade && s.submittedAt && new Date(s.submittedAt) < fiveDaysAgo
+        )
+        if (staleUngraded.length > 0) {
+          newAlerts.push({
+            id: 'stale-ungraded',
+            level: 'urgent',
+            message: `${staleUngraded.length} submission${staleUngraded.length > 1 ? 's have' : ' has'} been waiting to be graded for 5+ days`,
+            href: '/teacher/grades',
+          })
+        }
 
-      // 2. Students who haven't submitted anything this week
-      const submittedThisWeek = new Set(
-        allSubs
-          .filter((s: any) => !s.isArchived && s.submittedAt && new Date(s.submittedAt).getTime() >= weekStartMs)
-          .map((s: any) => s.studentId)
-      )
-      const notSubmitted = activeStudents.filter(s => !submittedThisWeek.has(s.userId) && !submittedThisWeek.has(s.email))
-      if (notSubmitted.length > 0 && notSubmitted.length <= activeStudents.length) {
-        const names = notSubmitted.slice(0, 3).map(s => s.firstName).join(', ')
-        const extra = notSubmitted.length > 3 ? ` +${notSubmitted.length - 3} more` : ''
-        newAlerts.push({
-          id: 'no-submission-this-week',
-          level: 'warning',
-          message: `${notSubmitted.length} student${notSubmitted.length > 1 ? 's haven\'t' : ' hasn\'t'} submitted anything this week — ${names}${extra}`,
-          href: '/teacher/grades',
-        })
+        // 2. Students who haven't submitted anything this week
+        const submittedThisWeek = new Set(
+          allSubs
+            .filter((s: any) => !s.isArchived && s.submittedAt && new Date(s.submittedAt).getTime() >= weekStartMs)
+            .map((s: any) => s.studentId)
+        )
+        const notSubmitted = activeStudents.filter(s => !submittedThisWeek.has(s.userId) && !submittedThisWeek.has(s.email))
+        if (notSubmitted.length > 0 && notSubmitted.length <= activeStudents.length) {
+          const names = notSubmitted.slice(0, 3).map(s => s.firstName).join(', ')
+          const extra = notSubmitted.length > 3 ? ` +${notSubmitted.length - 3} more` : ''
+          newAlerts.push({
+            id: 'no-submission-this-week',
+            level: 'warning',
+            message: `${notSubmitted.length} student${notSubmitted.length > 1 ? 's haven\'t' : ' hasn\'t'} submitted anything this week — ${names}${extra}`,
+            href: '/teacher/grades',
+          })
+        }
       }
 
       // 3. Next week's plans not set yet (warn Thu/Fri/weekend)
@@ -399,27 +420,28 @@ PENDING STUDENT APPROVALS:
         }
       }
 
-      // 4. Students with 3+ consecutive missed submissions (no submission for last 3 assignments)
-      const studentSubCounts: Record<string, number> = {}
-      for (const s of allSubs) {
-        if (s.isArchived) continue
-        const sid = s.studentId
-        if (!studentSubCounts[sid]) studentSubCounts[sid] = 0
-        studentSubCounts[sid]++
-      }
-      // Students with zero submissions ever among active students
-      const neverSubmitted = activeStudents.filter(s =>
-        !studentSubCounts[s.userId] && !studentSubCounts[s.email]
-      )
-      if (neverSubmitted.length > 0) {
-        const names = neverSubmitted.slice(0, 2).map(s => s.firstName).join(', ')
-        const extra = neverSubmitted.length > 2 ? ` +${neverSubmitted.length - 2} more` : ''
-        newAlerts.push({
-          id: 'never-submitted',
-          level: 'info',
-          message: `${neverSubmitted.length} active student${neverSubmitted.length > 1 ? 's have' : ' has'} never submitted work — ${names}${extra}`,
-          href: '/teacher/students',
-        })
+      // 4. Students who have never submitted (only if assignments exist)
+      if (hasAnyAssignments) {
+        const studentSubCounts: Record<string, number> = {}
+        for (const s of allSubs) {
+          if (s.isArchived) continue
+          const sid = s.studentId
+          if (!studentSubCounts[sid]) studentSubCounts[sid] = 0
+          studentSubCounts[sid]++
+        }
+        const neverSubmitted = activeStudents.filter(s =>
+          !studentSubCounts[s.userId] && !studentSubCounts[s.email]
+        )
+        if (neverSubmitted.length > 0) {
+          const names = neverSubmitted.slice(0, 2).map(s => s.firstName).join(', ')
+          const extra = neverSubmitted.length > 2 ? ` +${neverSubmitted.length - 2} more` : ''
+          newAlerts.push({
+            id: 'never-submitted',
+            level: 'info',
+            message: `${neverSubmitted.length} active student${neverSubmitted.length > 1 ? 's have' : ' has'} never submitted work — ${names}${extra}`,
+            href: '/teacher/students',
+          })
+        }
       }
 
       setAlerts(newAlerts)
