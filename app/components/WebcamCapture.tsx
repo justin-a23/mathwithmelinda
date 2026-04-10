@@ -32,15 +32,8 @@ export default function WebcamCapture({ onCapture }: Props) {
       }
       const stream = await navigator.mediaDevices.getUserMedia(constraints)
       streamRef.current = stream
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream
-        // Explicitly call play() — autoPlay alone isn't reliable in all browsers
-        try {
-          await videoRef.current.play()
-        } catch {
-          // play() rejection is non-fatal; the video may still render
-        }
-      }
+      // Don't attach to video here — the video element may not be mounted yet.
+      // A separate useEffect handles attaching the stream once the element exists.
       setState('active')
 
       // Enumerate cameras after permission granted
@@ -59,6 +52,18 @@ export default function WebcamCapture({ onCapture }: Props) {
       }
     }
   }, [activeCameraId])
+
+  // Attach stream to video element once both exist.
+  // This runs after setState('active') triggers a re-render that mounts <video>.
+  useEffect(() => {
+    if (state !== 'active') return
+    const video = videoRef.current
+    const stream = streamRef.current
+    if (!video || !stream) return
+
+    video.srcObject = stream
+    video.play().catch(() => {})
+  }, [state])
 
   useEffect(() => {
     if (!navigator.mediaDevices?.getUserMedia) {
