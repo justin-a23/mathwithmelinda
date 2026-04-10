@@ -27,13 +27,19 @@ export default function WebcamCapture({ onCapture }: Props) {
         video: {
           width: { ideal: 1920 },
           height: { ideal: 1080 },
-          ...(deviceId ? { deviceId: { exact: deviceId } } : { facingMode: 'environment' }),
+          ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
         },
       }
       const stream = await navigator.mediaDevices.getUserMedia(constraints)
       streamRef.current = stream
       if (videoRef.current) {
         videoRef.current.srcObject = stream
+        // Explicitly call play() — autoPlay alone isn't reliable in all browsers
+        try {
+          await videoRef.current.play()
+        } catch {
+          // play() rejection is non-fatal; the video may still render
+        }
       }
       setState('active')
 
@@ -78,6 +84,9 @@ export default function WebcamCapture({ onCapture }: Props) {
     const video = videoRef.current
     const canvas = canvasRef.current
     if (!video || !canvas) return
+
+    // Video not ready yet
+    if (video.readyState < 2 || video.videoWidth === 0) return
 
     canvas.width = video.videoWidth
     canvas.height = video.videoHeight
