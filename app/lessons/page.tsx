@@ -7,6 +7,7 @@ import { generateClient } from 'aws-amplify/api'
 import MathRenderer from '../components/MathRenderer'
 import MathInput from '../components/MathInput'
 import StudentNav from '../components/StudentNav'
+import SubmissionMethodPicker from '../components/SubmissionMethodPicker'
 import { apiFetch } from '@/app/lib/apiFetch'
 import { useRoleGuard } from '@/app/hooks/useRoleGuard'
 
@@ -182,11 +183,9 @@ function LessonPageInner() {
   const searchParams = useSearchParams()
   const [notes, setNotes] = useState('')
   const [files, setFiles] = useState<UploadedFile[]>([])
-  const [showPhotoTips, setShowPhotoTips] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState('')
-  const fileInputRef = useRef<HTMLInputElement>(null)
   const [planItem, setPlanItem] = useState<WeeklyPlanItemData | null>(null)
   const [loading, setLoading] = useState(true)
   const [lessonTemplate, setLessonTemplate] = useState<LessonTemplateData | null>(null)
@@ -1187,68 +1186,31 @@ function LessonPageInner() {
                   )}
 
                   {showUpload && (
-                    <div style={{ marginBottom: '24px' }}>
-                      {/* Header row with label + photo tips toggle */}
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                        <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--gray-dark)' }}>
-                          {hasShowWork ? 'Upload your show-work sheet' : 'Photos of your work'}
-                        </label>
-                        <button
-                          onClick={() => setShowPhotoTips(t => !t)}
-                          style={{ background: 'none', border: '1px solid var(--gray-light)', borderRadius: '20px', padding: '3px 10px', fontSize: '11px', fontWeight: 600, color: 'var(--plum)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                          {showPhotoTips ? 'Hide tips' : 'Photo tips'}
-                        </button>
-                      </div>
-
-                      {/* Collapsible photo tips panel */}
-                      {showPhotoTips && (
-                        <div style={{ background: 'rgba(123,79,166,0.05)', border: '1px solid var(--plum-mid)', borderRadius: '10px', padding: '14px 16px', marginBottom: '12px' }}>
-                          <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--plum)', marginBottom: '10px', letterSpacing: '0.5px', textTransform: 'uppercase' }}>📷 How to take a great photo</div>
-                          <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '7px' }}>
-                            {[
-                              ['📱', 'Hold your phone upright (portrait), not sideways'],
-                              ['☀️', 'Use good lighting — no shadows covering your work'],
-                              ['📐', 'Lay the paper flat on a table and shoot straight down'],
-                              ['🔍', 'Get close enough that all writing fills the frame'],
-                              ['✅', 'Check the photo before uploading — is everything readable?'],
-                            ].map(([icon, tip], i) => (
-                              <li key={i} style={{ display: 'flex', gap: '8px', fontSize: '12px', color: 'var(--foreground)', lineHeight: 1.4 }}>
-                                <span style={{ flexShrink: 0 }}>{icon}</span>
-                                <span>{tip}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-
-                      {hasShowWork && (
-                        <p style={{ fontSize: '12px', color: 'var(--gray-mid)', margin: '0 0 8px' }}>
-                          Print the show-work sheet above, complete the problems on paper, then take a photo and upload it here.
-                        </p>
-                      )}
-
-                      {/* Drop zone */}
-                      <div onClick={() => fileInputRef.current?.click()} onDragOver={e => e.preventDefault()}
-                        onDrop={e => { e.preventDefault(); Array.from(e.dataTransfer.files).forEach(uploadFile) }}
-                        style={{ border: '2px dashed var(--plum-mid)', borderRadius: 'var(--radius)', padding: files.length > 0 ? '16px' : '28px', textAlign: 'center', cursor: 'pointer', marginBottom: '12px', background: 'rgba(123,79,166,0.03)', transition: 'background 0.15s' }}>
-                        <input ref={fileInputRef} type="file" accept="image/*,.heic,.heif,.pdf,application/pdf" multiple style={{ display: 'none' }}
-                          onChange={e => { if (e.target.files) Array.from(e.target.files).forEach(uploadFile) }} />
-                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--plum)" strokeWidth="1.5" style={{ marginBottom: '8px', opacity: 0.7 }}>
-                          <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-                          <circle cx="12" cy="13" r="4"/>
-                        </svg>
-                        <div style={{ color: 'var(--plum)', fontSize: '14px', fontWeight: 600 }}>
-                          {files.length > 0 ? 'Add another photo' : 'Tap to take a photo or choose a file'}
-                        </div>
-                        <div style={{ color: 'var(--gray-mid)', fontSize: '11px', marginTop: '4px' }}>JPG, PNG, HEIC, PDF</div>
-                      </div>
+                    <>
+                      <SubmissionMethodPicker
+                        lessonId={planItem?.lesson?.id || itemId || ''}
+                        files={files}
+                        onUploadFile={uploadFile}
+                        onAddQrFiles={(keys) => {
+                          keys.forEach(key => {
+                            const name = key.split('/').pop() || 'phone-upload.jpg'
+                            setFiles(prev => [...prev, {
+                              uid: `qr-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+                              name: `📱 ${name}`,
+                              key,
+                              status: 'done',
+                              progress: 100,
+                            }])
+                          })
+                        }}
+                        hasShowWork={hasShowWork}
+                      />
 
                       {/* File previews */}
                       {files.length > 0 && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '24px' }}>
                           {files.map((f, i) => (
-                            <div key={i} style={{ borderRadius: '10px', border: `1px solid ${f.warning && f.status === 'done' ? '#fde68a' : 'var(--gray-light)'}`, overflow: 'hidden', background: f.warning && f.status === 'done' ? '#fffbeb' : 'var(--gray-light)' }}>
+                            <div key={f.uid} style={{ borderRadius: '10px', border: `1px solid ${f.warning && f.status === 'done' ? '#fde68a' : 'var(--gray-light)'}`, overflow: 'hidden', background: f.warning && f.status === 'done' ? '#fffbeb' : 'var(--gray-light)' }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px' }}>
                                 {/* Thumbnail */}
                                 {f.previewUrl ? (
@@ -1288,7 +1250,7 @@ function LessonPageInner() {
                           ))}
                         </div>
                       )}
-                    </div>
+                    </>
                   )}
 
                   <div style={{ marginBottom: '20px' }}>

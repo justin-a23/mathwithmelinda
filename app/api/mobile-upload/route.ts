@@ -1,31 +1,42 @@
 import { PutObjectCommand } from '@aws-sdk/client-s3'
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAuth } from '@/app/lib/auth'
-import { s3 } from '../../lib/s3'
+import { s3 } from '@/app/lib/s3'
+import { validateToken, incrementUploadCount } from '@/app/lib/uploadToken'
 import { validateFileType, isFileTooLarge, MAX_FILE_SIZE } from '@/app/lib/fileValidation'
 import { checkRateLimit, getClientIp } from '@/app/lib/rateLimit'
 
+/**
+ * Mobile upload endpoint — authenticated by upload token, NOT Cognito.
+ * The phone has no Cognito session; the token IS the authorization.
+ */
 export async function POST(request: NextRequest) {
-  const auth = await requireAuth(request)
-  if (auth instanceof NextResponse) return auth
+  const token = request.nextUrl.searchParams.get('token')
+  if (!token) {
+    return NextResponse.json({ error: 'Missing upload token' }, { status: 401 })
+  }
 
   // Rate limit: 20 uploads per minute per IP
   const ip = getClientIp(request)
-  if (!checkRateLimit(`submit:${ip}`, 20, 60_000)) {
+  if (!checkRateLimit(`mobile:${ip}`, 20, 60_000)) {
     return NextResponse.json({ error: 'Too many uploads. Please wait a moment.' }, { status: 429 })
+  }
+
+  // Validate the upload token
+  const tokenCheck = await validateToken(token)
+  if (!tokenCheck.valid) {
+    const status = tokenCheck.reason === 'Token expired' ? 410 : 401
+    return NextResponse.json({ error: tokenCheck.reason }, { status })
   }
 
   try {
     const formData = await request.formData()
     const file = formData.get('file') as File
-    const studentId = formData.get('studentId') as string
-    const lessonId = formData.get('lessonId') as string
 
     if (!file) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
     }
 
-    // File size check (before reading full buffer into memory)
+    // File size check
     if (isFileTooLarge(file.size)) {
       return NextResponse.json(
         { error: `File too large. Maximum size is ${MAX_FILE_SIZE / 1024 / 1024}MB.` },
@@ -36,42 +47,42 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
 
-    // Server-side file type validation via magic bytes
+    // Magic-byte file type validation
     const typeCheck = validateFileType(buffer)
     if (!typeCheck.valid) {
       return NextResponse.json(
-        { error: `Unsupported file type (${typeCheck.detectedType}). Please upload a JPEG, PNG, HEIC, WebP, or PDF file.` },
+        { error: `Unsupported file type. Please upload a photo or PDF.` },
         { status: 400 }
       )
     }
 
-    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+    // HEIC → JPEG conversion (same logic as /api/submit)
     const isHeic = file.type === 'image/heic' || file.type === 'image/heif'
       || file.name.toLowerCase().endsWith('.heic') || file.name.toLowerCase().endsWith('.heif')
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
 
     let uploadBuffer: Buffer
     let contentType: string
     let filename: string
 
     if (isPdf) {
-      // Upload PDF as-is
       uploadBuffer = buffer
       contentType = 'application/pdf'
       filename = file.name
     } else if (isHeic) {
-      // Convert HEIC/HEIF to JPEG (iPhone format)
       const heicConvert = (await import('heic-convert')).default
       const converted = await heicConvert({ buffer, format: 'JPEG', quality: 0.9 })
       uploadBuffer = Buffer.from(converted)
       contentType = 'image/jpeg'
       filename = file.name.replace(/\.[^.]+$/, '.jpg')
     } else {
-      // JPG, PNG, etc — upload directly, no processing needed
       uploadBuffer = buffer
       contentType = file.type || 'image/jpeg'
       filename = file.name
     }
 
+    // S3 key: same pattern as /api/submit for consistency
+    const { studentId, lessonId } = tokenCheck
     const key = `submissions/${studentId}/${lessonId}/${Date.now()}-${filename}`
 
     await s3.send(new PutObjectCommand({
@@ -81,14 +92,20 @@ export async function POST(request: NextRequest) {
       ContentType: contentType,
     }))
 
-    return NextResponse.json({ key, url: `https://mathwithmelinda-submissions.s3.us-east-1.amazonaws.com/${key}` })
+    // Atomically increment upload count (rejects if maxUploads exceeded)
+    const incremented = await incrementUploadCount(token, key)
+    if (!incremented) {
+      // Rare race condition — file already uploaded to S3 but token maxed out.
+      // The file is harmless in S3; just tell the client they're done.
+      return NextResponse.json({ error: 'Maximum uploads reached' }, { status: 409 })
+    }
+
+    return NextResponse.json({ key, success: true })
   } catch (err: any) {
-    console.error('Error processing submission:', err)
-    // Surface actionable error details — S3 credential issues show up here in production
-    const message = err?.message || err?.name || 'Failed to process upload'
-    const code = err?.name || err?.Code || ''
-    if (code === 'CredentialsProviderError' || message.includes('credentials') || message.includes('Could not load')) {
-      return NextResponse.json({ error: 'Server configuration error: AWS credentials not set. Contact your administrator.' }, { status: 500 })
+    console.error('Error in mobile upload:', err)
+    const message = err?.message || 'Failed to process upload'
+    if (message.includes('credentials') || message.includes('Could not load')) {
+      return NextResponse.json({ error: 'Server configuration error' }, { status: 500 })
     }
     return NextResponse.json({ error: message }, { status: 500 })
   }
