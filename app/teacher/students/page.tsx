@@ -265,6 +265,7 @@ export default function StudentsPage() {
   const [searchQuery, setSearchQuery] = useState('')
 
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState({ firstName: '', lastName: '', email: '', gradeLevel: '', courseId: '' })
   const [savingEdit, setSavingEdit] = useState(false)
 
@@ -1386,7 +1387,16 @@ export default function StudentsPage() {
                     {/* Info */}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                        <span style={{ fontWeight: 600, fontSize: '15px', color: 'var(--foreground)' }}>{s.firstName} {s.lastName}</span>
+                        <button
+                          onClick={() => {
+                            if (expandedId === s.id) { setExpandedId(null) }
+                            else { setExpandedId(s.id); setEditingId(null) }
+                          }}
+                          style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                        >
+                          <span style={{ fontSize: '10px', color: 'var(--gray-mid)', transition: 'transform 0.15s', transform: expandedId === s.id ? 'rotate(90deg)' : 'rotate(0deg)', display: 'inline-block' }}>▶</span>
+                          <span style={{ fontWeight: 600, fontSize: '15px', color: 'var(--foreground)' }}>{s.firstName} {s.lastName}</span>
+                        </button>
                         {courseName && (
                           <span style={{ background: 'var(--plum-light)', color: 'var(--plum)', fontSize: '11px', fontWeight: 500, padding: '2px 8px', borderRadius: '20px' }}>{courseName}</span>
                         )}
@@ -1426,7 +1436,7 @@ export default function StudentsPage() {
                         </button>
                       )}
                       <button
-                        onClick={() => isEditing ? setEditingId(null) : startEdit(s)}
+                        onClick={() => { if (isEditing) { setEditingId(null) } else { startEdit(s); setExpandedId(null) } }}
                         style={{ background: isEditing ? 'var(--plum-light)' : 'transparent', color: isEditing ? 'var(--plum)' : 'var(--gray-mid)', border: '1px solid ' + (isEditing ? 'var(--plum-mid)' : 'var(--gray-light)'), padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}>
                         {isEditing ? 'Cancel' : 'Edit'}
                       </button>
@@ -1442,6 +1452,152 @@ export default function StudentsPage() {
                       </button>
                     </div>
                   </div>
+
+                  {/* Student detail panel */}
+                  {expandedId === s.id && !isEditing && (() => {
+                    // Resolve linked parents for this student
+                    const linkedParentIds = allParentStudents
+                      .filter(ps => ps.studentEmail.toLowerCase() === s.email.toLowerCase())
+                      .map(ps => ps.parentId)
+                    const linkedParents = [...new Set(linkedParentIds)].map(pid => {
+                      const profile = parentProfiles.find(p => p.userId === pid)
+                      return profile ? {
+                        name: `${profile.firstName} ${profile.lastName}`.trim(),
+                        email: profile.email,
+                        userId: profile.userId,
+                        linked: true,
+                      } : { name: 'Unknown', email: '', userId: pid, linked: true }
+                    })
+                    // Pending invites (not yet used)
+                    const pendingInvites = studentParentInvites.filter(inv => !inv.used)
+                    const planLabels: Record<string, string> = { video_only: 'Video Only', virtual: 'Virtual Student', coop: 'Co-op Student' }
+                    const planLabel = s.planType ? (planLabels[s.planType] || s.planType) : 'Not set'
+
+                    return (
+                      <div style={{ borderTop: '1px solid var(--gray-light)', padding: '20px 24px', background: 'rgba(123,79,166,0.02)' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '24px' }}>
+
+                          {/* ── Student Info ── */}
+                          <div>
+                            <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--plum)', marginBottom: '12px' }}>Student Info</div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+                              <div style={{ width: '52px', height: '52px', borderRadius: '50%', overflow: 'hidden', border: '2px solid var(--plum-mid)', flexShrink: 0, background: 'var(--plum-light)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                {profilePicUrls[s.id] ? (
+                                  <img src={profilePicUrls[s.id]} alt={s.firstName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                ) : (
+                                  <span style={{ fontSize: '18px', fontWeight: 700, color: 'var(--plum)' }}>{s.firstName.charAt(0)}{s.lastName.charAt(0)}</span>
+                                )}
+                              </div>
+                              <div>
+                                <div style={{ fontWeight: 600, fontSize: '15px', color: 'var(--foreground)' }}>{s.firstName} {s.lastName}</div>
+                                <div style={{ fontSize: '12px', color: 'var(--gray-mid)' }}>{s.email}</div>
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '13px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                <span style={{ color: 'var(--gray-mid)' }}>Plan Type</span>
+                                <span style={{ color: 'var(--foreground)', fontWeight: 500 }}>{planLabel}</span>
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                <span style={{ color: 'var(--gray-mid)' }}>Grade Level</span>
+                                <span style={{ color: 'var(--foreground)', fontWeight: 500 }}>{s.gradeLevel ? `Grade ${s.gradeLevel}` : 'Not set'}</span>
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                <span style={{ color: 'var(--gray-mid)' }}>Status</span>
+                                <span style={{ color: s.status === 'active' ? '#16a34a' : 'var(--foreground)', fontWeight: 500 }}>{s.status || 'active'}</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* ── Academic ── */}
+                          <div>
+                            <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--plum)', marginBottom: '12px' }}>Academic</div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '13px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                <span style={{ color: 'var(--gray-mid)' }}>Course</span>
+                                <span style={{ color: 'var(--foreground)', fontWeight: 500 }}>{courseName || 'Not assigned'}</span>
+                              </div>
+                              {enrolledSemesters.length > 0 ? enrolledSemesters.map(sem => (
+                                <div key={sem.id} style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: '8px', padding: '8px 12px', marginTop: '4px' }}>
+                                  <div style={{ fontWeight: 500, color: 'var(--foreground)', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    {sem.name}
+                                    {sem.isActive && <span style={{ background: '#ede9fe', color: '#6d28d9', fontSize: '9px', fontWeight: 700, padding: '1px 6px', borderRadius: '10px' }}>ACTIVE</span>}
+                                  </div>
+                                  {sem.startDate && sem.endDate && (
+                                    <div style={{ fontSize: '11px', color: 'var(--gray-mid)', marginTop: '2px' }}>
+                                      {new Date(sem.startDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – {new Date(sem.endDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                    </div>
+                                  )}
+                                </div>
+                              )) : (
+                                <div style={{ color: 'var(--gray-mid)', fontSize: '13px', fontStyle: 'italic' }}>No semester enrollment</div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* ── Parents/Guardians ── */}
+                          <div>
+                            <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--plum)', marginBottom: '12px' }}>Parents / Guardians</div>
+                            {linkedParents.length === 0 && pendingInvites.length === 0 ? (
+                              <div style={{ color: 'var(--gray-mid)', fontSize: '13px', fontStyle: 'italic', marginBottom: '8px' }}>No parents linked yet</div>
+                            ) : (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                {linkedParents.map((parent, idx) => (
+                                  <div key={idx} style={{ background: 'var(--background)', border: '1px solid #D1FAE5', borderRadius: '8px', padding: '8px 12px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#16a34a', flexShrink: 0 }} />
+                                      <span style={{ fontWeight: 500, fontSize: '13px', color: 'var(--foreground)' }}>{parent.name || 'Parent'}</span>
+                                      <span style={{ fontSize: '10px', color: '#065F46', fontWeight: 600 }}>LINKED</span>
+                                    </div>
+                                    <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginTop: '2px', paddingLeft: '12px' }}>{parent.email}</div>
+                                  </div>
+                                ))}
+                                {pendingInvites.map(inv => (
+                                  <div key={inv.id} style={{ background: 'var(--background)', border: '1px solid #FDE68A', borderRadius: '8px', padding: '8px 12px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#f59e0b', flexShrink: 0 }} />
+                                      <span style={{ fontWeight: 500, fontSize: '13px', color: 'var(--foreground)' }}>{inv.parentFirstName} {inv.parentLastName}</span>
+                                      <span style={{ fontSize: '10px', color: '#92400E', fontWeight: 600 }}>PENDING</span>
+                                    </div>
+                                    {inv.parentEmail && <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginTop: '2px', paddingLeft: '12px' }}>{inv.parentEmail}</div>}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {(linkedParents.length + pendingInvites.length) < 2 && (
+                              <button
+                                onClick={() => { setInviteParentStudent(s); setInviteParentFirstName(''); setInviteParentLastName(''); setInviteParentEmail(''); setExpandedId(null) }}
+                                style={{ marginTop: '8px', background: 'transparent', color: '#0369a1', border: '1px solid #93C5FD', padding: '5px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}>
+                                + Invite Parent
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Quick links row */}
+                        <div style={{ marginTop: '16px', paddingTop: '12px', borderTop: '1px solid var(--gray-light)', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                          <button onClick={() => { startEdit(s); setExpandedId(null) }}
+                            style={{ background: 'var(--plum-light)', color: 'var(--plum)', border: 'none', padding: '6px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 600 }}>
+                            Edit Profile
+                          </button>
+                          <a href={`mailto:${s.email}`}
+                            style={{ background: 'var(--background)', color: 'var(--foreground)', border: '1px solid var(--gray-light)', padding: '6px 14px', borderRadius: '6px', fontSize: '12px', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                            ✉ Email Student
+                          </a>
+                          <button onClick={() => router.push('/teacher/messages')}
+                            style={{ background: 'var(--background)', color: 'var(--foreground)', border: '1px solid var(--gray-light)', padding: '6px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}>
+                            💬 Message Student
+                          </button>
+                          {s.courseId && (
+                            <button onClick={() => router.push(`/teacher/library/${s.courseId}`)}
+                              style={{ background: 'var(--background)', color: 'var(--foreground)', border: '1px solid var(--gray-light)', padding: '6px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}>
+                              📚 View Course
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })()}
 
                   {/* Edit form */}
                   {isEditing && (
