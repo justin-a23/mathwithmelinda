@@ -484,11 +484,11 @@ export default function Dashboard() {
     loadDashboard()
   }, [checking])
 
-  // ── Student daily briefing ──────────────────────────────────────────
+  // ── Student daily briefing (AI note + verse cached; stats computed live) ──
   useEffect(() => {
-    if (loading || !profileName || !weeklyPlans) return
+    if (loading || !profileName) return
 
-    // Check localStorage cache — one briefing per day
+    // Check localStorage cache — AI note + verse cached per day
     const cacheKey = 'mwm:studentBriefingCache'
     const todayStr = new Date().toISOString().split('T')[0]
     try {
@@ -499,31 +499,13 @@ export default function Dashboard() {
       }
     } catch { /* proceed to fetch */ }
 
-    // Count assignments due this week and overdue
-    const now = new Date()
-    let assignmentsDue = 0
-    let assignmentsOverdue = 0
-    for (const plan of weeklyPlans) {
-      for (const item of (plan.items?.items || [])) {
-        if (!item.isPublished) continue
-        if (item.lesson?.id && submittedLessonIds.has(item.lesson.id)) continue
-        assignmentsDue++
-        if (item.dueTime) {
-          const due = new Date(item.dueTime.includes('T') ? item.dueTime : item.dueTime + 'T23:59:59')
-          if (!isNaN(due.getTime()) && due < now) assignmentsOverdue++
-        }
-      }
-    }
-
     setBriefingLoading(true)
     apiFetch('/api/student-briefing', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         studentName: profileName.split(' ')[0],
-        assignmentsDue,
-        assignmentsOverdue,
-        dayOfWeek: now.toLocaleDateString('en-US', { weekday: 'long' }),
+        dayOfWeek: new Date().toLocaleDateString('en-US', { weekday: 'long' }),
       }),
     })
       .then(r => r.json())
@@ -535,7 +517,26 @@ export default function Dashboard() {
       })
       .catch(() => { /* non-critical */ })
       .finally(() => setBriefingLoading(false))
-  }, [loading, profileName, weeklyPlans, submittedLessonIds])
+  }, [loading, profileName])
+
+  // Live stats — recomputed on every render so they're never stale
+  const liveAssignmentStats = (() => {
+    const now = new Date()
+    let remaining = 0
+    let overdue = 0
+    for (const plan of weeklyPlans) {
+      for (const item of (plan.items?.items || [])) {
+        if (!item.isPublished) continue
+        if (item.lesson?.id && submittedLessonIds.has(item.lesson.id)) continue
+        remaining++
+        if (item.dueTime) {
+          const due = new Date(item.dueTime.includes('T') ? item.dueTime : item.dueTime + 'T23:59:59')
+          if (!isNaN(due.getTime()) && due < now) overdue++
+        }
+      }
+    }
+    return { remaining, overdue }
+  })()
 
   async function handlePicUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -883,8 +884,30 @@ export default function Dashboard() {
                   </div>
                 ) : (
                   <div>
-                    {briefing.split('\n\n').map((paragraph, i) => (
-                      <p key={i} style={{ fontSize: '14px', color: 'var(--foreground)', lineHeight: '1.65', margin: i === 0 ? '0 0 8px' : '0', fontStyle: i > 0 && paragraph.startsWith('"') ? 'italic' : 'normal' }}>
+                    {/* AI personal note (first paragraph) */}
+                    {briefing.split('\n\n').slice(0, 1).map((paragraph, i) => (
+                      <p key={i} style={{ fontSize: '14px', color: 'var(--foreground)', lineHeight: '1.65', margin: '0 0 10px' }}>
+                        {paragraph}
+                      </p>
+                    ))}
+
+                    {/* Live assignment stats — always current */}
+                    {!loading && weeklyPlans.length > 0 && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '10px', fontSize: '13px' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: liveAssignmentStats.remaining === 0 ? '#16a34a' : 'var(--foreground)', fontWeight: 600 }}>
+                          {liveAssignmentStats.remaining === 0 ? '✅ All caught up!' : `📋 ${liveAssignmentStats.remaining} assignment${liveAssignmentStats.remaining !== 1 ? 's' : ''} remaining`}
+                        </span>
+                        {liveAssignmentStats.overdue > 0 && (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#dc2626', fontWeight: 600 }}>
+                            · {liveAssignmentStats.overdue} overdue
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Scripture/prayer (remaining paragraphs) */}
+                    {briefing.split('\n\n').slice(1).map((paragraph, i) => (
+                      <p key={i} style={{ fontSize: '13px', color: 'var(--gray-mid)', lineHeight: '1.6', margin: 0, fontStyle: paragraph.startsWith('"') ? 'italic' : 'normal' }}>
                         {paragraph}
                       </p>
                     ))}

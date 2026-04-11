@@ -7,7 +7,7 @@ export async function POST(req: NextRequest) {
   if (auth instanceof NextResponse) return auth
 
   try {
-    const { studentName, assignmentsDue, assignmentsOverdue, dayOfWeek } = await req.json()
+    const { studentName, dayOfWeek } = await req.json()
 
     const encouragement = getStudentDailyEncouragement()
 
@@ -17,10 +17,8 @@ export async function POST(req: NextRequest) {
     }
 
     const context = [
-      studentName ? `Student's name: ${studentName}` : null,
-      `Day: ${dayOfWeek || new Date().toLocaleDateString('en-US', { weekday: 'long' })}`,
-      assignmentsDue != null ? `Assignments due this week: ${assignmentsDue}` : null,
-      assignmentsOverdue != null && assignmentsOverdue > 0 ? `Overdue assignments: ${assignmentsOverdue}` : null,
+      studentName ? `Student's first name: ${studentName}` : null,
+      `Day of the week: ${dayOfWeek || new Date().toLocaleDateString('en-US', { weekday: 'long' })}`,
     ].filter(Boolean).join('\n')
 
     const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -32,24 +30,23 @@ export async function POST(req: NextRequest) {
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 100,
+        max_tokens: 80,
         system: `You are a warm, encouraging assistant for a homeschool math student (grades 6-9).
-Write a brief 1-sentence personal encouragement based on their current status.
-Be friendly and upbeat — like a coach giving a quick pep talk before class.
-If they have overdue work, gently encourage them to catch up without guilt.
-If they're all caught up, celebrate that.
-Use their first name once. Keep it under 30 words. No bullet points.`,
+Write a brief 1-sentence personal greeting for the start of their day.
+Be friendly and upbeat — like a kind teacher greeting them in the morning.
+Match the energy to the day (Monday = fresh start, Wednesday = midweek push, Friday = finish strong).
+Do NOT mention assignments, grades, or anything about their workload — that info is shown separately.
+Use their first name once. Keep it under 25 words. No bullet points or lists.`,
         messages: [
           {
             role: 'user',
-            content: `Here is the student's current status:\n\n${context}\n\nWrite a short personal encouragement.`,
+            content: `${context}\n\nWrite a short, warm greeting.`,
           },
         ],
       }),
     })
 
     if (!res.ok) {
-      // API failed — still return the verse/prayer
       return NextResponse.json({ briefing: encouragement, encouragement })
     }
 
@@ -62,7 +59,6 @@ Use their first name once. Keep it under 30 words. No bullet points.`,
     return NextResponse.json({ briefing, encouragement })
   } catch (err: any) {
     console.error('Student briefing error:', err)
-    // Always return something useful even on failure
     try {
       const encouragement = getStudentDailyEncouragement()
       return NextResponse.json({ briefing: encouragement, encouragement })
