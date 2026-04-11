@@ -17,6 +17,7 @@ const LIST_PARENT_STUDENTS = /* GraphQL */ `
   }
 `
 
+// Fetch student profiles, semesters, and syllabi in one batch
 const GET_STUDENT_PROFILE_BY_EMAIL = /* GraphQL */ `
   query GetStudentProfileByEmail($email: String!) {
     listStudentProfiles(filter: { email: { eq: $email } }, limit: 500) {
@@ -25,9 +26,9 @@ const GET_STUDENT_PROFILE_BY_EMAIL = /* GraphQL */ `
   }
 `
 
-const LIST_SEMESTERS = /* GraphQL */ `
-  query ListSemesters {
-    listSemesters(limit: 200) {
+const LIST_SEMESTERS_FOR_COURSE = /* GraphQL */ `
+  query ListSemestersForCourse($courseId: ID!) {
+    listSemesters(filter: { courseId: { eq: $courseId } }, limit: 50) {
       items {
         id name startDate endDate isActive courseId
         course { id title }
@@ -36,9 +37,9 @@ const LIST_SEMESTERS = /* GraphQL */ `
   }
 `
 
-const LIST_ALL_SYLLABI = /* GraphQL */ `
-  query ListAllSyllabi {
-    listSyllabi(limit: 200) {
+const LIST_SYLLABI_FOR_SEMESTER = /* GraphQL */ `
+  query ListSyllabiForSemester($semesterId: ID!) {
+    listSyllabi(filter: { semesterId: { eq: $semesterId } }, limit: 10) {
       items { semesterId pdfKey publishedPdfKey publishedAt }
     }
   }
@@ -113,7 +114,7 @@ export default function ParentSyllabusPage() {
     setNoSyllabus(false)
     setSyllabusData(null)
     try {
-      // 1. Get student's courseId via their profile
+      // 1. Get student's courseId
       const profileRes = await (client.graphql({
         query: GET_STUDENT_PROFILE_BY_EMAIL,
         variables: { email },
@@ -122,22 +123,22 @@ export default function ParentSyllabusPage() {
       if (!profiles.length || !profiles[0].courseId) { setNoSyllabus(true); return }
       const courseId = profiles[0].courseId
 
-      // 2. Find active or most recent semester for that course
+      // 2. Get semesters for this course only (not all semesters)
       const semRes = await (client.graphql({
-        query: LIST_SEMESTERS,
+        query: LIST_SEMESTERS_FOR_COURSE,
+        variables: { courseId },
       }) as any)
-      const allSems = semRes.data.listSemesters.items
-      const sems = allSems.filter((s: any) => s.courseId === courseId)
+      const sems = semRes.data.listSemesters.items
       const sorted = [...sems].sort((a: any, b: any) => b.startDate.localeCompare(a.startDate))
       const active = sorted.find((s: any) => s.isActive) || sorted[0]
       if (!active) { setNoSyllabus(true); return }
 
-      // 3. Get published syllabus for this semester (fetch all, filter client-side)
+      // 3. Get syllabi for this semester only (not all syllabi)
       const sylRes = await (client.graphql({
-        query: LIST_ALL_SYLLABI,
+        query: LIST_SYLLABI_FOR_SEMESTER,
+        variables: { semesterId: active.id },
       }) as any)
-      const allSyllabi = sylRes.data.listSyllabi.items
-      const syllabi = allSyllabi.filter((s: any) => s.semesterId === active.id)
+      const syllabi = sylRes.data.listSyllabi.items
       if (!syllabi.length || !syllabi[0].publishedPdfKey) { setNoSyllabus(true); return }
 
       const syl = syllabi[0]
@@ -192,6 +193,11 @@ export default function ParentSyllabusPage() {
             onClick={toggleTheme}
             style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'white', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '14px' }}>
             {theme === 'light' ? '🌙 Dark' : '☀️ Light'}
+          </button>
+          <button
+            onClick={() => router.push('/parent/messages')}
+            style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.8)', padding: '8px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px' }}>
+            Messages
           </button>
           <button
             onClick={() => router.push('/parent')}
