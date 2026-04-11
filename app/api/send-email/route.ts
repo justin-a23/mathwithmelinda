@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import crypto from 'crypto'
 import nodemailer from 'nodemailer'
 import { requireAuth } from '@/app/lib/auth'
 
@@ -23,14 +24,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields: to, subject, html or text' }, { status: 400 })
     }
 
+    const fromEmail = process.env.SES_FROM_EMAIL || 'melinda@mathwithmelinda.com'
+    const messageId = `<${crypto.randomUUID()}@mathwithmelinda.com>`
+
     await transporter.sendMail({
-      from: `"Math with Melinda" <${process.env.SES_FROM_EMAIL}>`,
+      from: `"Math with Melinda" <${fromEmail}>`,
+      replyTo: `"Melinda" <melinda@mathwithmelinda.com>`,
       to,
       subject,
       html,
       text,
+      messageId,
       headers: {
-        'List-Unsubscribe': `<mailto:${process.env.SES_FROM_EMAIL}?subject=unsubscribe>`,
+        'List-Unsubscribe': `<mailto:${fromEmail}?subject=unsubscribe>`,
         'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
       },
     })

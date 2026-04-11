@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import crypto from 'crypto'
 import nodemailer from 'nodemailer'
 import { requireTeacher } from '@/app/lib/auth'
 
@@ -111,10 +112,16 @@ export async function POST(req: NextRequest) {
       try {
         await transporter.sendMail({
           from: `"Math with Melinda" <${fromEmail}>`,
+          replyTo: `"Melinda" <melinda@mathwithmelinda.com>`,
           to: email,
           subject,
           html,
           text,
+          messageId: `<${crypto.randomUUID()}@mathwithmelinda.com>`,
+          headers: {
+            'List-Unsubscribe': `<mailto:${fromEmail}?subject=unsubscribe>`,
+            'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+          },
         })
         sent++
       } catch (err) {
