@@ -98,6 +98,7 @@ export default function TeacherNav({ ungradedCount: propUngraded, unreadCount: p
   const isLessons = pathname.startsWith('/teacher/library')
   const isGradebook = pathname === '/teacher/gradebook'
   const isStudents = pathname === '/teacher/students'
+  const isPayments = pathname === '/teacher/payments'
   const isTerms = pathname === '/teacher/semesters'
   const isPlans = pathname === '/teacher/plans'
   const isSyllabi = pathname === '/teacher/syllabus'
@@ -237,6 +238,7 @@ export default function TeacherNav({ ungradedCount: propUngraded, unreadCount: p
         {secondaryLink('Students', '/teacher/students', isStudents, pendingStudents)}
         {secondaryLink('Meetings', '/teacher/zoom', isZoom)}
         {secondaryLink('Academic Year', '/teacher/semesters', isTerms)}
+        {secondaryLink('Payments', '/teacher/payments', isPayments)}
         {secondaryLink('Syllabi', '/teacher/syllabus', isSyllabi)}
       </div>
 
