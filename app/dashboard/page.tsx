@@ -244,6 +244,9 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
 
+  const [briefing, setBriefing] = useState('')
+  const [briefingLoading, setBriefingLoading] = useState(false)
+
   const [pendingApproval, setPendingApproval] = useState(false)
   const [isDeclined, setIsDeclined] = useState(false)
   const [declinedReason, setDeclinedReason] = useState<string | null>(null)
@@ -480,6 +483,59 @@ export default function Dashboard() {
 
     loadDashboard()
   }, [checking])
+
+  // ── Student daily briefing ──────────────────────────────────────────
+  useEffect(() => {
+    if (loading || !profileName || !weeklyPlans) return
+
+    // Check localStorage cache — one briefing per day
+    const cacheKey = 'mwm:studentBriefingCache'
+    const todayStr = new Date().toISOString().split('T')[0]
+    try {
+      const cached = JSON.parse(localStorage.getItem(cacheKey) || '{}')
+      if (cached.date === todayStr && cached.text) {
+        setBriefing(cached.text)
+        return
+      }
+    } catch { /* proceed to fetch */ }
+
+    // Count assignments due this week and overdue
+    const now = new Date()
+    let assignmentsDue = 0
+    let assignmentsOverdue = 0
+    for (const plan of weeklyPlans) {
+      for (const item of (plan.items?.items || [])) {
+        if (!item.isPublished) continue
+        if (item.lesson?.id && submittedLessonIds.has(item.lesson.id)) continue
+        assignmentsDue++
+        if (item.dueTime) {
+          const due = new Date(item.dueTime.includes('T') ? item.dueTime : item.dueTime + 'T23:59:59')
+          if (!isNaN(due.getTime()) && due < now) assignmentsOverdue++
+        }
+      }
+    }
+
+    setBriefingLoading(true)
+    apiFetch('/api/student-briefing', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        studentName: profileName.split(' ')[0],
+        assignmentsDue,
+        assignmentsOverdue,
+        dayOfWeek: now.toLocaleDateString('en-US', { weekday: 'long' }),
+      }),
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.briefing) {
+          setBriefing(data.briefing)
+          try { localStorage.setItem(cacheKey, JSON.stringify({ date: todayStr, text: data.briefing })) } catch {}
+        }
+      })
+      .catch(() => { /* non-critical */ })
+      .finally(() => setBriefingLoading(false))
+  }, [loading, profileName, weeklyPlans, submittedLessonIds])
 
   async function handlePicUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -811,6 +867,33 @@ export default function Dashboard() {
             <p style={{ color: 'var(--gray-mid)', margin: 0 }}>Today is {today}. Here are your lessons.</p>
           </div>
         </div>
+
+        {/* ── Daily Encouragement ── */}
+        {(briefing || briefingLoading) && (
+          <div style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', padding: '20px 24px', marginBottom: '24px' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px' }}>
+              <div style={{ width: '36px', height: '36px', background: 'var(--plum-light)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: '2px' }}>
+                <span style={{ fontSize: '18px' }}>✨</span>
+              </div>
+              <div style={{ flex: 1 }}>
+                {briefingLoading ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--plum)', opacity: 0.4, animation: 'pulse 1.2s ease-in-out infinite' }} />
+                    <span style={{ fontSize: '14px', color: 'var(--gray-mid)', fontStyle: 'italic' }}>Getting your daily encouragement…</span>
+                  </div>
+                ) : (
+                  <div>
+                    {briefing.split('\n\n').map((paragraph, i) => (
+                      <p key={i} style={{ fontSize: '14px', color: 'var(--foreground)', lineHeight: '1.65', margin: i === 0 ? '0 0 8px' : '0', fontStyle: i > 0 && paragraph.startsWith('"') ? 'italic' : 'normal' }}>
+                        {paragraph}
+                      </p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {returnedSubmissions.length > 0 && (
           <div style={{ marginBottom: '32px' }}>
