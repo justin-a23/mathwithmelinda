@@ -533,7 +533,7 @@ PENDING STUDENT APPROVALS:
 
       <main style={{ maxWidth: '1100px', margin: '0 auto', padding: '40px 24px' }}>
 
-        {/* ── AI BRIEFING + TODAY'S MEETINGS ── */}
+        {/* ── AI BRIEFING + LIVE STATS + TODAY'S MEETINGS ── */}
         <div style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', padding: '22px 28px', marginBottom: '24px' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px', width: '100%' }}>
             <div style={{ width: '36px', height: '36px', background: 'var(--plum-light)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: '2px' }}>
@@ -542,12 +542,57 @@ PENDING STUDENT APPROVALS:
             <div style={{ flex: 1 }}>
               {briefingLoading ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--plum)', opacity: 0.4 }} />
+                  <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--plum)', opacity: 0.4, animation: 'pulse 1.2s ease-in-out infinite' }} />
                   <span style={{ fontSize: '14px', color: 'var(--gray-mid)', fontStyle: 'italic' }}>Getting your briefing…</span>
                 </div>
-              ) : briefing ? (
-                <p style={{ fontSize: '15px', color: 'var(--foreground)', lineHeight: '1.65', margin: 0 }}>{briefing}</p>
-              ) : (
+              ) : briefing ? (() => {
+                const paragraphs = briefing.split('\n\n')
+                const aiNote = paragraphs.slice(0, 1)
+                const encouragement = paragraphs.slice(1)
+
+                // Live stats from already-loaded data
+                const totalUngraded = weekStats.reduce((sum, s) => sum + Math.max(0, s.received - s.graded), 0)
+                const pendingCount = pendingStudents.length
+                const urgentAlerts = alerts.filter(a => a.level === 'urgent').length
+
+                return (
+                  <div>
+                    {/* AI personal note (cached per day) */}
+                    {aiNote.map((p, i) => (
+                      <p key={i} style={{ fontSize: '15px', color: 'var(--foreground)', lineHeight: '1.65', margin: '0 0 10px' }}>{p}</p>
+                    ))}
+
+                    {/* Live stats — refresh every 60s */}
+                    {!statsLoading && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '10px', fontSize: '13px', flexWrap: 'wrap' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600, color: totalUngraded === 0 ? '#16a34a' : 'var(--foreground)' }}>
+                          {totalUngraded === 0 ? '✅ All graded' : `📋 ${totalUngraded} to grade`}
+                        </span>
+                        {pendingCount > 0 && (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600, color: '#92400E' }}>
+                            · 👤 {pendingCount} pending approval{pendingCount !== 1 ? 's' : ''}
+                          </span>
+                        )}
+                        {urgentAlerts > 0 && (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600, color: '#dc2626' }}>
+                            · ⚠ {urgentAlerts} urgent
+                          </span>
+                        )}
+                        {todayMeetings.length > 0 && (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600, color: 'var(--foreground)' }}>
+                            · 🎥 {todayMeetings.length} meeting{todayMeetings.length !== 1 ? 's' : ''} today
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Scripture/prayer (cached per day) */}
+                    {encouragement.map((p, i) => (
+                      <p key={i} style={{ fontSize: '13px', color: 'var(--gray-mid)', lineHeight: '1.6', margin: 0, fontStyle: p.startsWith('"') ? 'italic' : 'normal' }}>{p}</p>
+                    ))}
+                  </div>
+                )
+              })() : (
                 <button
                   onClick={() => fetchMeetingsAndBriefing(true)}
                   style={{ background: 'none', border: 'none', color: 'var(--plum)', fontSize: '14px', cursor: 'pointer', padding: 0, fontFamily: 'var(--font-body)' }}
