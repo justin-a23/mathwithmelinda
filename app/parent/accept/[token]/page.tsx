@@ -2,7 +2,7 @@
 
 import { useRouter, useParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { getCurrentUser } from 'aws-amplify/auth'
+import { getCurrentUser, fetchAuthSession } from 'aws-amplify/auth'
 import { generateClient } from 'aws-amplify/api'
 
 const client = generateClient()
@@ -196,6 +196,22 @@ export default function AcceptInvitePage() {
           }
         }
       } catch { /* non-fatal — profile creation failure doesn't block the accept */ }
+
+      // Add user to the 'parent' Cognito group so login routing works
+      try {
+        const session = await fetchAuthSession()
+        const token = session.tokens?.accessToken?.toString()
+        if (token) {
+          await fetch('/api/add-to-group', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({ group: 'parent' }),
+          })
+        }
+      } catch { /* non-fatal — user can still access parent portal via direct URL */ }
 
       await client.graphql({
         query: updateParentInvite,

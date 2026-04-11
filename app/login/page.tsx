@@ -171,6 +171,13 @@ function LoginInner() {
           >
             {submitting ? 'Signing in…' : 'Sign In'}
           </button>
+
+          <p style={{ textAlign: 'center', fontSize: '13px', color: 'var(--gray-mid)', margin: 0 }}>
+            New student or parent?{' '}
+            <button type="button" onClick={() => router.push('/signup')} style={{ background: 'none', border: 'none', color: '#7B4FA6', cursor: 'pointer', fontWeight: 600, fontSize: '13px', padding: 0, fontFamily: 'var(--font-body)' }}>
+              Create an account
+            </button>
+          </p>
         </form>
       </main>
     </div>
