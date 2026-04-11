@@ -88,22 +88,21 @@ export default function PaymentsPage() {
   }, [selectedScheduleId])
 
   async function loadInitial() {
-    try {
-      const [schedulesRes, studentsRes, coursesRes] = await Promise.all([
-        apiFetch('/api/payments').then(r => r.json()),
-        client.graphql({ query: LIST_ACTIVE_STUDENTS }) as any,
-        client.graphql({ query: LIST_COURSES }) as any,
-      ])
-      const scheds: Schedule[] = schedulesRes.schedules || []
-      setSchedules(scheds)
-      if (scheds.length > 0) setSelectedScheduleId(scheds[0].scheduleId)
-      setStudents(studentsRes.data.listStudentProfiles.items)
-      setCourses(coursesRes.data.listCourses.items)
-    } catch (err) {
-      console.error('Error loading payment data:', err)
-    } finally {
-      setLoading(false)
-    }
+    // Load each independently so one failure doesn't block the others
+    const safe = (p: Promise<any>): Promise<any> => p.catch(err => { console.error('Payment load error:', err); return null })
+
+    const [schedulesRes, studentsRes, coursesRes] = await Promise.all([
+      safe(apiFetch('/api/payments').then(r => r.json())),
+      safe(client.graphql({ query: LIST_ACTIVE_STUDENTS }) as any),
+      safe(client.graphql({ query: LIST_COURSES }) as any),
+    ])
+
+    const scheds: Schedule[] = schedulesRes?.schedules || []
+    setSchedules(scheds)
+    if (scheds.length > 0) setSelectedScheduleId(scheds[0].scheduleId)
+    setStudents(studentsRes?.data?.listStudentProfiles?.items || [])
+    setCourses(coursesRes?.data?.listCourses?.items || [])
+    setLoading(false)
   }
 
   async function loadPayments(scheduleId: string) {

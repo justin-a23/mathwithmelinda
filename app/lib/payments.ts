@@ -80,7 +80,7 @@ export type Payment = {
 export async function createSchedule(input: Omit<PaymentSchedule, 'scheduleId' | 'createdAt'>): Promise<PaymentSchedule> {
   const schedule: PaymentSchedule = {
     ...input,
-    scheduleId: crypto.randomUUID(),
+    scheduleId: crypto.randomBytes(16).toString('hex').replace(/(.{8})(.{4})(.{4})(.{4})(.{12})/, '$1-$2-$3-$4-$5'),
     createdAt: new Date().toISOString(),
   }
   await ddb.send(new PutCommand({ TableName: SCHEDULES_TABLE, Item: schedule }))
@@ -157,7 +157,7 @@ export async function addStudentToSchedule(
 
   // Deposit
   const deposit: Payment = {
-    paymentId: crypto.randomUUID(),
+    paymentId: crypto.randomBytes(16).toString('hex').replace(/(.{8})(.{4})(.{4})(.{4})(.{12})/, '$1-$2-$3-$4-$5'),
     scheduleId: schedule.scheduleId,
     studentId: student.studentId,
     studentName: student.studentName,
@@ -178,7 +178,7 @@ export async function addStudentToSchedule(
   // Monthly payments
   for (const month of schedule.months) {
     const payment: Payment = {
-      paymentId: crypto.randomUUID(),
+      paymentId: crypto.randomBytes(16).toString('hex').replace(/(.{8})(.{4})(.{4})(.{4})(.{12})/, '$1-$2-$3-$4-$5'),
       scheduleId: schedule.scheduleId,
       studentId: student.studentId,
       studentName: student.studentName,
