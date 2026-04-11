@@ -119,8 +119,15 @@ export default function PaymentsPage() {
     }
   }
 
+  const [scheduleError, setScheduleError] = useState('')
+
   async function handleCreateSchedule() {
-    if (!newSchedule.academicYear || !newSchedule.monthlyRate || !newSchedule.depositAmount || !newSchedule.cancellationDeadline) return
+    setScheduleError('')
+    if (!newSchedule.academicYear) { setScheduleError('Academic year is required'); return }
+    if (!newSchedule.monthlyRate || parseFloat(newSchedule.monthlyRate) <= 0) { setScheduleError('Monthly rate is required'); return }
+    if (!newSchedule.depositAmount || parseFloat(newSchedule.depositAmount) < 0) { setScheduleError('Deposit amount is required'); return }
+    if (!newSchedule.cancellationDeadline) { setScheduleError('Cancellation deadline is required'); return }
+    if (newSchedule.months.length === 0) { setScheduleError('Select at least one payment month'); return }
     setCreatingSchedule(true)
     try {
       const res = await apiFetch('/api/payments', {
@@ -551,8 +558,13 @@ export default function PaymentsPage() {
                   })}
                 </div>
               </div>
+              {scheduleError && (
+                <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: '8px', padding: '10px 14px', fontSize: '13px', color: '#B91C1C', marginBottom: '12px' }}>
+                  {scheduleError}
+                </div>
+              )}
               <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-                <button onClick={() => setShowNewSchedule(false)} style={{ background: 'var(--background)', color: 'var(--gray-mid)', border: '1px solid var(--gray-light)', padding: '8px 20px', borderRadius: '6px', cursor: 'pointer', fontSize: '14px' }}>Cancel</button>
+                <button onClick={() => { setShowNewSchedule(false); setScheduleError('') }} style={{ background: 'var(--background)', color: 'var(--gray-mid)', border: '1px solid var(--gray-light)', padding: '8px 20px', borderRadius: '6px', cursor: 'pointer', fontSize: '14px' }}>Cancel</button>
                 <button onClick={handleCreateSchedule} disabled={creatingSchedule}
                   style={{ background: 'var(--plum)', color: 'white', border: 'none', padding: '8px 20px', borderRadius: '6px', cursor: 'pointer', fontSize: '14px', fontWeight: 600, opacity: creatingSchedule ? 0.6 : 1 }}>
                   {creatingSchedule ? 'Creating…' : 'Create Schedule'}
