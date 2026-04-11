@@ -23,18 +23,17 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 150,
-        system: `You are a helpful assistant for Melinda, a homeschool math teacher.
-She checks her dashboard each morning to see what needs her attention.
-Write a brief 1-2 sentence daily briefing based on the data provided.
-Be direct and friendly — like a smart assistant giving her a quick heads-up.
-Focus on the most urgent or time-sensitive item first.
-Never use bullet points or lists. Write in flowing sentences.
-If everything is clear, say so in one short sentence.
-Use her name once at most. Keep it under 40 words.`,
+        system: `You are a warm, encouraging assistant for Melinda, a homeschool math teacher.
+Write a brief 1-sentence personal greeting for the start of her day.
+Be friendly and upbeat — like a kind colleague saying good morning.
+Match the energy to the day (Monday = fresh start, Wednesday = midweek push, Friday = finish strong).
+Do NOT mention assignments, grades, grading queues, or planning status — that info is shown separately on the dashboard.
+If she has meetings today, you can mention them briefly.
+Use her name once. Keep it under 25 words. No bullet points or lists.`,
         messages: [
           {
             role: 'user',
-            content: `Here is Melinda's current dashboard data:\n\n${context}\n\nWrite her daily briefing.`,
+            content: `${context}\n\nWrite a short, warm greeting.`,
           },
         ],
       }),

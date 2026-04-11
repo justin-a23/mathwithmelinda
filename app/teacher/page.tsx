@@ -288,18 +288,12 @@ export default function TeacherDashboard() {
         : `GRADING:
 - No assignments have been created yet — nothing to grade.`
 
+      // Context for AI — keep it light since stats are shown live in the dashboard.
+      // The AI just writes a warm personal greeting, not a status report.
       const context = `Current date/time: ${todayStr}
-
-TODAY'S ZOOM MEETINGS:
-${meetingLines}
-
-${gradingSection}
-
-PLANNING:
-- Next week's assignments planned: ${nextWeekPlanned ? 'Yes' : 'No'}${!nextWeekPlanned && isEndOfWeek ? ' (it is end of week — this needs attention)' : ''}
-
-PENDING STUDENT APPROVALS:
-- ${pendingCount > 0 ? `${pendingCount} student(s) waiting for approval: ${pendingNames}` : 'None'}`
+Day of the week: ${now.toLocaleDateString('en-US', { weekday: 'long' })}
+Number of active students: ${activeStudents.length}
+Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) => m.topic).join(', ')}`
 
       const res = await apiFetch('/api/briefing', {
         method: 'POST',
@@ -365,7 +359,7 @@ PENDING STUDENT APPROVALS:
       const allSubs = subsResult?.data?.listSubmissions?.items ?? []
       const activeStudents: { id: string; userId: string; email: string; firstName: string; lastName: string }[] =
         studentsResult?.data?.listStudentProfiles?.items ?? []
-      const weeklyPlans: { id: string; weekStart: string; courseId: string }[] =
+      const weeklyPlans: { id: string; weekStart: string; weekStartDate: string; courseId: string }[] =
         plansResult?.data?.listWeeklyPlans?.items ?? []
       const hasAnyAssignments = (assignResult?.data?.listAssignments?.items?.length ?? 0) > 0
 
@@ -408,7 +402,7 @@ PENDING STUDENT APPROVALS:
 
       // 3. Next week's plans not set yet (warn Thu/Fri/weekend)
       if (dayOfWeek === 4 || dayOfWeek === 5 || dayOfWeek === 0 || dayOfWeek === 6) {
-        const nextWeekPlanned = weeklyPlans.some(p => p.weekStart === nextMondayStr)
+        const nextWeekPlanned = weeklyPlans.some(p => p.weekStart === nextMondayStr || p.weekStartDate === nextMondayStr)
         if (!nextWeekPlanned) {
           const dayName = dayOfWeek === 4 ? 'Thursday' : dayOfWeek === 5 ? 'Friday' : 'the weekend'
           newAlerts.push({
