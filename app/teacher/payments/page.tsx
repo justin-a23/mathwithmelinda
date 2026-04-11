@@ -300,7 +300,9 @@ export default function PaymentsPage() {
   if (checking) return null
 
   // ── Derived data ──
-  const columns = selectedSchedule ? ['Deposit', ...selectedSchedule.months] : []
+  const MONTH_ORDER = ['Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May']
+  const sortedMonths = selectedSchedule ? [...selectedSchedule.months].sort((a, b) => MONTH_ORDER.indexOf(a) - MONTH_ORDER.indexOf(b)) : []
+  const columns = selectedSchedule ? ['Deposit', ...sortedMonths] : []
   const studentIds = [...new Set(payments.map(p => p.studentId))]
   const studentRows = studentIds.map(sid => {
     const sp = payments.filter(p => p.studentId === sid)
