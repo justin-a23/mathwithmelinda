@@ -52,6 +52,8 @@ const listSemestersQuery = /* GraphQL */`
         endDate
         isActive
         courseId
+        academicYearSemestersId
+        academicYear { id year }
       }
     }
   }
@@ -192,6 +194,8 @@ type Semester = {
   endDate: string
   isActive: boolean | null
   courseId: string | null
+  academicYearSemestersId: string | null
+  academicYear: { id: string; year: string } | null
 }
 
 type Enrollment = {
@@ -293,6 +297,8 @@ export default function StudentsPage() {
   const [approveCourseId, setApproveCourseId] = useState('')
   const [approvePlanType, setApprovePlanType] = useState('')
   const [approveGradeLevel, setApproveGradeLevel] = useState('')
+  const [approveFamilyName, setApproveFamilyName] = useState('')
+  const [approveBoardMember, setApproveBoardMember] = useState(false)
   const [approveSemesterId, setApproveSemesterId] = useState('')
   const [approving, setApproving] = useState(false)
 
@@ -562,6 +568,38 @@ export default function StudentsPage() {
       if (enrollResult.data?.createEnrollment) {
         setEnrollments(prev => [...prev, enrollResult.data.createEnrollment])
       }
+      // Auto-generate payment records if a payment schedule exists for this academic year
+      if (approveSemesterId) {
+        try {
+          const semester = semesters.find(s => s.id === approveSemesterId)
+          const academicYearStr = semester?.academicYear?.year
+          if (academicYearStr) {
+            // Fetch payment schedules and find matching one
+            const schedRes = await apiFetch('/api/payments')
+            const schedData = await schedRes.json()
+            const matchingSchedule = (schedData.schedules || []).find((s: any) => s.academicYear === academicYearStr)
+            if (matchingSchedule) {
+              const courseName = courseMap[approveCourseId] || ''
+              await apiFetch(`/api/payments/${matchingSchedule.scheduleId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  studentId: approveStudent.userId,
+                  studentName: `${approveStudent.firstName} ${approveStudent.lastName}`,
+                  studentEmail: approveStudent.email,
+                  familyName: approveFamilyName,
+                  courseName,
+                  isDiscounted: approveBoardMember,
+                }),
+              })
+            }
+          }
+        } catch (err) {
+          console.error('Non-fatal: could not auto-generate payments', err)
+          // Payment creation failure should NOT block student approval
+        }
+      }
+
       setStudents(prev => prev.map(s => s.id === approveStudent.id
         ? { ...s, status: 'active', courseId: approveCourseId, planType: approvePlanType, gradeLevel: approveGradeLevel || s.gradeLevel }
         : s
@@ -571,6 +609,8 @@ export default function StudentsPage() {
       setApprovePlanType('')
       setApproveGradeLevel('')
       setApproveSemesterId('')
+      setApproveFamilyName('')
+      setApproveBoardMember(false)
       window.location.reload()
     } catch (err) {
       console.error('Error approving student:', err)
@@ -1252,9 +1292,26 @@ export default function StudentsPage() {
                     </div>
                   )
                 })()}
+
+                {/* Family name + board member (for payment tracking) */}
+                <div>
+                  <label style={{ fontSize: '13px', fontWeight: 500, color: 'var(--foreground)', display: 'block', marginBottom: '6px' }}>
+                    Family Name <span style={{ color: 'var(--gray-mid)', fontWeight: 400 }}>(for payment tracking)</span>
+                  </label>
+                  <input
+                    value={approveFamilyName}
+                    onChange={e => setApproveFamilyName(e.target.value)}
+                    placeholder="e.g. Reynolds"
+                    style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--gray-light)', borderRadius: '8px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)', boxSizing: 'border-box' }}
+                  />
+                </div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', color: 'var(--foreground)', cursor: 'pointer', marginTop: '4px' }}>
+                  <input type="checkbox" checked={approveBoardMember} onChange={e => setApproveBoardMember(e.target.checked)} />
+                  Board member family (discounted rate)
+                </label>
               </div>
               <div style={{ display: 'flex', gap: '10px', marginTop: '28px' }}>
-                <button onClick={() => { setApproveStudent(null); setApproveSemesterId('') }}
+                <button onClick={() => { setApproveStudent(null); setApproveSemesterId(''); setApproveFamilyName(''); setApproveBoardMember(false) }}
                   style={{ flex: 1, padding: '11px', borderRadius: '8px', border: '1px solid var(--gray-light)', background: 'transparent', color: 'var(--gray-mid)', fontSize: '14px', cursor: 'pointer', fontFamily: 'var(--font-body)' }}>
                   Cancel
                 </button>
