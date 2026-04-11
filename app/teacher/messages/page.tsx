@@ -66,6 +66,22 @@ const UPDATE_MESSAGE = /* GraphQL */ `
   }
 `
 
+const LIST_PARENT_STUDENTS = /* GraphQL */ `
+  query ListParentStudents {
+    listParentStudents(limit: 200) {
+      items { id parentId studentEmail studentName }
+    }
+  }
+`
+
+const LIST_PARENT_PROFILES = /* GraphQL */ `
+  query ListParentProfiles {
+    listParentProfiles(limit: 200) {
+      items { id userId email firstName lastName }
+    }
+  }
+`
+
 const DELETE_MESSAGE = /* GraphQL */ `
   mutation DeleteMessage($input: DeleteMessageInput!) {
     deleteMessage(input: $input) { id }
@@ -138,6 +154,7 @@ export default function TeacherMessagesPage() {
   const [announcementSending, setAnnouncementSending] = useState(false)
   const [announcementSent, setAnnouncementSent] = useState(false)
   const [students, setStudents] = useState<{ userId: string; name: string; email: string }[]>([])
+  const [parents, setParents] = useState<{ threadId: string; name: string; email: string; childNames: string[] }[]>([])
   const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(new Set())
   const [courseFilter, setCourseFilter] = useState<string>('all')
   const [courses, setCourses] = useState<{ id: string; title: string }[]>([])
@@ -151,6 +168,7 @@ export default function TeacherMessagesPage() {
   useEffect(() => {
     loadMessages()
     loadStudents()
+    loadParents()
     loadAnnouncements()
   }, [])
 
@@ -185,6 +203,40 @@ export default function TeacherMessagesPage() {
       setCourses(Array.from(courseSet.entries()).map(([id, title]) => ({ id, title })).sort((a, b) => a.title.localeCompare(b.title)))
     } catch (err) {
       console.error('Error loading students:', err)
+    }
+  }
+
+  async function loadParents() {
+    try {
+      const [psRes, ppRes] = await Promise.all([
+        client.graphql({ query: LIST_PARENT_STUDENTS }) as any,
+        client.graphql({ query: LIST_PARENT_PROFILES }) as any,
+      ])
+      const parentStudents: { parentId: string; studentName: string }[] = psRes.data.listParentStudents.items
+      const profiles: { userId: string; email: string; firstName: string; lastName: string }[] = ppRes.data.listParentProfiles.items
+
+      // Group children by parentId
+      const childMap = new Map<string, string[]>()
+      for (const ps of parentStudents) {
+        if (!childMap.has(ps.parentId)) childMap.set(ps.parentId, [])
+        if (ps.studentName) childMap.get(ps.parentId)!.push(ps.studentName)
+      }
+
+      // Build parent list with email + child names
+      const parentList: typeof parents = []
+      for (const profile of profiles) {
+        const children = childMap.get(profile.userId) || []
+        const name = [profile.firstName, profile.lastName].filter(Boolean).join(' ') || profile.email.split('@')[0]
+        parentList.push({
+          threadId: `parent:${profile.userId}`,
+          name,
+          email: profile.email,
+          childNames: children,
+        })
+      }
+      setParents(parentList)
+    } catch (err) {
+      console.error('Error loading parents:', err)
     }
   }
 
@@ -296,15 +348,29 @@ export default function TeacherMessagesPage() {
     if (!composeStudentId || !composeText.trim()) return
     setComposing(true)
     try {
-      const student = students.find(s => s.userId === composeStudentId)
-      if (!student) return
+      // Check if this is a parent or student
+      const isParent = composeStudentId.startsWith('parent:')
+      const parent = isParent ? parents.find(p => p.threadId === composeStudentId) : null
+      const student = !isParent ? students.find(s => s.userId === composeStudentId) : null
+      if (!student && !parent) return
+
+      const threadId = isParent ? composeStudentId : student!.userId
+      const displayName = isParent
+        ? `${parent!.name} (Parent of ${parent!.childNames.join(', ') || 'student'})`
+        : student!.name
+      const recipientEmail = isParent ? parent!.email : student!.email
+      const recipientName = isParent ? parent!.name : student!.name
+      const replyUrl = isParent
+        ? 'https://mathwithmelinda.com/parent/messages'
+        : 'https://mathwithmelinda.com/student/messages'
+
       const sentAt = new Date().toISOString()
       const result = await (client.graphql({
         query: CREATE_MESSAGE,
         variables: {
           input: {
-            studentId: student.userId,
-            studentName: `${student.name}`,
+            studentId: threadId,
+            studentName: displayName,
             content: composeText.trim(),
             sentAt,
             isRead: true,
@@ -318,24 +384,24 @@ export default function TeacherMessagesPage() {
       setComposeStudentId('')
       setShowCompose(false)
 
-      // Email the student
+      // Email notification
       apiFetch('/api/send-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          to: student.email,
+          to: recipientEmail,
           subject: 'New message from Melinda',
           html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto">
-            <h2 style="color:#7B4FA6">Hi ${student.name},</h2>
+            <h2 style="color:#7B4FA6">Hi ${recipientName},</h2>
             <p style="font-size:15px;color:#333">You have a new message from Melinda:</p>
             <div style="background:#f5f3ff;border-left:4px solid #7B4FA6;border-radius:8px;padding:16px;margin:16px 0;font-size:15px;line-height:1.6;color:#4C1D95">
               ${composeText.trim().replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br/>')}
             </div>
-            <a href="https://mathwithmelinda.com/student/messages" style="display:inline-block;background:#7B4FA6;color:white;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:600">
+            <a href="${replyUrl}" style="display:inline-block;background:#7B4FA6;color:white;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:600">
               Reply in Messages
             </a>
           </div>`,
-          text: `Hi ${student.name},\n\nNew message from Melinda:\n\n${composeText.trim()}\n\nReply at https://mathwithmelinda.com/student/messages`,
+          text: `Hi ${recipientName},\n\nNew message from Melinda:\n\n${composeText.trim()}\n\nReply at ${replyUrl}`,
         }),
       }).catch(() => {})
     } catch (err) {
@@ -494,10 +560,21 @@ export default function TeacherMessagesPage() {
                 onChange={e => setComposeStudentId(e.target.value)}
                 style={{ width: '100%', maxWidth: '360px', padding: '9px 12px', border: '1px solid var(--gray-light)', borderRadius: '8px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: composeStudentId ? 'var(--foreground)' : 'var(--gray-mid)' }}
               >
-                <option value="">Select a student…</option>
-                {students.map(s => (
-                  <option key={s.userId} value={s.userId}>{s.name}</option>
-                ))}
+                <option value="">Select a recipient…</option>
+                <optgroup label="Students">
+                  {students.map(s => (
+                    <option key={s.userId} value={s.userId}>{s.name}</option>
+                  ))}
+                </optgroup>
+                {parents.length > 0 && (
+                  <optgroup label="Parents">
+                    {parents.map(p => (
+                      <option key={p.threadId} value={p.threadId}>
+                        {p.name} ({p.childNames.join(', ') || 'parent'})
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
               </select>
             </div>
             <div style={{ marginBottom: '16px' }}>
@@ -751,10 +828,13 @@ export default function TeacherMessagesPage() {
                 <div key={group.studentId}>
                   {/* Student group header */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-                    <div style={{ width: '34px', height: '34px', borderRadius: '50%', background: 'var(--plum)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: 700, flexShrink: 0 }}>
-                      {group.studentName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                    <div style={{ width: '34px', height: '34px', borderRadius: '50%', background: group.studentId.startsWith('parent:') ? '#0369a1' : 'var(--plum)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: 700, flexShrink: 0 }}>
+                      {group.studentId.startsWith('parent:') ? 'P' : group.studentName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
                     </div>
                     <span style={{ fontFamily: 'var(--font-display)', fontSize: '18px', fontWeight: 700, color: 'var(--foreground)' }}>{group.studentName}</span>
+                    {group.studentId.startsWith('parent:') && (
+                      <span style={{ background: '#dbeafe', color: '#1d4ed8', fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '20px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Parent</span>
+                    )}
                     {unreadCount > 0 && (
                       <span style={{ background: '#ef4444', color: 'white', fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '20px' }}>
                         {unreadCount} new
