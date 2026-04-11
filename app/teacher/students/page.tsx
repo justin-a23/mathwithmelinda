@@ -1588,12 +1588,6 @@ export default function StudentsPage() {
                             style={{ background: 'var(--background)', color: 'var(--foreground)', border: '1px solid var(--gray-light)', padding: '6px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}>
                             💬 Message Student
                           </button>
-                          {s.courseId && (
-                            <button onClick={() => router.push(`/teacher/library/${s.courseId}`)}
-                              style={{ background: 'var(--background)', color: 'var(--foreground)', border: '1px solid var(--gray-light)', padding: '6px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}>
-                              📚 View Course
-                            </button>
-                          )}
                         </div>
                       </div>
                     )
