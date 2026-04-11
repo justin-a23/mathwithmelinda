@@ -19,7 +19,7 @@ const LIST_ACTIVE_STUDENTS = /* GraphQL */ `
 `
 const LIST_COURSES = /* GraphQL */ `
   query ListCourses {
-    listCourses(limit: 50, filter: { archived: { ne: true } }) {
+    listCourses(limit: 50) {
       items { id title }
     }
   }
@@ -303,10 +303,21 @@ export default function PaymentsPage() {
   const MONTH_ORDER = ['Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May']
   const sortedMonths = selectedSchedule ? [...selectedSchedule.months].sort((a, b) => MONTH_ORDER.indexOf(a) - MONTH_ORDER.indexOf(b)) : []
   const columns = selectedSchedule ? ['Deposit', ...sortedMonths] : []
+  // Build a courseId→title map for fallback lookups
+  const courseMap: Record<string, string> = {}
+  for (const c of courses) courseMap[c.id] = c.title
+
   const studentIds = [...new Set(payments.map(p => p.studentId))]
   const studentRows = studentIds.map(sid => {
     const sp = payments.filter(p => p.studentId === sid)
-    return { studentId: sid, first: sp[0], payments: sp }
+    const first = sp[0]
+    // If courseName wasn't stored on the payment, look it up from the student's profile
+    let resolvedCourseName = first?.courseName || ''
+    if (!resolvedCourseName) {
+      const student = students.find(s => s.userId === sid)
+      if (student?.courseId) resolvedCourseName = courseMap[student.courseId] || ''
+    }
+    return { studentId: sid, first, payments: sp, courseName: resolvedCourseName }
   }).sort((a, b) => (a.first?.familyName || '').localeCompare(b.first?.familyName || '') || (a.first?.studentName || '').localeCompare(b.first?.studentName || ''))
 
   // Already added student IDs (to filter the add dropdown)
@@ -439,7 +450,7 @@ export default function PaymentsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {studentRows.map(({ studentId, first, payments: sp }) => (
+                    {studentRows.map(({ studentId, first, payments: sp, courseName: rowCourseName }) => (
                       <tr key={studentId} style={{ borderBottom: '1px solid var(--gray-light)' }}>
                         <td style={{ ...tdStyle, fontWeight: 500, position: 'sticky', left: 0, background: 'var(--background)', zIndex: 1 }}>
                           {first?.familyName || '—'}
@@ -454,7 +465,7 @@ export default function PaymentsPage() {
                         </td>
                         <td style={tdStyle}>
                           <span style={{ background: 'var(--plum-light)', color: 'var(--plum)', fontSize: '11px', fontWeight: 500, padding: '2px 8px', borderRadius: '12px' }}>
-                            {first?.courseName || '—'}
+                            {rowCourseName || '—'}
                           </span>
                         </td>
                         {columns.map(col => {
