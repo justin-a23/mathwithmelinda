@@ -120,11 +120,11 @@ const listAllSubmissionsForAlertsQuery = /* GraphQL */`
 
 const listWeeklyPlansQuery = /* GraphQL */`
   query ListWeeklyPlans {
-    listWeeklyPlans(limit: 200) {
+    listWeeklyPlans(limit: 500) {
       items {
         id
         weekStartDate
-        courseId
+        course { id title }
       }
     }
   }
@@ -358,7 +358,7 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
       const allSubs = subsResult?.data?.listSubmissions?.items ?? []
       const activeStudents: { id: string; userId: string; email: string; firstName: string; lastName: string }[] =
         studentsResult?.data?.listStudentProfiles?.items ?? []
-      const weeklyPlans: { id: string; weekStartDate: string; courseId: string }[] =
+      const weeklyPlans: { id: string; weekStartDate: string; course?: { id: string; title: string } }[] =
         plansResult?.data?.listWeeklyPlans?.items ?? []
       const hasAnyAssignments = (assignResult?.data?.listAssignments?.items?.length ?? 0) > 0
 
@@ -404,11 +404,10 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
         const nextWeekPlanned = weeklyPlans.some(p => p.weekStartDate === nextMondayStr)
         if (!nextWeekPlanned) {
           const dayName = dayOfWeek === 4 ? 'Thursday' : dayOfWeek === 5 ? 'Friday' : 'the weekend'
-          const planDates = weeklyPlans.map(p => p.weekStartDate).join(', ')
           newAlerts.push({
             id: 'next-week-not-planned',
             level: 'warning',
-            message: `It's ${dayName} — next week's assignments haven't been set yet (looking for ${nextMondayStr}, found: ${planDates || 'none'})`,
+            message: `It's ${dayName} — next week's assignments haven't been set yet`,
             href: '/teacher/plans',
           })
         }
