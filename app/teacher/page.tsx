@@ -404,10 +404,11 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
         const nextWeekPlanned = weeklyPlans.some(p => p.weekStartDate === nextMondayStr)
         if (!nextWeekPlanned) {
           const dayName = dayOfWeek === 4 ? 'Thursday' : dayOfWeek === 5 ? 'Friday' : 'the weekend'
+          const planDates = weeklyPlans.map(p => p.weekStartDate).join(', ')
           newAlerts.push({
             id: 'next-week-not-planned',
             level: 'warning',
-            message: `It's ${dayName} — next week's assignments haven't been set yet`,
+            message: `It's ${dayName} — next week's assignments haven't been set yet (looking for ${nextMondayStr}, found: ${planDates || 'none'})`,
             href: '/teacher/plans',
           })
         }
