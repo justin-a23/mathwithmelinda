@@ -123,7 +123,6 @@ const listWeeklyPlansQuery = /* GraphQL */`
     listWeeklyPlans(limit: 200) {
       items {
         id
-        weekStart
         weekStartDate
         courseId
       }
@@ -224,7 +223,7 @@ export default function TeacherDashboard() {
       const monday = getMonday(now)
       const weekStartMs = monday.getTime()
       const nextMonday = new Date(monday); nextMonday.setDate(monday.getDate() + 7)
-      const nextMondayStr = nextMonday.toISOString().slice(0, 10)
+      const nextMondayStr = `${nextMonday.getFullYear()}-${String(nextMonday.getMonth() + 1).padStart(2, '0')}-${String(nextMonday.getDate()).padStart(2, '0')}`
 
       // Fetch everything needed for the briefing in parallel — each query is wrapped
       // so one failure doesn't crash the whole briefing
@@ -271,7 +270,7 @@ export default function TeacherDashboard() {
 
       // Next week planned?
       const weeklyPlans: any[] = plansRes?.data?.listWeeklyPlans?.items ?? []
-      const nextWeekPlanned = weeklyPlans.some((p: any) => p.weekStart === nextMondayStr || p.weekStartDate === nextMondayStr)
+      const nextWeekPlanned = weeklyPlans.some((p: any) => p.weekStartDate === nextMondayStr)
       const dayOfWeek = now.getDay()
       const isEndOfWeek = dayOfWeek === 4 || dayOfWeek === 5 || dayOfWeek === 0 || dayOfWeek === 6
 
@@ -344,7 +343,7 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
       const now = new Date()
       const monday = getMonday(now)
       const nextMonday = new Date(monday); nextMonday.setDate(monday.getDate() + 7)
-      const nextMondayStr = nextMonday.toISOString().slice(0, 10)
+      const nextMondayStr = `${nextMonday.getFullYear()}-${String(nextMonday.getMonth() + 1).padStart(2, '0')}-${String(nextMonday.getDate()).padStart(2, '0')}`
       const dayOfWeek = now.getDay() // 0=Sun,1=Mon...5=Fri,6=Sat
       const newAlerts: Alert[] = []
 
@@ -359,7 +358,7 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
       const allSubs = subsResult?.data?.listSubmissions?.items ?? []
       const activeStudents: { id: string; userId: string; email: string; firstName: string; lastName: string }[] =
         studentsResult?.data?.listStudentProfiles?.items ?? []
-      const weeklyPlans: { id: string; weekStart: string; weekStartDate: string; courseId: string }[] =
+      const weeklyPlans: { id: string; weekStartDate: string; courseId: string }[] =
         plansResult?.data?.listWeeklyPlans?.items ?? []
       const hasAnyAssignments = (assignResult?.data?.listAssignments?.items?.length ?? 0) > 0
 
@@ -402,7 +401,7 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
 
       // 3. Next week's plans not set yet (warn Thu/Fri/weekend)
       if (dayOfWeek === 4 || dayOfWeek === 5 || dayOfWeek === 0 || dayOfWeek === 6) {
-        const nextWeekPlanned = weeklyPlans.some(p => p.weekStart === nextMondayStr || p.weekStartDate === nextMondayStr)
+        const nextWeekPlanned = weeklyPlans.some(p => p.weekStartDate === nextMondayStr)
         if (!nextWeekPlanned) {
           const dayName = dayOfWeek === 4 ? 'Thursday' : dayOfWeek === 5 ? 'Friday' : 'the weekend'
           newAlerts.push({
