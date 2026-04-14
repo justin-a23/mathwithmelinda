@@ -564,7 +564,7 @@ function GradingPageInner() {
     try {
       const userId = user?.userId || user?.username || ''
       const result = await (client.graphql({
-        query: `query GetTeacherProfile($userId: String!) { listTeacherProfiles(filter: { userId: { eq: $userId } }, limit: 1) { items { teachingVoice } } }`,
+        query: `query GetTeacherProfile($userId: String!) { listTeacherProfiles(filter: { userId: { eq: $userId } }, limit: 500) { items { teachingVoice } } }`,
         variables: { userId }
       }) as any)
       const items = result.data?.listTeacherProfiles?.items || []
