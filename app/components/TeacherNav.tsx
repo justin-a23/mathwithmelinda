@@ -25,7 +25,7 @@ const NAV_COUNTS_QUERY = /* GraphQL */`
 
 const GET_TEACHER_PROFILE = /* GraphQL */`
   query GetTeacherProfile($userId: String!) {
-    listTeacherProfiles(filter: { userId: { eq: $userId } }, limit: 1) {
+    listTeacherProfiles(filter: { userId: { eq: $userId } }, limit: 500) {
       items { displayName profilePictureKey }
     }
   }

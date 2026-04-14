@@ -13,7 +13,7 @@ const client = generateClient()
 
 const getTeacherProfileQuery = /* GraphQL */`
   query GetTeacherProfile($userId: String!) {
-    listTeacherProfiles(filter: { userId: { eq: $userId } }, limit: 1) {
+    listTeacherProfiles(filter: { userId: { eq: $userId } }, limit: 500) {
       items {
         id
         userId
@@ -455,7 +455,7 @@ export default function TeacherProfilePage() {
 
             {/* Sign out */}
             <div style={{ textAlign: 'center', paddingTop: '8px' }}>
-              <button onClick={async () => { await signOut(); router.replace('/login') }} style={{ background: 'transparent', color: 'var(--gray-mid)', border: 'none', cursor: 'pointer', fontSize: '14px', textDecoration: 'underline' }}>
+              <button onClick={() => signOut()} style={{ background: 'transparent', color: 'var(--gray-mid)', border: 'none', cursor: 'pointer', fontSize: '14px', textDecoration: 'underline' }}>
                 Sign out
               </button>
             </div>
