@@ -605,16 +605,14 @@ function ReportCardInner() {
             <div style={{ textAlign: 'center', borderBottom: '3px solid #1a1a2e', paddingBottom: '24px', marginBottom: '32px' }}>
               {/* Logo row */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', marginBottom: '4px' }}>
-                <svg width="36" height="36" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <rect width="120" height="120" rx="20" fill="rgba(123,79,166,0.15)"/>
-                  <g transform="translate(14, 28)">
-                    <path d="M0,60 C0,60 0,4 4,4 C8,4 15,38 23,38 C31,38 33,4 39,4 C43,4 45,60 45,60" stroke="#A478C8" strokeWidth="12" strokeLinecap="round" strokeLinejoin="round" opacity="0.6"/>
-                    <path d="M0,60 C0,60 0,4 4,4 C8,4 15,38 23,38 C31,38 33,4 39,4 C43,4 45,60 45,60" stroke="white" strokeWidth="8.5" strokeLinecap="round" strokeLinejoin="round"/>
-                    <path d="M34,4 C34,4 33,60 39,60 C45,60 52,19 59,19 C66,19 68,60 75,60 C82,60 81,4 81,4" stroke="#4E2B72" strokeWidth="12" strokeLinecap="round" strokeLinejoin="round"/>
-                    <path d="M34,4 C34,4 33,60 39,60 C45,60 52,19 59,19 C66,19 68,60 75,60 C82,60 81,4 81,4" stroke="#7B4FA6" strokeWidth="8.5" strokeLinecap="round" strokeLinejoin="round"/>
-                    <path d="M70,60 C70,60 70,4 74,4 C78,4 86,38 94,38 C102,38 103,4 108,4 C112,4 114,60 114,60" stroke="#A478C8" strokeWidth="12" strokeLinecap="round" strokeLinejoin="round" opacity="0.6"/>
-                    <path d="M70,60 C70,60 70,4 74,4 C78,4 86,38 94,38 C102,38 103,4 108,4 C112,4 114,60 114,60" stroke="white" strokeWidth="8.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  </g>
+                <svg width="36" height="36" viewBox="60 30 340 170" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <rect x="60" y="30" width="340" height="170" rx="20" fill="rgba(123,79,166,0.1)"/>
+                  <path d="M96,162 C96,162 96,60 104,60 C112,60 124,122 138,122 C152,122 156,60 168,60 C176,60 178,162 178,162" stroke="#A478C8" strokeWidth="22" strokeLinecap="round" strokeLinejoin="round" opacity="0.6"/>
+                  <path d="M96,162 C96,162 96,60 104,60 C112,60 124,122 138,122 C152,122 156,60 168,60 C176,60 178,162 178,162" stroke="white" strokeWidth="16" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M177,60 C177,60 175,162 187,162 C199,162 211,87 223,87 C235,87 240,162 253,162 C265,162 263,60 263,60" stroke="#4E2B72" strokeWidth="22" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M177,60 C177,60 175,162 187,162 C199,162 211,87 223,87 C235,87 240,162 253,162 C265,162 263,60 263,60" stroke="#7B4FA6" strokeWidth="16" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M256,162 C256,162 256,60 264,60 C272,60 286,122 300,122 C314,122 316,60 326,60 C334,60 336,162 336,162" stroke="#A478C8" strokeWidth="22" strokeLinecap="round" strokeLinejoin="round" opacity="0.6"/>
+                  <path d="M256,162 C256,162 256,60 264,60 C272,60 286,122 300,122 C314,122 316,60 326,60 C334,60 336,162 336,162" stroke="white" strokeWidth="16" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
                 <span style={{ fontFamily: 'var(--font-display)', fontSize: '26px', fontWeight: 700, color: '#1a1a2e', letterSpacing: '-0.5px' }}>Math with Melinda</span>
               </div>
