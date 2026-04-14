@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { useAuthenticator } from '@aws-amplify/ui-react'
 import { generateClient } from 'aws-amplify/api'
 import ThemeToggle from './ThemeToggle'
+import { MwmMark } from './MwmLogo'
 import { apiFetch } from '@/app/lib/apiFetch'
 
 const client = generateClient()
@@ -208,12 +209,7 @@ export default function TeacherNav({ ungradedCount: propUngraded, unreadCount: p
         onClick={() => router.push('/teacher')}
         style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: '8px', marginRight: '24px', flexShrink: 0 }}
       >
-        <div style={{ width: '28px', height: '28px', background: 'var(--plum)', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <svg width="16" height="16" viewBox="0 0 40 40" fill="none">
-            <rect x="17" y="6" width="6" height="28" rx="3" fill="white"/>
-            <rect x="6" y="17" width="28" height="6" rx="3" fill="white"/>
-          </svg>
-        </div>
+        <MwmMark size={28} />
         <span style={{ fontFamily: 'var(--font-display)', color: 'white', fontSize: '16px', whiteSpace: 'nowrap' }}>MwM</span>
       </button>
 
