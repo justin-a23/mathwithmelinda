@@ -178,8 +178,7 @@ export default function StudentNav({ unreadCount: propUnread }: Props = {}) {
         onClick={() => router.push('/dashboard')}
         style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: '8px', marginRight: '24px', flexShrink: 0 }}
       >
-        <MwmMark size={28} />
-        <span style={{ fontFamily: 'var(--font-display)', color: 'white', fontSize: '16px', whiteSpace: 'nowrap' }}>MwM</span>
+        <MwmMark size={38} />
       </button>
 
       {/* Divider */}
