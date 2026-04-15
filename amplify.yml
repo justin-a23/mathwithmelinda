@@ -9,10 +9,11 @@ frontend:
   phases:
     preBuild:
       commands:
-        # npm ci fails on cross-platform optional deps (macOS lockfile → Linux build)
+        # npm ci/install with macOS lockfile won't resolve linux native binaries
         # See https://github.com/npm/cli/issues/4828
-        # Use npm install to resolve native binaries for the build platform
-        - npm install --cache .npm --prefer-offline
+        # Delete lockfile + node_modules so npm resolves fresh for linux-x64
+        - rm -rf node_modules package-lock.json
+        - npm install --cache .npm
     build:
       commands:
         - npm run build
