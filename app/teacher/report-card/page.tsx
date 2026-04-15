@@ -31,7 +31,7 @@ const LIST_WEEKLY_PLANS = /* GraphQL */ `
   query ListWeeklyPlans {
     listWeeklyPlans(limit: 500) {
       items {
-        id weekStartDate courseWeeklyPlansId
+        id weekStartDate courseWeeklyPlansId assignedStudentIds
         items {
           items {
             id dayOfWeek lessonTemplateId isPublished
@@ -142,6 +142,7 @@ type WeeklyPlan = {
   id: string
   weekStartDate: string
   courseWeeklyPlansId: string | null
+  assignedStudentIds: string | null
   items: { items: PlanItem[] } | null
 }
 
@@ -408,10 +409,24 @@ function ReportCardInner() {
       // 3b. Load weekly plans and filter
       const plansRes = await (client.graphql({ query: LIST_WEEKLY_PLANS }) as any)
       const allPlans: WeeklyPlan[] = plansRes.data.listWeeklyPlans.items
+
+      // Helper: check if a plan is assigned to this student
+      const studentUserId = prof.userId || ''
+      function isPlanAssignedToStudent(plan: WeeklyPlan): boolean {
+        if (!plan.assignedStudentIds) return true // null = all students
+        try {
+          const ids = typeof plan.assignedStudentIds === 'string'
+            ? JSON.parse(plan.assignedStudentIds)
+            : plan.assignedStudentIds
+          if (Array.isArray(ids) && ids.length > 0) return ids.includes(studentUserId)
+        } catch { /* parse error — treat as all students */ }
+        return true
+      }
+
       const plansInRange = allPlans.filter(p => {
         const inRange = p.weekStartDate >= filterStart && p.weekStartDate <= filterEnd
         const courseMatch = !sem.courseId || p.courseWeeklyPlansId === sem.courseId
-        return inRange && courseMatch
+        return inRange && courseMatch && isPlanAssignedToStudent(p)
       })
 
       // 4. Collect plan items with lessons
@@ -537,11 +552,11 @@ function ReportCardInner() {
       let quarterBreakdown: QuarterGrades[] | null = null
       if (throughQuarters.length > 0) {
         quarterBreakdown = throughQuarters.map(q => {
-          // Filter plans within this quarter's date range
+          // Filter plans within this quarter's date range + student assignment
           const qPlans = allPlans.filter(p => {
             const inRange = p.weekStartDate >= q.startDate && p.weekStartDate <= q.endDate
             const courseMatch = !sem.courseId || p.courseWeeklyPlansId === sem.courseId
-            return inRange && courseMatch
+            return inRange && courseMatch && isPlanAssignedToStudent(p)
           })
 
           // Collect plan items
