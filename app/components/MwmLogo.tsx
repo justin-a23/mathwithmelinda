@@ -101,7 +101,7 @@ export default function MwmLogo({ size = 36, variant = 'dark', showWordmark = fa
           <span style={{
             fontFamily: 'var(--font-display)',
             color: variant === 'light' ? 'var(--foreground, #1E1E2E)' : 'white',
-            fontSize: '20px',
+            fontSize: `${Math.round(size * 0.56)}px`,
           }}>
             Math with Melinda
           </span>

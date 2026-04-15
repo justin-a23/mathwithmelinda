@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState, Suspense } from 'react'
 import { generateClient } from 'aws-amplify/api'
 import TeacherNav from '../../components/TeacherNav'
-import { MwmMark } from '../../components/MwmLogo'
+import MwmLogo from '../../components/MwmLogo'
 import { useRoleGuard } from '../../hooks/useRoleGuard'
 import { apiFetch } from '@/app/lib/apiFetch'
 
@@ -860,7 +860,7 @@ function ReportCardInner() {
         @media print {
           .no-print { display: none !important; }
           body { background: white !important; }
-          .print-area { box-shadow: none !important; border: 1px solid #ddd !important; }
+          .print-area { box-shadow: none !important; border: 1px solid #ddd !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
           @page { margin: 0.75in; size: letter; }
         }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
@@ -896,31 +896,28 @@ function ReportCardInner() {
         ) : report ? (
           <div className="print-area" style={{ background: 'white', color: '#111', borderRadius: '8px', boxShadow: '0 4px 32px rgba(0,0,0,0.10)', padding: '48px 56px' }}>
 
-            {/* ── Report Card Header ── */}
-            <div style={{ borderBottom: '3px solid #1a1a2e', paddingBottom: '28px', marginBottom: '32px' }}>
-              {/* Logo block — large, centered, professional */}
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '20px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '8px' }}>
-                  <MwmMark size={64} variant="light" />
-                  <div>
-                    <div style={{ fontFamily: 'var(--font-display)', fontSize: '32px', fontWeight: 700, color: '#1a1a2e', letterSpacing: '-0.5px', lineHeight: 1.1 }}>Math with Melinda</div>
-                    <div style={{ fontSize: '13px', color: '#7b4fa6', fontWeight: 600, letterSpacing: '0.5px', marginTop: '2px' }}>mathwithmelinda.com</div>
-                  </div>
-                </div>
-                <div style={{ fontSize: '14px', color: '#555', letterSpacing: '4px', textTransform: 'uppercase', fontWeight: 600, marginTop: '8px' }}>Student {report.reportTitle}</div>
+            {/* ── Report Card Header — dark banner matching brand logo ── */}
+            <div style={{ background: '#1E1E2E', borderRadius: '12px 12px 0 0', margin: '-48px -56px 0', padding: '32px 56px 24px', marginBottom: '0' }}>
+              {/* Logo lockup — MWM mark + "Math with Melinda" */}
+              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '16px' }}>
+                <MwmLogo size={56} variant="dark" showWordmark />
               </div>
+              {/* Report title */}
+              <div style={{ textAlign: 'center', fontSize: '13px', color: 'rgba(255,255,255,0.55)', letterSpacing: '4px', textTransform: 'uppercase', fontWeight: 600 }}>
+                Student {report.reportTitle}
+              </div>
+            </div>
 
-              {/* Term + Date row */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', background: '#f8f7fa', borderRadius: '8px', padding: '14px 20px' }}>
-                <div style={{ textAlign: 'left' }}>
-                  <div style={{ fontSize: '11px', fontWeight: 600, color: '#999', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '4px' }}>Term</div>
-                  <div style={{ fontSize: '15px', fontWeight: 700, color: '#1a1a2e' }}>{report.semesterName}</div>
-                  <div style={{ fontSize: '12px', color: '#555', marginTop: '2px' }}>{fmtDate(report.startDate)} – {fmtDate(report.endDate)}</div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: '11px', fontWeight: 600, color: '#999', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '4px' }}>Date Printed</div>
-                  <div style={{ fontSize: '14px', color: '#1a1a2e', fontWeight: 600 }}>{printedDate}</div>
-                </div>
+            {/* Term + Date row — just below the dark banner */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', background: '#f8f7fa', borderRadius: '0 0 8px 8px', padding: '14px 20px', marginBottom: '32px', borderBottom: '3px solid #1a1a2e' }}>
+              <div style={{ textAlign: 'left' }}>
+                <div style={{ fontSize: '11px', fontWeight: 600, color: '#999', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '4px' }}>Term</div>
+                <div style={{ fontSize: '15px', fontWeight: 700, color: '#1a1a2e' }}>{report.semesterName}</div>
+                <div style={{ fontSize: '12px', color: '#555', marginTop: '2px' }}>{fmtDate(report.startDate)} – {fmtDate(report.endDate)}</div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: '11px', fontWeight: 600, color: '#999', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '4px' }}>Date Printed</div>
+                <div style={{ fontSize: '14px', color: '#1a1a2e', fontWeight: 600 }}>{printedDate}</div>
               </div>
             </div>
 
