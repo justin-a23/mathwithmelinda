@@ -34,7 +34,7 @@ const LIST_WEEKLY_PLANS = /* GraphQL */ `
   query ListWeeklyPlans {
     listWeeklyPlans(limit: 500) {
       items {
-        id weekStartDate courseWeeklyPlansId
+        id weekStartDate courseWeeklyPlansId assignedStudentIds
         items {
           items {
             id dayOfWeek lessonTemplateId isPublished
@@ -211,11 +211,22 @@ export default function StudentGradesPage() {
       const plansRes = await (client.graphql({ query: LIST_WEEKLY_PLANS }) as any)
       const allPlans = plansRes.data.listWeeklyPlans.items
 
-      const plansInRange = allPlans.filter((p: any) =>
-        p.weekStartDate >= sem.startDate &&
-        p.weekStartDate <= sem.endDate &&
-        p.courseWeeklyPlansId === sem.courseId
-      )
+      // Filter by date range, course, AND assignedStudentIds
+      const studentUserId = user?.userId || ''
+      const plansInRange = allPlans.filter((p: any) => {
+        if (p.weekStartDate < sem.startDate || p.weekStartDate > sem.endDate) return false
+        if (p.courseWeeklyPlansId !== sem.courseId) return false
+        // Check assignedStudentIds: null/empty = all students, otherwise must include this student
+        if (p.assignedStudentIds) {
+          try {
+            const ids: string[] = typeof p.assignedStudentIds === 'string'
+              ? JSON.parse(p.assignedStudentIds)
+              : p.assignedStudentIds
+            if (Array.isArray(ids) && ids.length > 0 && !ids.includes(studentUserId)) return false
+          } catch { /* parse error — treat as all students */ }
+        }
+        return true
+      })
 
       // 2. Collect plan items with lessons
       const lessonMap = new Map<string, any>()

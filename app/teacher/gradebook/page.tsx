@@ -27,7 +27,7 @@ const LIST_WEEKLY_PLANS = /* GraphQL */ `
   query ListWeeklyPlans {
     listWeeklyPlans(limit: 500) {
       items {
-        id weekStartDate courseWeeklyPlansId
+        id weekStartDate courseWeeklyPlansId assignedStudentIds
         items {
           items {
             id dayOfWeek lessonTemplateId isPublished
@@ -102,6 +102,7 @@ type WeeklyPlan = {
   id: string
   weekStartDate: string
   courseWeeklyPlansId: string | null
+  assignedStudentIds: string | null
   items: { items: PlanItem[] } | null
 }
 
@@ -143,6 +144,7 @@ type StudentRow = {
   grades: Record<string, string | null | 'pending'>
   avg: number | null
   letter: string
+  assignedLessonIds: Set<string>
 }
 
 function categoryLabel(cat: string | null | undefined): string {
@@ -241,11 +243,40 @@ export default function GradebookPage() {
         return inRange && courseMatch
       })
 
-      // 3. Collect all plan items with lessons
+      // 3. Collect all plan items with lessons + track assigned students per lesson
+      // lessonAssignedStudents: lessonId → null (all students) or Set<userId>
+      const lessonAssignedStudents = new Map<string, Set<string> | null>()
       const allPlanItems: PlanItem[] = []
       for (const plan of plansInRange) {
+        // Parse assignedStudentIds for this plan
+        let planStudentIds: string[] | null = null
+        if (plan.assignedStudentIds) {
+          try {
+            const parsed = typeof plan.assignedStudentIds === 'string'
+              ? JSON.parse(plan.assignedStudentIds)
+              : plan.assignedStudentIds
+            if (Array.isArray(parsed) && parsed.length > 0) planStudentIds = parsed
+          } catch { /* parse error — treat as all students */ }
+        }
+
         for (const item of plan.items?.items || []) {
-          if (item.lesson) allPlanItems.push(item)
+          if (item.lesson) {
+            allPlanItems.push(item)
+            const lid = item.lesson.id
+            const existing = lessonAssignedStudents.get(lid)
+            if (existing === null) {
+              // Already unrestricted from another plan — stays unrestricted
+            } else if (planStudentIds === null) {
+              // This plan is for all students — mark lesson as unrestricted
+              lessonAssignedStudents.set(lid, null)
+            } else if (existing === undefined) {
+              // First time seeing this lesson
+              lessonAssignedStudents.set(lid, new Set(planStudentIds))
+            } else {
+              // Merge: add these students to existing set
+              for (const sid of planStudentIds) existing.add(sid)
+            }
+          }
         }
       }
 
@@ -325,6 +356,13 @@ export default function GradebookPage() {
       const quizW = (sem.quizWeightPercent ?? 20) / 100
       const testW = (sem.testWeightPercent ?? 20) / 100
 
+      // Helper: check if a student is assigned to a lesson
+      function isStudentAssigned(studentUserId: string, lessonId: string): boolean {
+        const assigned = lessonAssignedStudents.get(lessonId)
+        if (assigned === null || assigned === undefined) return true // null = all students, undefined = not tracked (show)
+        return assigned.has(studentUserId)
+      }
+
       const studentRows: StudentRow[] = []
       for (const student of students) {
         const studentIds = [student.userId, student.email].filter(Boolean)
@@ -334,13 +372,19 @@ export default function GradebookPage() {
           if (found) { studentSubs = found; break }
         }
 
+        // Only include grades for lessons this student is assigned to
         const grades: Record<string, string | null | 'pending'> = {}
         for (const sub of studentSubs) {
-          grades[sub.lessonId] = sub.grade ? sub.grade : 'pending'
+          if (isStudentAssigned(student.userId, sub.lessonId)) {
+            grades[sub.lessonId] = sub.grade ? sub.grade : 'pending'
+          }
         }
 
+        // Only calculate averages for assigned lessons
+        const studentCols = cols.filter(col => isStudentAssigned(student.userId, col.lessonId))
+        const assignedLessonIds = new Set(studentCols.map(c => c.lessonId))
         const byCategory: Record<string, number[]> = { lesson: [], quiz: [], test: [] }
-        for (const col of cols) {
+        for (const col of studentCols) {
           const g = grades[col.lessonId]
           if (g && g !== 'pending') {
             const n = parseFloat(g)
@@ -359,7 +403,7 @@ export default function GradebookPage() {
 
         const avg = weightedTotal > 0 ? weightedSum / weightedTotal : null
         const letter = avg !== null ? letterGrade(avg, gradeA, gradeB, gradeC, gradeD) : '—'
-        studentRows.push({ student, grades, avg, letter })
+        studentRows.push({ student, grades, avg, letter, assignedLessonIds })
       }
 
       studentRows.sort((a, b) => {
@@ -517,6 +561,7 @@ export default function GradebookPage() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 {rows.map(row => {
                   const isExpanded = expandedStudentId === row.student.id
+                  const studentColumns = columns.filter(c => row.assignedLessonIds.has(c.lessonId))
                   const gradedCount = Object.values(row.grades).filter(g => g && g !== 'pending').length
                   const totalAssigned = Object.keys(row.grades).length
                   const chip = gradeChip(row.letter)
@@ -546,15 +591,15 @@ export default function GradebookPage() {
                             {row.student.lastName}, {row.student.firstName}
                           </div>
                           <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginTop: '2px' }}>
-                            {gradedCount} graded · {totalAssigned - gradedCount} pending · {columns.length - totalAssigned} not started
+                            {gradedCount} graded · {totalAssigned - gradedCount} pending · {studentColumns.length - totalAssigned} not started
                           </div>
                         </div>
 
                         {/* Progress bar */}
                         <div style={{ width: 120, flexShrink: 0 }}>
-                          <div style={{ fontSize: '11px', color: 'var(--gray-mid)', marginBottom: '4px', textAlign: 'right' }}>{totalAssigned}/{columns.length}</div>
+                          <div style={{ fontSize: '11px', color: 'var(--gray-mid)', marginBottom: '4px', textAlign: 'right' }}>{totalAssigned}/{studentColumns.length}</div>
                           <div style={{ height: 6, background: 'var(--gray-light)', borderRadius: 3, overflow: 'hidden' }}>
-                            <div style={{ height: '100%', width: `${columns.length > 0 ? (totalAssigned / columns.length) * 100 : 0}%`, background: 'var(--plum)', borderRadius: 3 }} />
+                            <div style={{ height: '100%', width: `${studentColumns.length > 0 ? (totalAssigned / studentColumns.length) * 100 : 0}%`, background: 'var(--plum)', borderRadius: 3 }} />
                           </div>
                         </div>
 
@@ -597,7 +642,7 @@ export default function GradebookPage() {
                               {selectedQuarterId ? `Report Card (${(() => { const q = (selectedSemester?.academicYear?.quarters?.items || []).find((q: Quarter) => q.id === selectedQuarterId); return q ? q.name : 'Quarter' })()})` : 'Report Card'}
                             </button>
                           </div>
-                          {columns.map((col, i) => {
+                          {studentColumns.map((col, i) => {
                             const g = row.grades[col.lessonId]
                             const isEven = i % 2 === 0
                             const catColor = col.category === 'test' ? '#dc2626' : col.category === 'quiz' ? '#d97706' : '#16a34a'
