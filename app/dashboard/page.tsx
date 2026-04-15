@@ -488,9 +488,13 @@ export default function Dashboard() {
   useEffect(() => {
     if (loading || !profileName) return
 
-    // Check localStorage cache — AI note + verse cached per day
+    // Use Central Time for cache key + day of week so greeting flips at midnight CDT, not UTC
+    const nowCT = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }))
+    const todayStr = `${nowCT.getFullYear()}-${String(nowCT.getMonth() + 1).padStart(2, '0')}-${String(nowCT.getDate()).padStart(2, '0')}`
+    const dayOfWeek = nowCT.toLocaleDateString('en-US', { weekday: 'long' })
+
+    // Check localStorage cache — AI note + verse cached per day (Central Time)
     const cacheKey = 'mwm:studentBriefingCache'
-    const todayStr = new Date().toISOString().split('T')[0]
     try {
       const cached = JSON.parse(localStorage.getItem(cacheKey) || '{}')
       if (cached.date === todayStr && cached.text) {
@@ -505,7 +509,8 @@ export default function Dashboard() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         studentName: profileName.split(' ')[0],
-        dayOfWeek: new Date().toLocaleDateString('en-US', { weekday: 'long' }),
+        dayOfWeek,
+        hourOfDay: nowCT.getHours(),
       }),
     })
       .then(r => r.json())

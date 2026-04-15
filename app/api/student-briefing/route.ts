@@ -7,7 +7,7 @@ export async function POST(req: NextRequest) {
   if (auth instanceof NextResponse) return auth
 
   try {
-    const { studentName, dayOfWeek } = await req.json()
+    const { studentName, dayOfWeek, hourOfDay } = await req.json()
 
     const encouragement = getStudentDailyEncouragement()
 
@@ -16,9 +16,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ briefing: encouragement, encouragement })
     }
 
+    const hour = typeof hourOfDay === 'number' ? hourOfDay : new Date().getHours()
+    const timeOfDay = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening'
+
     const context = [
       studentName ? `Student's first name: ${studentName}` : null,
       `Day of the week: ${dayOfWeek || new Date().toLocaleDateString('en-US', { weekday: 'long' })}`,
+      `Time of day: ${timeOfDay}`,
     ].filter(Boolean).join('\n')
 
     const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -32,8 +36,8 @@ export async function POST(req: NextRequest) {
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 80,
         system: `You are a warm, encouraging assistant for a homeschool math student (grades 6-9).
-Write a brief 1-sentence personal greeting for the start of their day.
-Be friendly and upbeat — like a kind teacher greeting them in the morning.
+Write a brief 1-sentence personal greeting appropriate for the time of day (use "Good morning", "Good afternoon", or "Good evening" accordingly).
+Be friendly and upbeat — like a kind teacher greeting them.
 Match the energy to the day (Monday = fresh start, Wednesday = midweek push, Friday = finish strong).
 Do NOT mention assignments, grades, or anything about their workload — that info is shown separately.
 Use their first name once. Keep it under 25 words. No bullet points or lists.`,

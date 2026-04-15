@@ -182,9 +182,10 @@ export default function TeacherDashboard() {
     fetchMeetingsAndBriefing(false)
   }
 
-  // Load cached briefing on mount
+  // Load cached briefing on mount (use Central Time so cache flips at midnight CDT)
   useEffect(() => {
-    const today = new Date().toISOString().slice(0, 10)
+    const nowCT = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }))
+    const today = `${nowCT.getFullYear()}-${String(nowCT.getMonth() + 1).padStart(2, '0')}-${String(nowCT.getDate()).padStart(2, '0')}`
     try {
       const cached = JSON.parse(localStorage.getItem(BRIEFING_CACHE_KEY) || '{}')
       if (cached.date === today && cached.text) {
@@ -201,7 +202,9 @@ export default function TeacherDashboard() {
   }
 
   async function fetchMeetingsAndBriefing(force = false) {
-    const today = new Date().toISOString().slice(0, 10)
+    // Use Central Time for cache key so briefing flips at midnight CDT, not UTC
+    const nowCT = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }))
+    const today = `${nowCT.getFullYear()}-${String(nowCT.getMonth() + 1).padStart(2, '0')}-${String(nowCT.getDate()).padStart(2, '0')}`
 
     // Check cache first — skip API call if we have today's briefing and not forcing
     if (!force) {
