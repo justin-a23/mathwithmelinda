@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState, Suspense } from 'react'
 import { generateClient } from 'aws-amplify/api'
 import TeacherNav from '../../components/TeacherNav'
+import { MwmMark } from '../../components/MwmLogo'
 import { useRoleGuard } from '../../hooks/useRoleGuard'
 import { apiFetch } from '@/app/lib/apiFetch'
 
@@ -20,7 +21,7 @@ const LIST_SEMESTERS = /* GraphQL */ `
         lessonWeightPercent testWeightPercent quizWeightPercent
         gradeA gradeB gradeC gradeD
         course { id title }
-        quarters { items { id name startDate endDate order } }
+        academicYear { id year quarters { items { id name startDate endDate order } } }
       }
     }
   }
@@ -126,7 +127,7 @@ type Semester = {
   gradeC: number | null
   gradeD: number | null
   course: { id: string; title: string } | null
-  quarters: { items: Quarter[] } | null
+  academicYear: { id: string; year: string; quarters: { items: Quarter[] } } | null
 }
 
 type PlanItem = {
@@ -393,7 +394,7 @@ function ReportCardInner() {
       setStudentEmail(prof.email || prof.userId || '')
 
       // 3. Determine quarters and date range
-      const allQuarters = [...(sem.quarters?.items || [])].sort((a, b) => a.order - b.order)
+      const allQuarters = [...(sem.academicYear?.quarters?.items || [])].sort((a, b) => a.order - b.order)
       const selectedQ = allQuarters.find(q => q.id === quarterId)
       // "Through quarter" = all quarters up to and including selected
       const throughQuarters = selectedQ ? allQuarters.filter(q => q.order <= selectedQ.order) : []
@@ -885,12 +886,7 @@ function ReportCardInner() {
               {/* Logo block — large, centered, professional */}
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '20px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '8px' }}>
-                  <div style={{ width: '56px', height: '56px', background: '#7b4fa6', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 2px 8px rgba(123,79,166,0.25)' }}>
-                    <svg width="30" height="30" viewBox="0 0 40 40" fill="none">
-                      <rect x="17" y="6" width="6" height="28" rx="3" fill="white"/>
-                      <rect x="6" y="17" width="28" height="6" rx="3" fill="white"/>
-                    </svg>
-                  </div>
+                  <MwmMark size={64} variant="light" />
                   <div>
                     <div style={{ fontFamily: 'var(--font-display)', fontSize: '32px', fontWeight: 700, color: '#1a1a2e', letterSpacing: '-0.5px', lineHeight: 1.1 }}>Math with Melinda</div>
                     <div style={{ fontSize: '13px', color: '#7b4fa6', fontWeight: 600, letterSpacing: '0.5px', marginTop: '2px' }}>mathwithmelinda.com</div>
@@ -1373,15 +1369,7 @@ function ReportCardInner() {
                         )}
                       </div>
                       <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginTop: '4px' }}>
-                        {record.recipientEmails ? (
-                          <>
-                            <span style={{ color: '#16a34a', fontWeight: 600 }}>Sent</span> {dateStr} at {timeStr} to {record.recipientEmails}
-                          </>
-                        ) : (
-                          <>
-                            <span style={{ color: '#b45309', fontWeight: 600 }}>Draft saved</span> {dateStr} at {timeStr}
-                          </>
-                        )}
+                        {dateStr} at {timeStr}{record.recipientEmails ? ` · sent to ${record.recipientEmails}` : ''}
                       </div>
                       {record.comment && (
                         <div style={{ fontSize: '13px', color: 'var(--foreground)', marginTop: '8px', fontStyle: 'italic', lineHeight: 1.5, background: 'var(--background)', padding: '8px 12px', borderRadius: '6px', borderLeft: '3px solid #7b4fa6' }}>

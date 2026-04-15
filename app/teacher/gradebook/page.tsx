@@ -17,7 +17,7 @@ const LIST_SEMESTERS = /* GraphQL */ `
         lessonWeightPercent testWeightPercent quizWeightPercent
         gradeA gradeB gradeC gradeD
         course { id title }
-        quarters { items { id name startDate endDate order } }
+        academicYear { id year quarters { items { id name startDate endDate order } } }
       }
     }
   }
@@ -87,7 +87,7 @@ type Semester = {
   gradeC: number | null
   gradeD: number | null
   course: { id: string; title: string } | null
-  quarters: { items: Quarter[] } | null
+  academicYear: { id: string; year: string; quarters: { items: Quarter[] } } | null
 }
 
 type PlanItem = {
@@ -230,7 +230,7 @@ export default function GradebookPage() {
       const allPlans: WeeklyPlan[] = plansRes.data.listWeeklyPlans.items
 
       // 2. Filter to this course + date range (quarter or full semester)
-      const quarters = [...(sem.quarters?.items || [])].sort((a, b) => a.order - b.order)
+      const quarters = [...(sem.academicYear?.quarters?.items || [])].sort((a, b) => a.order - b.order)
       const selectedQ = quarters.find(q => q.id === selectedQuarterId)
       const filterStart = selectedQ ? selectedQ.startDate : sem.startDate
       const filterEnd = selectedQ ? selectedQ.endDate : sem.endDate
@@ -440,7 +440,7 @@ export default function GradebookPage() {
 
           {/* Quarter filter — only show if semester has quarters */}
           {selectedSemester && (() => {
-            const quarters = [...(selectedSemester.quarters?.items || [])].sort((a, b) => a.order - b.order)
+            const quarters = [...(selectedSemester.academicYear?.quarters?.items || [])].sort((a, b) => a.order - b.order)
             return quarters.length > 0 ? (
               <div>
                 <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--gray-mid)', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '8px' }}>Quarter</label>
@@ -594,7 +594,7 @@ export default function GradebookPage() {
                               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                 <polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>
                               </svg>
-                              {selectedQuarterId ? `Report Card (${(() => { const q = (selectedSemester?.quarters?.items || []).find((q: Quarter) => q.id === selectedQuarterId); return q ? q.name : 'Quarter' })()})` : 'Report Card'}
+                              {selectedQuarterId ? `Report Card (${(() => { const q = (selectedSemester?.academicYear?.quarters?.items || []).find((q: Quarter) => q.id === selectedQuarterId); return q ? q.name : 'Quarter' })()})` : 'Report Card'}
                             </button>
                           </div>
                           {columns.map((col, i) => {

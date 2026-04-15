@@ -17,6 +17,23 @@ const LIST_COURSES = /* GraphQL */ `
   }
 `
 
+const LIST_ACADEMIC_YEARS = /* GraphQL */ `
+  query ListAcademicYears {
+    listAcademicYears(limit: 100) {
+      items {
+        id year
+        quarters { items { id name startDate endDate order } }
+      }
+    }
+  }
+`
+
+const CREATE_ACADEMIC_YEAR = /* GraphQL */ `
+  mutation CreateAcademicYear($input: CreateAcademicYearInput!) {
+    createAcademicYear(input: $input) { id year }
+  }
+`
+
 const LIST_SEMESTERS = /* GraphQL */ `
   query ListSemesters {
     listSemesters(limit: 100) {
@@ -25,7 +42,8 @@ const LIST_SEMESTERS = /* GraphQL */ `
         lessonWeightPercent testWeightPercent quizWeightPercent
         gradeA gradeB gradeC gradeD
         course { id title }
-        quarters { items { id name startDate endDate order } }
+        academicYearSemestersId
+        academicYear { id year }
       }
     }
   }
@@ -38,6 +56,7 @@ const CREATE_SEMESTER = /* GraphQL */ `
       lessonWeightPercent testWeightPercent quizWeightPercent
       gradeA gradeB gradeC gradeD
       course { id title }
+      academicYear { id year }
     }
   }
 `
@@ -82,6 +101,12 @@ type Quarter = {
   order: number
 }
 
+type AcademicYear = {
+  id: string
+  year: string
+  quarters: { items: Quarter[] } | null
+}
+
 type Semester = {
   id: string
   name: string
@@ -97,7 +122,8 @@ type Semester = {
   gradeC: number | null
   gradeD: number | null
   course: { id: string; title: string } | null
-  quarters: { items: Quarter[] } | null
+  academicYearSemestersId: string | null
+  academicYear: { id: string; year: string } | null
 }
 
 type QuarterForm = {
@@ -122,6 +148,7 @@ type FormState = {
   gradeB: string
   gradeC: string
   gradeD: string
+  academicYearId: string
 }
 
 const DEFAULT_FORM: FormState = {
@@ -138,6 +165,7 @@ const DEFAULT_FORM: FormState = {
   gradeB: '80',
   gradeC: '70',
   gradeD: '60',
+  academicYearId: '',
 }
 
 function formatDateRange(start: string, end: string): string {
@@ -153,6 +181,7 @@ export default function SemestersPage() {
   const { checking } = useRoleGuard('teacher')
 
   const [courses, setCourses] = useState<Course[]>([])
+  const [academicYears, setAcademicYears] = useState<AcademicYear[]>([])
   const [semesters, setSemesters] = useState<Semester[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -160,8 +189,13 @@ export default function SemestersPage() {
   const [saving, setSaving] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
-  // Quarter state
-  const [expandedSemId, setExpandedSemId] = useState<string | null>(null)
+  // Academic year creation
+  const [newAyYear, setNewAyYear] = useState('')
+  const [creatingAy, setCreatingAy] = useState(false)
+  const [showAyForm, setShowAyForm] = useState(false)
+
+  // Quarter state (at AY level)
+  const [expandedAyId, setExpandedAyId] = useState<string | null>(null)
   const [quarterForm, setQuarterForm] = useState<QuarterForm | null>(null)
   const [savingQuarter, setSavingQuarter] = useState(false)
   const [deletingQuarterId, setDeletingQuarterId] = useState<string | null>(null)
@@ -177,24 +211,50 @@ export default function SemestersPage() {
   async function loadData() {
     setLoading(true)
     try {
-      const [coursesRes, semestersRes] = await Promise.all([
+      const [coursesRes, ayRes, semestersRes] = await Promise.all([
         client.graphql({ query: LIST_COURSES }) as any,
+        client.graphql({ query: LIST_ACADEMIC_YEARS }) as any,
         client.graphql({ query: LIST_SEMESTERS }) as any,
       ])
       setCourses(coursesRes.data.listCourses.items)
+      setAcademicYears(
+        [...ayRes.data.listAcademicYears.items].sort((a: AcademicYear, b: AcademicYear) => b.year.localeCompare(a.year))
+      )
       const sorted = [...semestersRes.data.listSemesters.items].sort(
         (a: Semester, b: Semester) => b.startDate.localeCompare(a.startDate)
       )
       setSemesters(sorted)
     } catch (err) {
-      console.error('Error loading semesters:', err)
+      console.error('Error loading data:', err)
     } finally {
       setLoading(false)
     }
   }
 
+  // ── Academic Year CRUD ──
+
+  async function createAcademicYear() {
+    if (!newAyYear.trim()) return
+    setCreatingAy(true)
+    try {
+      await (client.graphql({
+        query: CREATE_ACADEMIC_YEAR,
+        variables: { input: { year: newAyYear.trim() } },
+      }) as any)
+      setNewAyYear('')
+      setShowAyForm(false)
+      await loadData()
+    } catch (err) {
+      console.error('Error creating academic year:', err)
+    } finally {
+      setCreatingAy(false)
+    }
+  }
+
+  // ── Semester CRUD ──
+
   function openCreate() {
-    setForm(DEFAULT_FORM)
+    setForm({ ...DEFAULT_FORM, academicYearId: academicYears[0]?.id || '' })
     setShowForm(true)
   }
 
@@ -213,9 +273,9 @@ export default function SemestersPage() {
       gradeB: String(sem.gradeB ?? 80),
       gradeC: String(sem.gradeC ?? 70),
       gradeD: String(sem.gradeD ?? 60),
+      academicYearId: sem.academicYearSemestersId || '',
     })
     setShowForm(true)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   function cancelForm() {
@@ -227,49 +287,29 @@ export default function SemestersPage() {
     if (!form.name || !form.courseId || !form.startDate || !form.endDate) return
     setSaving(true)
     try {
-      if (form.id) {
-        await (client.graphql({
-          query: UPDATE_SEMESTER,
-          variables: {
-            input: {
-              id: form.id,
-              name: form.name,
-              courseId: form.courseId,
-              startDate: form.startDate,
-              endDate: form.endDate,
-              isActive: form.isActive,
-              lessonWeightPercent: parseInt(form.lessonWeight) || 0,
-              quizWeightPercent: parseInt(form.quizWeight) || 0,
-              testWeightPercent: parseInt(form.testWeight) || 0,
-              gradeA: parseInt(form.gradeA) || 0,
-              gradeB: parseInt(form.gradeB) || 0,
-              gradeC: parseInt(form.gradeC) || 0,
-              gradeD: parseInt(form.gradeD) || 0,
-            },
-          },
-        }) as any)
-      } else {
-        await (client.graphql({
-          query: CREATE_SEMESTER,
-          variables: {
-            input: {
-              name: form.name,
-              courseId: form.courseId,
-              startDate: form.startDate,
-              endDate: form.endDate,
-              isActive: form.isActive,
-              lessonWeightPercent: parseInt(form.lessonWeight) || 0,
-              quizWeightPercent: parseInt(form.quizWeight) || 0,
-              testWeightPercent: parseInt(form.testWeight) || 0,
-              gradeA: parseInt(form.gradeA) || 0,
-              gradeB: parseInt(form.gradeB) || 0,
-              gradeC: parseInt(form.gradeC) || 0,
-              gradeD: parseInt(form.gradeD) || 0,
-            },
-          },
-        }) as any)
+      const input: any = {
+        name: form.name,
+        courseId: form.courseId,
+        startDate: form.startDate,
+        endDate: form.endDate,
+        isActive: form.isActive,
+        lessonWeightPercent: parseInt(form.lessonWeight) || 60,
+        quizWeightPercent: parseInt(form.quizWeight) || 20,
+        testWeightPercent: parseInt(form.testWeight) || 20,
+        gradeA: parseInt(form.gradeA) || 90,
+        gradeB: parseInt(form.gradeB) || 80,
+        gradeC: parseInt(form.gradeC) || 70,
+        gradeD: parseInt(form.gradeD) || 60,
       }
-      cancelForm()
+      if (form.academicYearId) input.academicYearSemestersId = form.academicYearId
+      if (form.id) {
+        input.id = form.id
+        await (client.graphql({ query: UPDATE_SEMESTER, variables: { input } }) as any)
+      } else {
+        await (client.graphql({ query: CREATE_SEMESTER, variables: { input } }) as any)
+      }
+      setShowForm(false)
+      setForm(DEFAULT_FORM)
       await loadData()
     } catch (err) {
       console.error('Error saving semester:', err)
@@ -291,11 +331,11 @@ export default function SemestersPage() {
     }
   }
 
-  // ── Quarter CRUD ──
+  // ── Quarter CRUD (at Academic Year level) ──
 
-  function openQuarterCreate(semId: string) {
-    const sem = semesters.find(s => s.id === semId)
-    const quarters = sem?.quarters?.items || []
+  function openQuarterCreate(ayId: string) {
+    const ay = academicYears.find(a => a.id === ayId)
+    const quarters = ay?.quarters?.items || []
     const nextOrder = quarters.length > 0 ? Math.max(...quarters.map(q => q.order)) + 1 : 1
     setQuarterForm({ id: null, name: `Q${nextOrder}`, startDate: '', endDate: '', order: String(nextOrder) })
   }
@@ -304,7 +344,7 @@ export default function SemestersPage() {
     setQuarterForm({ id: q.id, name: q.name, startDate: q.startDate, endDate: q.endDate, order: String(q.order) })
   }
 
-  async function saveQuarter(semId: string) {
+  async function saveQuarter(ayId: string) {
     if (!quarterForm || !quarterForm.name || !quarterForm.startDate || !quarterForm.endDate) return
     setSavingQuarter(true)
     try {
@@ -330,7 +370,7 @@ export default function SemestersPage() {
               startDate: quarterForm.startDate,
               endDate: quarterForm.endDate,
               order: parseInt(quarterForm.order) || 1,
-              quarterSemesterId: semId,
+              quarterAcademicYearId: ayId,
             },
           },
         }) as any)
@@ -391,12 +431,214 @@ export default function SemestersPage() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
           <div>
             <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '32px', color: 'var(--foreground)', marginBottom: '8px' }}>Academic Year</h1>
-            <p style={{ color: 'var(--gray-mid)', margin: 0 }}>Manage academic terms and grading weights.</p>
+            <p style={{ color: 'var(--gray-mid)', margin: 0 }}>Manage academic years, quarters, and grading weights.</p>
           </div>
+        </div>
+
+        {/* ── Academic Years & Quarters ── */}
+        {!loading && (
+          <div style={{ marginBottom: '40px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--plum)', letterSpacing: '1px', textTransform: 'uppercase' }}>
+                Academic Years & Quarters
+              </div>
+              {!showAyForm && (
+                <button
+                  onClick={() => setShowAyForm(true)}
+                  style={{ background: 'var(--plum)', color: 'white', padding: '8px 16px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}>
+                  + New Academic Year
+                </button>
+              )}
+            </div>
+
+            {/* New AY form */}
+            {showAyForm && (
+              <div style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', padding: '20px', marginBottom: '16px', display: 'flex', alignItems: 'flex-end', gap: '12px' }}>
+                <div style={{ flex: 1 }}>
+                  <label style={labelStyle}>Year</label>
+                  <input
+                    type="text"
+                    value={newAyYear}
+                    onChange={e => setNewAyYear(e.target.value)}
+                    placeholder="e.g. 2025-2026"
+                    style={inputStyle}
+                  />
+                </div>
+                <button
+                  onClick={createAcademicYear}
+                  disabled={creatingAy || !newAyYear.trim()}
+                  style={{ background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '6px', padding: '10px 20px', cursor: creatingAy ? 'not-allowed' : 'pointer', fontSize: '13px', fontWeight: 600, opacity: (creatingAy || !newAyYear.trim()) ? 0.6 : 1, whiteSpace: 'nowrap' }}>
+                  {creatingAy ? 'Creating...' : 'Create'}
+                </button>
+                <button
+                  onClick={() => { setShowAyForm(false); setNewAyYear('') }}
+                  style={{ background: 'transparent', color: 'var(--gray-mid)', border: '1px solid var(--gray-light)', borderRadius: '6px', padding: '10px 16px', cursor: 'pointer', fontSize: '13px' }}>
+                  Cancel
+                </button>
+              </div>
+            )}
+
+            {academicYears.length === 0 && !showAyForm && (
+              <div style={{ textAlign: 'center', padding: '32px', color: 'var(--gray-mid)', background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)' }}>
+                <p style={{ fontSize: '14px', margin: 0 }}>No academic years yet. Create one to define quarters.</p>
+              </div>
+            )}
+
+            {academicYears.map(ay => {
+              const quarters = [...(ay.quarters?.items || [])].sort((a, b) => a.order - b.order)
+              const isExpanded = expandedAyId === ay.id
+              const semCount = semesters.filter(s => s.academicYearSemestersId === ay.id).length
+
+              return (
+                <div key={ay.id} style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', overflow: 'hidden', marginBottom: '12px' }}>
+                  <div style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <span style={{ fontFamily: 'var(--font-display)', fontSize: '18px', color: 'var(--foreground)' }}>{ay.year}</span>
+                      <span style={{ fontSize: '11px', color: 'var(--gray-mid)', background: 'var(--gray-light)', padding: '2px 10px', borderRadius: '20px' }}>
+                        {semCount} term{semCount !== 1 ? 's' : ''}
+                      </span>
+                      {quarters.length > 0 && (
+                        <span style={{ fontSize: '11px', color: 'var(--plum)', background: '#f0eaf8', padding: '2px 10px', borderRadius: '20px' }}>
+                          {quarters.map(q => q.name).join(' · ')}
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => setExpandedAyId(isExpanded ? null : ay.id)}
+                      style={{ background: 'transparent', color: 'var(--gray-mid)', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--gray-light)', cursor: 'pointer', fontSize: '13px', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      Quarters
+                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>
+                        <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    </button>
+                  </div>
+
+                  {/* Quarter Management Panel */}
+                  {isExpanded && (
+                    <div style={{ borderTop: '1px solid var(--gray-light)', background: 'rgba(123,79,166,0.02)', padding: '20px 24px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                        <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--plum)', letterSpacing: '1px', textTransform: 'uppercase' }}>Quarters</div>
+                        {!quarterForm && (
+                          <button
+                            onClick={() => openQuarterCreate(ay.id)}
+                            style={{ background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '6px', padding: '6px 14px', cursor: 'pointer', fontSize: '12px', fontWeight: 600 }}>
+                            + Add Quarter
+                          </button>
+                        )}
+                      </div>
+
+                      {quarters.length === 0 && !quarterForm && (
+                        <div style={{ fontSize: '13px', color: 'var(--gray-mid)', padding: '8px 0' }}>
+                          No quarters defined. Add quarters to enable per-quarter report cards.
+                        </div>
+                      )}
+
+                      {quarters.length > 0 && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: quarterForm ? '16px' : '0' }}>
+                          {quarters.map(q => (
+                            <div key={q.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 14px', background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: '8px' }}>
+                              <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#f0eaf8', color: 'var(--plum)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: 800, flexShrink: 0 }}>
+                                {q.order}
+                              </div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--foreground)' }}>{q.name}</div>
+                                <div style={{ fontSize: '12px', color: 'var(--gray-mid)' }}>{formatDateRange(q.startDate, q.endDate)}</div>
+                              </div>
+                              <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                                <button
+                                  onClick={() => openQuarterEdit(q)}
+                                  style={{ background: 'transparent', color: 'var(--plum)', border: '1px solid var(--plum)', borderRadius: '4px', padding: '4px 10px', cursor: 'pointer', fontSize: '11px', fontWeight: 500 }}>
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={() => deleteQuarter(q.id)}
+                                  disabled={deletingQuarterId === q.id}
+                                  style={{ background: 'transparent', color: '#dc2626', border: '1px solid #fca5a5', borderRadius: '4px', padding: '4px 10px', cursor: 'pointer', fontSize: '11px', opacity: deletingQuarterId === q.id ? 0.6 : 1 }}>
+                                  {deletingQuarterId === q.id ? '...' : 'Delete'}
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Quarter create/edit form */}
+                      {quarterForm && (
+                        <div style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: '8px', padding: '16px' }}>
+                          <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--foreground)', marginBottom: '12px' }}>
+                            {quarterForm.id ? 'Edit Quarter' : 'New Quarter'}
+                          </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                            <div>
+                              <label style={labelStyle}>Name</label>
+                              <input
+                                type="text"
+                                value={quarterForm.name}
+                                onChange={e => setQuarterForm(f => f ? { ...f, name: e.target.value } : f)}
+                                placeholder="Q1"
+                                style={inputStyle}
+                              />
+                            </div>
+                            <div>
+                              <label style={labelStyle}>Order</label>
+                              <input
+                                type="number"
+                                min={1}
+                                max={4}
+                                value={quarterForm.order}
+                                onChange={e => setQuarterForm(f => f ? { ...f, order: e.target.value } : f)}
+                                style={inputStyle}
+                              />
+                            </div>
+                            <div>
+                              <label style={labelStyle}>Start Date</label>
+                              <input
+                                type="date"
+                                value={quarterForm.startDate}
+                                onChange={e => setQuarterForm(f => f ? { ...f, startDate: e.target.value } : f)}
+                                style={inputStyle}
+                              />
+                            </div>
+                            <div>
+                              <label style={labelStyle}>End Date</label>
+                              <input
+                                type="date"
+                                value={quarterForm.endDate}
+                                onChange={e => setQuarterForm(f => f ? { ...f, endDate: e.target.value } : f)}
+                                style={inputStyle}
+                              />
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button
+                              onClick={() => saveQuarter(ay.id)}
+                              disabled={savingQuarter || !quarterForm.name || !quarterForm.startDate || !quarterForm.endDate}
+                              style={{ background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '6px', padding: '7px 16px', cursor: savingQuarter ? 'not-allowed' : 'pointer', fontSize: '12px', fontWeight: 600, opacity: (savingQuarter || !quarterForm.name || !quarterForm.startDate || !quarterForm.endDate) ? 0.6 : 1 }}>
+                              {savingQuarter ? 'Saving...' : quarterForm.id ? 'Save' : 'Add Quarter'}
+                            </button>
+                            <button
+                              onClick={() => setQuarterForm(null)}
+                              style={{ background: 'transparent', color: 'var(--gray-mid)', border: '1px solid var(--gray-light)', borderRadius: '6px', padding: '7px 16px', cursor: 'pointer', fontSize: '12px' }}>
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* ── Terms ── */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--plum)', letterSpacing: '1px', textTransform: 'uppercase' }}>Terms</div>
           {!showForm && (
             <button
               onClick={openCreate}
-              style={{ background: 'var(--plum)', color: 'white', padding: '12px 24px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '14px', fontWeight: 500 }}>
+              style={{ background: 'var(--plum)', color: 'white', padding: '8px 16px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}>
               + New Term
             </button>
           )}
@@ -404,13 +646,13 @@ export default function SemestersPage() {
 
         {/* Create / Edit form */}
         {showForm && (
-          <div style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', padding: '28px', marginBottom: '40px' }}>
+          <div style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', padding: '28px', marginBottom: '24px' }}>
             <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '20px', color: 'var(--foreground)', marginBottom: '24px', marginTop: 0 }}>
               {form.id ? 'Edit Term' : 'New Term'}
             </h2>
 
-            {/* Row 1: Name + Course */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+            {/* Row 1: Name + Course + Academic Year */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px', marginBottom: '16px' }}>
               <div>
                 <label style={labelStyle}>Name</label>
                 <input
@@ -430,6 +672,18 @@ export default function SemestersPage() {
                   <option value="">Select a course...</option>
                   {courses.map(c => (
                     <option key={c.id} value={c.id}>{c.title}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label style={labelStyle}>Academic Year</label>
+                <select
+                  value={form.academicYearId}
+                  onChange={e => setForm(f => ({ ...f, academicYearId: e.target.value }))}
+                  style={inputStyle}>
+                  <option value="">Select year...</option>
+                  {academicYears.map(ay => (
+                    <option key={ay.id} value={ay.id}>{ay.year}</option>
                   ))}
                 </select>
               </div>
@@ -583,24 +837,23 @@ export default function SemestersPage() {
         ) : semesters.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '64px 24px', color: 'var(--gray-mid)' }}>
             <p style={{ fontSize: '16px', marginBottom: '8px' }}>No terms yet.</p>
-            <p style={{ fontSize: '14px' }}>Click "New Term" to get started.</p>
+            <p style={{ fontSize: '14px' }}>Click "+ New Term" to get started.</p>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {semesters.map(sem => {
-              const quarters = [...(sem.quarters?.items || [])].sort((a, b) => a.order - b.order)
-              const isExpanded = expandedSemId === sem.id
-
-              return (
+            {semesters.map(sem => (
               <div
                 key={sem.id}
                 style={{
                   background: 'var(--background)',
                   border: '1px solid var(--gray-light)',
                   borderRadius: 'var(--radius)',
-                  overflow: 'hidden',
+                  padding: '20px 24px',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  justifyContent: 'space-between',
+                  gap: '16px',
                 }}>
-                <div style={{ padding: '20px 24px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px' }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   {/* Name + active badge */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px', flexWrap: 'wrap' }}>
@@ -610,9 +863,9 @@ export default function SemestersPage() {
                         Active
                       </span>
                     )}
-                    {quarters.length > 0 && (
+                    {sem.academicYear && (
                       <span style={{ fontSize: '11px', color: 'var(--gray-mid)', background: 'var(--gray-light)', padding: '2px 10px', borderRadius: '20px' }}>
-                        {quarters.length} quarter{quarters.length !== 1 ? 's' : ''}
+                        {sem.academicYear.year}
                       </span>
                     )}
                   </div>
@@ -645,14 +898,6 @@ export default function SemestersPage() {
                 {/* Actions */}
                 <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
                   <button
-                    onClick={() => setExpandedSemId(isExpanded ? null : sem.id)}
-                    style={{ background: 'transparent', color: 'var(--gray-mid)', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--gray-light)', cursor: 'pointer', fontSize: '13px', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    Quarters
-                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>
-                      <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  </button>
-                  <button
                     onClick={() => openEdit(sem)}
                     style={{ background: 'transparent', color: 'var(--plum)', padding: '8px 16px', borderRadius: '6px', border: '1px solid var(--plum)', cursor: 'pointer', fontSize: '13px', fontWeight: 500 }}>
                     Edit
@@ -664,125 +909,8 @@ export default function SemestersPage() {
                     {deletingId === sem.id ? 'Deleting...' : 'Delete'}
                   </button>
                 </div>
-                </div>
-
-                {/* ── Quarter Management Panel ── */}
-                {isExpanded && (
-                  <div style={{ borderTop: '1px solid var(--gray-light)', background: 'rgba(123,79,166,0.02)', padding: '20px 24px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-                      <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--plum)', letterSpacing: '1px', textTransform: 'uppercase' }}>Quarters</div>
-                      {!quarterForm && (
-                        <button
-                          onClick={() => openQuarterCreate(sem.id)}
-                          style={{ background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '6px', padding: '6px 14px', cursor: 'pointer', fontSize: '12px', fontWeight: 600 }}>
-                          + Add Quarter
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Quarter list */}
-                    {quarters.length === 0 && !quarterForm && (
-                      <div style={{ fontSize: '13px', color: 'var(--gray-mid)', padding: '8px 0' }}>
-                        No quarters defined. Add quarters to enable per-quarter report cards.
-                      </div>
-                    )}
-
-                    {quarters.length > 0 && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: quarterForm ? '16px' : '0' }}>
-                        {quarters.map(q => (
-                          <div key={q.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 14px', background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: '8px' }}>
-                            <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#f0eaf8', color: 'var(--plum)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: 800, flexShrink: 0 }}>
-                              {q.order}
-                            </div>
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--foreground)' }}>{q.name}</div>
-                              <div style={{ fontSize: '12px', color: 'var(--gray-mid)' }}>{formatDateRange(q.startDate, q.endDate)}</div>
-                            </div>
-                            <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
-                              <button
-                                onClick={() => openQuarterEdit(q)}
-                                style={{ background: 'transparent', color: 'var(--plum)', border: '1px solid var(--plum)', borderRadius: '4px', padding: '4px 10px', cursor: 'pointer', fontSize: '11px', fontWeight: 500 }}>
-                                Edit
-                              </button>
-                              <button
-                                onClick={() => deleteQuarter(q.id)}
-                                disabled={deletingQuarterId === q.id}
-                                style={{ background: 'transparent', color: '#dc2626', border: '1px solid #fca5a5', borderRadius: '4px', padding: '4px 10px', cursor: 'pointer', fontSize: '11px', opacity: deletingQuarterId === q.id ? 0.6 : 1 }}>
-                                {deletingQuarterId === q.id ? '...' : 'Delete'}
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Quarter create/edit form */}
-                    {quarterForm && (
-                      <div style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: '8px', padding: '16px', marginTop: quarters.length > 0 ? '0' : '0' }}>
-                        <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--foreground)', marginBottom: '12px' }}>
-                          {quarterForm.id ? 'Edit Quarter' : 'New Quarter'}
-                        </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 1fr 1fr', gap: '12px', marginBottom: '12px' }}>
-                          <div>
-                            <label style={labelStyle}>Name</label>
-                            <input
-                              type="text"
-                              value={quarterForm.name}
-                              onChange={e => setQuarterForm(f => f ? { ...f, name: e.target.value } : f)}
-                              placeholder="Q1"
-                              style={inputStyle}
-                            />
-                          </div>
-                          <div>
-                            <label style={labelStyle}>Order</label>
-                            <input
-                              type="number"
-                              min={1}
-                              max={4}
-                              value={quarterForm.order}
-                              onChange={e => setQuarterForm(f => f ? { ...f, order: e.target.value } : f)}
-                              style={inputStyle}
-                            />
-                          </div>
-                          <div>
-                            <label style={labelStyle}>Start Date</label>
-                            <input
-                              type="date"
-                              value={quarterForm.startDate}
-                              onChange={e => setQuarterForm(f => f ? { ...f, startDate: e.target.value } : f)}
-                              style={inputStyle}
-                            />
-                          </div>
-                          <div>
-                            <label style={labelStyle}>End Date</label>
-                            <input
-                              type="date"
-                              value={quarterForm.endDate}
-                              onChange={e => setQuarterForm(f => f ? { ...f, endDate: e.target.value } : f)}
-                              style={inputStyle}
-                            />
-                          </div>
-                        </div>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button
-                            onClick={() => saveQuarter(sem.id)}
-                            disabled={savingQuarter || !quarterForm.name || !quarterForm.startDate || !quarterForm.endDate}
-                            style={{ background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '6px', padding: '7px 16px', cursor: savingQuarter ? 'not-allowed' : 'pointer', fontSize: '12px', fontWeight: 600, opacity: (savingQuarter || !quarterForm.name || !quarterForm.startDate || !quarterForm.endDate) ? 0.6 : 1 }}>
-                            {savingQuarter ? 'Saving...' : quarterForm.id ? 'Save' : 'Add Quarter'}
-                          </button>
-                          <button
-                            onClick={() => setQuarterForm(null)}
-                            style={{ background: 'transparent', color: 'var(--gray-mid)', border: '1px solid var(--gray-light)', borderRadius: '6px', padding: '7px 16px', cursor: 'pointer', fontSize: '12px' }}>
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
               </div>
-              )
-            })}
+            ))}
           </div>
         )}
       </main>

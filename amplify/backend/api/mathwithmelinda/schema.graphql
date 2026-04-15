@@ -4,6 +4,7 @@ type AcademicYear @model {
   id: ID!
   year: String!
   semesters: [Semester] @hasMany
+  quarters: [Quarter] @hasMany
 }
 
 type Semester @model {
@@ -25,7 +26,6 @@ type Semester @model {
   gradeC: Int
   gradeD: Int
   semesterType: String
-  quarters: [Quarter] @hasMany
 }
 
 type Quarter @model {
@@ -34,7 +34,7 @@ type Quarter @model {
   startDate: String!
   endDate: String!
   order: Int!
-  semester: Semester @belongsTo
+  academicYear: AcademicYear @belongsTo
 }
 
 type StudentInvite @model {
