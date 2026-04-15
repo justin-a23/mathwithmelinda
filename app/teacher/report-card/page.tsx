@@ -20,6 +20,7 @@ const LIST_SEMESTERS = /* GraphQL */ `
         lessonWeightPercent testWeightPercent quizWeightPercent
         gradeA gradeB gradeC gradeD
         course { id title }
+        quarters { items { id name startDate endDate order } }
       }
     }
   }
@@ -66,7 +67,49 @@ const LIST_SUBMISSIONS_FOR_STUDENT = /* GraphQL */ `
   }
 `
 
+const LIST_REPORT_CARDS = /* GraphQL */ `
+  query ListReportCards($filter: ModelReportCardRecordFilterInput) {
+    listReportCardRecords(filter: $filter, limit: 200) {
+      items {
+        id studentId semesterId quarterId studentName courseName semesterName
+        reportTitle finalLetter weightedAvg comment sentAt recipientEmails quarterBreakdown
+      }
+    }
+  }
+`
+
+const CREATE_REPORT_CARD = /* GraphQL */ `
+  mutation CreateReportCard($input: CreateReportCardRecordInput!) {
+    createReportCardRecord(input: $input) {
+      id studentId semesterId quarterId studentName courseName semesterName
+      reportTitle finalLetter weightedAvg comment sentAt recipientEmails quarterBreakdown
+    }
+  }
+`
+
+const UPDATE_REPORT_CARD = /* GraphQL */ `
+  mutation UpdateReportCard($input: UpdateReportCardRecordInput!) {
+    updateReportCardRecord(input: $input) {
+      id comment
+    }
+  }
+`
+
+const DELETE_REPORT_CARD = /* GraphQL */ `
+  mutation DeleteReportCard($input: DeleteReportCardRecordInput!) {
+    deleteReportCardRecord(input: $input) { id }
+  }
+`
+
 // ── Types ────────────────────────────────────────────────────────────────────
+
+type Quarter = {
+  id: string
+  name: string
+  startDate: string
+  endDate: string
+  order: number
+}
 
 type Semester = {
   id: string
@@ -83,6 +126,7 @@ type Semester = {
   gradeC: number | null
   gradeD: number | null
   course: { id: string; title: string } | null
+  quarters: { items: Quarter[] } | null
 }
 
 type PlanItem = {
@@ -123,6 +167,17 @@ type AssignmentResult = {
   letter: string
 }
 
+type QuarterGrades = {
+  quarterName: string
+  lessonAvg: number | null
+  quizAvg: number | null
+  testAvg: number | null
+  weightedAvg: number | null
+  letter: string
+  assignmentCount: number
+  completedCount: number
+}
+
 type ReportData = {
   studentName: string
   courseName: string
@@ -138,6 +193,26 @@ type ReportData = {
   quizWeight: number
   testWeight: number
   assignments: AssignmentResult[]
+  // Quarter-based report card data
+  quarterBreakdown: QuarterGrades[] | null
+  reportTitle: string  // e.g. "Q3 Report Card" or "Report Card"
+}
+
+type ReportCardRecord = {
+  id: string
+  studentId: string
+  semesterId: string
+  quarterId: string | null
+  studentName: string
+  courseName: string
+  semesterName: string
+  reportTitle: string
+  finalLetter: string | null
+  weightedAvg: number | null
+  comment: string | null
+  sentAt: string
+  recipientEmails: string | null
+  quarterBreakdown: string | null
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -179,6 +254,7 @@ function ReportCardInner() {
   const { checking } = useRoleGuard('teacher')
   const studentId = params.get('studentId') || ''
   const semesterId = params.get('semesterId') || ''
+  const quarterId = params.get('quarterId') || ''
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -188,11 +264,19 @@ function ReportCardInner() {
   // Send report card
   const [studentEmail, setStudentEmail] = useState('')
   const [comment, setComment] = useState('')
+  const [savedComment, setSavedComment] = useState('')
+  const [savingComment, setSavingComment] = useState(false)
+  const [commentDraftId, setCommentDraftId] = useState<string | null>(null)
   const [aiGenerating, setAiGenerating] = useState(false)
   const [aiPolishing, setAiPolishing] = useState(false)
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
   const [sendError, setSendError] = useState('')
+
+  // History
+  const [history, setHistory] = useState<ReportCardRecord[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [deletingRecordId, setDeletingRecordId] = useState<string | null>(null)
 
   useEffect(() => {
     if (user === null) router.replace('/login')
@@ -205,7 +289,87 @@ function ReportCardInner() {
       return
     }
     loadReport()
-  }, [studentId, semesterId])
+    loadHistory()
+  }, [studentId, semesterId, quarterId])
+
+  async function loadHistory() {
+    setHistoryLoading(true)
+    try {
+      const filter: any = { studentId: { eq: studentId }, semesterId: { eq: semesterId } }
+      const res = await (client.graphql({ query: LIST_REPORT_CARDS, variables: { filter } }) as any)
+      const items: ReportCardRecord[] = res.data.listReportCardRecords.items
+      // Sort by sentAt descending
+      items.sort((a, b) => b.sentAt.localeCompare(a.sentAt))
+      setHistory(items)
+
+      // If there's a matching record for this quarter (or no-quarter), pre-populate saved comment
+      const match = items.find(r => (r.quarterId || '') === quarterId)
+      if (match?.comment) {
+        setComment(match.comment)
+        setSavedComment(match.comment)
+      }
+    } catch (err) {
+      console.error('Error loading report card history:', err)
+    } finally {
+      setHistoryLoading(false)
+    }
+  }
+
+  async function saveComment() {
+    if (!report) return
+    setSavingComment(true)
+    try {
+      // Check if there's an existing record for this exact student/semester/quarter
+      const match = history.find(r => (r.quarterId || '') === quarterId)
+      if (match) {
+        // Update existing record's comment
+        await (client.graphql({
+          query: UPDATE_REPORT_CARD,
+          variables: { input: { id: match.id, comment: comment.trim() } },
+        }) as any)
+      } else {
+        // Create a draft record (sentAt marked as "draft" save time)
+        await (client.graphql({
+          query: CREATE_REPORT_CARD,
+          variables: {
+            input: {
+              studentId,
+              semesterId,
+              quarterId: quarterId || null,
+              studentName: report.studentName,
+              courseName: report.courseName,
+              semesterName: report.semesterName,
+              reportTitle: report.reportTitle,
+              finalLetter: report.finalLetter !== '—' ? report.finalLetter : null,
+              weightedAvg: report.weightedAvg,
+              comment: comment.trim(),
+              sentAt: new Date().toISOString(),
+              recipientEmails: null,
+            },
+          },
+        }) as any)
+      }
+      setSavedComment(comment.trim())
+      await loadHistory()
+    } catch (err) {
+      console.error('Error saving comment:', err)
+    } finally {
+      setSavingComment(false)
+    }
+  }
+
+  async function deleteRecord(id: string) {
+    if (!confirm('Delete this report card record? This cannot be undone.')) return
+    setDeletingRecordId(id)
+    try {
+      await (client.graphql({ query: DELETE_REPORT_CARD, variables: { input: { id } } }) as any)
+      setHistory(prev => prev.filter(r => r.id !== id))
+    } catch (err) {
+      console.error('Error deleting record:', err)
+    } finally {
+      setDeletingRecordId(null)
+    }
+  }
 
   async function loadReport() {
     setLoading(true)
@@ -228,11 +392,23 @@ function ReportCardInner() {
       const studentName = `${prof.firstName} ${prof.lastName}`
       setStudentEmail(prof.email || prof.userId || '')
 
-      // 3. Load weekly plans and filter
+      // 3. Determine quarters and date range
+      const allQuarters = [...(sem.quarters?.items || [])].sort((a, b) => a.order - b.order)
+      const selectedQ = allQuarters.find(q => q.id === quarterId)
+      // "Through quarter" = all quarters up to and including selected
+      const throughQuarters = selectedQ ? allQuarters.filter(q => q.order <= selectedQ.order) : []
+      // Use "through" date range: from semester start to end of selected quarter
+      const filterStart = sem.startDate
+      const filterEnd = selectedQ ? selectedQ.endDate : sem.endDate
+      const reportTitle = selectedQ
+        ? `${selectedQ.name} Report Card`
+        : 'Report Card'
+
+      // 3b. Load weekly plans and filter
       const plansRes = await (client.graphql({ query: LIST_WEEKLY_PLANS }) as any)
       const allPlans: WeeklyPlan[] = plansRes.data.listWeeklyPlans.items
       const plansInRange = allPlans.filter(p => {
-        const inRange = p.weekStartDate >= sem.startDate && p.weekStartDate <= sem.endDate
+        const inRange = p.weekStartDate >= filterStart && p.weekStartDate <= filterEnd
         const courseMatch = !sem.courseId || p.courseWeeklyPlansId === sem.courseId
         return inRange && courseMatch
       })
@@ -356,12 +532,85 @@ function ReportCardInner() {
       const weightedAvg = weightedTotal > 0 ? weightedSum / weightedTotal : null
       const finalLetter = weightedAvg !== null ? letterGrade(weightedAvg, gradeA, gradeB, gradeC, gradeD) : '—'
 
+      // 12. Build per-quarter breakdown (if quarters exist)
+      let quarterBreakdown: QuarterGrades[] | null = null
+      if (throughQuarters.length > 0) {
+        quarterBreakdown = throughQuarters.map(q => {
+          // Filter plans within this quarter's date range
+          const qPlans = allPlans.filter(p => {
+            const inRange = p.weekStartDate >= q.startDate && p.weekStartDate <= q.endDate
+            const courseMatch = !sem.courseId || p.courseWeeklyPlansId === sem.courseId
+            return inRange && courseMatch
+          })
+
+          // Collect plan items
+          const qItems: PlanItem[] = []
+          for (const plan of qPlans) {
+            for (const item of plan.items?.items || []) {
+              if (item.lesson) qItems.push(item)
+            }
+          }
+
+          // Deduplicate by lesson id
+          const qLessonMap = new Map<string, PlanItem>()
+          for (const item of qItems) {
+            if (item.lesson && !qLessonMap.has(item.lesson.id)) {
+              qLessonMap.set(item.lesson.id, item)
+            }
+          }
+
+          // Build columns for this quarter
+          const qCols: LessonColumn[] = []
+          for (const [lessonId, item] of qLessonMap.entries()) {
+            const lesson = item.lesson!
+            const tmpl = item.lessonTemplateId ? templateMap.get(item.lessonTemplateId) : null
+            const cat = categoryLabel(tmpl?.lessonCategory)
+            const order = lesson.order ?? tmpl?.lessonNumber ?? 9999
+            qCols.push({ lessonId, title: lesson.title, order, category: cat, templateId: item.lessonTemplateId || null })
+          }
+
+          // Calculate grades
+          const qByCategory: Record<string, number[]> = { lesson: [], quiz: [], test: [] }
+          let qCompleted = 0
+          for (const col of qCols) {
+            const g = gradeMap[col.lessonId]
+            if (g && g !== 'pending') {
+              const n = parseFloat(g)
+              if (!isNaN(n)) qByCategory[col.category].push(n)
+              qCompleted++
+            }
+          }
+
+          const qLA = catAvg(qByCategory.lesson)
+          const qQA = catAvg(qByCategory.quiz)
+          const qTA = catAvg(qByCategory.test)
+
+          let qWeightedSum = 0; let qWeightedTotal = 0
+          if (qLA !== null) { qWeightedSum += qLA * lessonW; qWeightedTotal += lessonW }
+          if (qQA !== null) { qWeightedSum += qQA * quizW; qWeightedTotal += quizW }
+          if (qTA !== null) { qWeightedSum += qTA * testW; qWeightedTotal += testW }
+          const qWAvg = qWeightedTotal > 0 ? qWeightedSum / qWeightedTotal : null
+          const qLetter = qWAvg !== null ? letterGrade(qWAvg, gradeA, gradeB, gradeC, gradeD) : '—'
+
+          return {
+            quarterName: q.name,
+            lessonAvg: qLA,
+            quizAvg: qQA,
+            testAvg: qTA,
+            weightedAvg: qWAvg,
+            letter: qLetter,
+            assignmentCount: qCols.length,
+            completedCount: qCompleted,
+          }
+        })
+      }
+
       setReport({
         studentName,
         courseName: sem.course?.title || 'Course',
         semesterName: sem.name,
-        startDate: sem.startDate,
-        endDate: sem.endDate,
+        startDate: filterStart,
+        endDate: filterEnd,
         finalLetter,
         weightedAvg,
         lessonAvg: lAvg,
@@ -371,6 +620,8 @@ function ReportCardInner() {
         quizWeight: sem.quizWeightPercent ?? 20,
         testWeight: sem.testWeightPercent ?? 20,
         assignments,
+        quarterBreakdown,
+        reportTitle,
       })
     } catch (err: any) {
       console.error('Error loading report card:', err)
@@ -468,7 +719,7 @@ function ReportCardInner() {
 
         <div style="border:1px solid #e5e7eb;border-top:none;border-radius:0 0 10px 10px;padding:32px 28px;">
           <div style="font-size:12px;font-weight:700;color:#7b4fa6;letter-spacing:2px;text-transform:uppercase;margin-bottom:6px;">
-            ${report.semesterName} Report Card
+            ${report.semesterName} ${report.reportTitle}
           </div>
           <h1 style="font-size:26px;font-weight:800;color:#1a1a2e;margin:0 0 4px;">
             ${report.studentName}
@@ -513,7 +764,7 @@ function ReportCardInner() {
         </div>
       </div>`
 
-    const text = `${report.semesterName} Report Card — ${report.studentName}\n\nCourse: ${report.courseName}\nGrade: ${report.finalLetter}${report.weightedAvg !== null ? ` (${report.weightedAvg.toFixed(1)}%)` : ''}\n${comment.trim() ? `\nComment from Melinda:\n${comment.trim()}\n` : ''}\nView full grades at: https://mathwithmelinda.com/dashboard`
+    const text = `${report.semesterName} ${report.reportTitle} — ${report.studentName}\n\nCourse: ${report.courseName}\nGrade: ${report.finalLetter}${report.weightedAvg !== null ? ` (${report.weightedAvg.toFixed(1)}%)` : ''}\n${comment.trim() ? `\nComment from Melinda:\n${comment.trim()}\n` : ''}\nView full grades at: https://mathwithmelinda.com/dashboard`
 
     try {
       // Email the student
@@ -522,7 +773,7 @@ function ReportCardInner() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           to: studentEmail,
-          subject: `Your ${report.semesterName} Report Card — ${report.courseName}`,
+          subject: `Your ${report.semesterName} ${report.reportTitle} — ${report.courseName}`,
           html,
           text,
         }),
@@ -534,7 +785,7 @@ function ReportCardInner() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           studentEmail,
-          subject: `${report.studentName}'s ${report.semesterName} Report Card — ${report.courseName}`,
+          subject: `${report.studentName}'s ${report.semesterName} ${report.reportTitle} — ${report.courseName}`,
           html: html.replace(
             `View Full Grades →`,
             `View ${report.studentName}'s Grades →`
@@ -548,6 +799,34 @@ function ReportCardInner() {
           ),
         }),
       })
+
+      // Save report card record to history
+      try {
+        await (client.graphql({
+          query: CREATE_REPORT_CARD,
+          variables: {
+            input: {
+              studentId,
+              semesterId,
+              quarterId: quarterId || null,
+              studentName: report.studentName,
+              courseName: report.courseName,
+              semesterName: report.semesterName,
+              reportTitle: report.reportTitle,
+              finalLetter: report.finalLetter !== '—' ? report.finalLetter : null,
+              weightedAvg: report.weightedAvg,
+              comment: comment.trim() || null,
+              sentAt: new Date().toISOString(),
+              recipientEmails: studentEmail,
+              quarterBreakdown: report.quarterBreakdown ? JSON.stringify(report.quarterBreakdown) : null,
+            },
+          },
+        }) as any)
+        setSavedComment(comment.trim())
+        await loadHistory()
+      } catch (err) {
+        console.error('Error saving report card record:', err)
+      }
 
       setSent(true)
     } catch {
@@ -602,23 +881,26 @@ function ReportCardInner() {
           <div className="print-area" style={{ background: 'white', color: '#111', borderRadius: '8px', boxShadow: '0 4px 32px rgba(0,0,0,0.10)', padding: '48px 56px' }}>
 
             {/* ── Report Card Header ── */}
-            <div style={{ textAlign: 'center', borderBottom: '3px solid #1a1a2e', paddingBottom: '24px', marginBottom: '32px' }}>
-              {/* Logo row */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', marginBottom: '4px' }}>
-                <svg width="36" height="36" viewBox="60 30 340 170" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <rect x="60" y="30" width="340" height="170" rx="20" fill="rgba(123,79,166,0.1)"/>
-                  <path d="M96,162 C96,162 96,60 104,60 C112,60 124,122 138,122 C152,122 156,60 168,60 C176,60 178,162 178,162" stroke="#A478C8" strokeWidth="22" strokeLinecap="round" strokeLinejoin="round" opacity="0.6"/>
-                  <path d="M96,162 C96,162 96,60 104,60 C112,60 124,122 138,122 C152,122 156,60 168,60 C176,60 178,162 178,162" stroke="white" strokeWidth="16" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M177,60 C177,60 175,162 187,162 C199,162 211,87 223,87 C235,87 240,162 253,162 C265,162 263,60 263,60" stroke="#4E2B72" strokeWidth="22" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M177,60 C177,60 175,162 187,162 C199,162 211,87 223,87 C235,87 240,162 253,162 C265,162 263,60 263,60" stroke="#7B4FA6" strokeWidth="16" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M256,162 C256,162 256,60 264,60 C272,60 286,122 300,122 C314,122 316,60 326,60 C334,60 336,162 336,162" stroke="#A478C8" strokeWidth="22" strokeLinecap="round" strokeLinejoin="round" opacity="0.6"/>
-                  <path d="M256,162 C256,162 256,60 264,60 C272,60 286,122 300,122 C314,122 316,60 326,60 C334,60 336,162 336,162" stroke="white" strokeWidth="16" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-                <span style={{ fontFamily: 'var(--font-display)', fontSize: '26px', fontWeight: 700, color: '#1a1a2e', letterSpacing: '-0.5px' }}>Math with Melinda</span>
+            <div style={{ borderBottom: '3px solid #1a1a2e', paddingBottom: '28px', marginBottom: '32px' }}>
+              {/* Logo block — large, centered, professional */}
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '20px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '8px' }}>
+                  <div style={{ width: '56px', height: '56px', background: '#7b4fa6', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 2px 8px rgba(123,79,166,0.25)' }}>
+                    <svg width="30" height="30" viewBox="0 0 40 40" fill="none">
+                      <rect x="17" y="6" width="6" height="28" rx="3" fill="white"/>
+                      <rect x="6" y="17" width="28" height="6" rx="3" fill="white"/>
+                    </svg>
+                  </div>
+                  <div>
+                    <div style={{ fontFamily: 'var(--font-display)', fontSize: '32px', fontWeight: 700, color: '#1a1a2e', letterSpacing: '-0.5px', lineHeight: 1.1 }}>Math with Melinda</div>
+                    <div style={{ fontSize: '13px', color: '#7b4fa6', fontWeight: 600, letterSpacing: '0.5px', marginTop: '2px' }}>mathwithmelinda.com</div>
+                  </div>
+                </div>
+                <div style={{ fontSize: '14px', color: '#555', letterSpacing: '4px', textTransform: 'uppercase', fontWeight: 600, marginTop: '8px' }}>Student {report.reportTitle}</div>
               </div>
-              <div style={{ fontSize: '13px', color: '#555', letterSpacing: '3px', textTransform: 'uppercase', marginBottom: '16px' }}>Student Report Card</div>
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              {/* Term + Date row */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', background: '#f8f7fa', borderRadius: '8px', padding: '14px 20px' }}>
                 <div style={{ textAlign: 'left' }}>
                   <div style={{ fontSize: '11px', fontWeight: 600, color: '#999', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '4px' }}>Term</div>
                   <div style={{ fontSize: '15px', fontWeight: 700, color: '#1a1a2e' }}>{report.semesterName}</div>
@@ -671,6 +953,17 @@ function ReportCardInner() {
               </div>
             </div>
 
+            {/* ── Teacher Comment (printed on report card) ── */}
+            {comment.trim() && (
+              <div style={{ marginBottom: '32px', background: '#f5f3ff', borderLeft: '4px solid #7b4fa6', borderRadius: '0 8px 8px 0', padding: '18px 22px' }}>
+                <div style={{ fontSize: '11px', fontWeight: 700, color: '#7b4fa6', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '10px' }}>Teacher Comment</div>
+                <div style={{ fontSize: '15px', lineHeight: 1.7, color: '#2d1b4e', fontStyle: 'italic', whiteSpace: 'pre-wrap' }}>
+                  {comment.trim()}
+                </div>
+                <div style={{ fontSize: '12px', color: '#9874c8', marginTop: '10px', fontWeight: 600 }}>— Melinda</div>
+              </div>
+            )}
+
             {/* ── Category Breakdown ── */}
             <div style={{ marginBottom: '32px' }}>
               <div style={{ fontSize: '11px', fontWeight: 700, color: '#7b4fa6', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '12px' }}>Category Breakdown</div>
@@ -713,6 +1006,79 @@ function ReportCardInner() {
                 </tbody>
               </table>
             </div>
+
+            {/* ── Quarter Breakdown (if quarters exist) ── */}
+            {report.quarterBreakdown && report.quarterBreakdown.length > 0 && (
+              <div style={{ marginBottom: '32px' }}>
+                <div style={{ fontSize: '11px', fontWeight: 700, color: '#7b4fa6', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '12px' }}>Quarter Performance</div>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+                  <thead>
+                    <tr style={{ background: '#f0eaf8' }}>
+                      <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#555', letterSpacing: '1px', textTransform: 'uppercase', borderRadius: '6px 0 0 6px' }}>Quarter</th>
+                      <th style={{ padding: '10px 16px', textAlign: 'center', fontSize: '11px', fontWeight: 700, color: '#555', letterSpacing: '1px', textTransform: 'uppercase' }}>Lessons</th>
+                      <th style={{ padding: '10px 16px', textAlign: 'center', fontSize: '11px', fontWeight: 700, color: '#555', letterSpacing: '1px', textTransform: 'uppercase' }}>Participation</th>
+                      <th style={{ padding: '10px 16px', textAlign: 'center', fontSize: '11px', fontWeight: 700, color: '#555', letterSpacing: '1px', textTransform: 'uppercase' }}>Tests</th>
+                      <th style={{ padding: '10px 16px', textAlign: 'center', fontSize: '11px', fontWeight: 700, color: '#555', letterSpacing: '1px', textTransform: 'uppercase' }}>Average</th>
+                      <th style={{ padding: '10px 16px', textAlign: 'center', fontSize: '11px', fontWeight: 700, color: '#555', letterSpacing: '1px', textTransform: 'uppercase', borderRadius: '0 6px 6px 0' }}>Grade</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {report.quarterBreakdown.map((qg, i) => {
+                      const { bg, text } = qg.letter !== '—' ? gradeChip(qg.letter) : { bg: 'transparent', text: '#999' }
+                      return (
+                        <tr key={qg.quarterName} style={{ borderBottom: '1px solid #f0eaf8', background: i % 2 === 0 ? 'white' : '#faf8fd' }}>
+                          <td style={{ padding: '12px 16px', fontWeight: 600, color: '#1a1a2e' }}>
+                            {qg.quarterName}
+                            <span style={{ fontSize: '11px', color: '#999', fontWeight: 400, marginLeft: '8px' }}>
+                              {qg.completedCount}/{qg.assignmentCount}
+                            </span>
+                          </td>
+                          <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 600, color: '#1a1a2e' }}>
+                            {qg.lessonAvg !== null ? qg.lessonAvg.toFixed(1) + '%' : '—'}
+                          </td>
+                          <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 600, color: '#1a1a2e' }}>
+                            {qg.quizAvg !== null ? qg.quizAvg.toFixed(1) + '%' : '—'}
+                          </td>
+                          <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 600, color: '#1a1a2e' }}>
+                            {qg.testAvg !== null ? qg.testAvg.toFixed(1) + '%' : '—'}
+                          </td>
+                          <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: '#1a1a2e' }}>
+                            {qg.weightedAvg !== null ? qg.weightedAvg.toFixed(1) + '%' : '—'}
+                          </td>
+                          <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                            {qg.letter !== '—' ? (
+                              <span style={{ background: bg, color: text, fontWeight: 700, fontSize: '13px', padding: '3px 12px', borderRadius: '20px', display: 'inline-block' }}>{qg.letter}</span>
+                            ) : <span style={{ color: '#bbb' }}>—</span>}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                    {/* Cumulative row */}
+                    <tr style={{ borderTop: '2px solid #7b4fa6', background: '#f8f6fb' }}>
+                      <td style={{ padding: '12px 16px', fontWeight: 800, color: '#7b4fa6', fontSize: '13px' }}>CUMULATIVE</td>
+                      <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: '#1a1a2e' }}>
+                        {report.lessonAvg !== null ? report.lessonAvg.toFixed(1) + '%' : '—'}
+                      </td>
+                      <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: '#1a1a2e' }}>
+                        {report.quizAvg !== null ? report.quizAvg.toFixed(1) + '%' : '—'}
+                      </td>
+                      <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: '#1a1a2e' }}>
+                        {report.testAvg !== null ? report.testAvg.toFixed(1) + '%' : '—'}
+                      </td>
+                      <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 800, color: '#1a1a2e' }}>
+                        {report.weightedAvg !== null ? report.weightedAvg.toFixed(1) + '%' : '—'}
+                      </td>
+                      <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                        {report.finalLetter !== '—' ? (() => {
+                          const { bg, text } = gradeChip(report.finalLetter)
+                          return <span style={{ background: bg, color: text, fontWeight: 800, fontSize: '14px', padding: '3px 14px', borderRadius: '20px', display: 'inline-block' }}>{report.finalLetter}</span>
+                        })() : <span style={{ color: '#bbb' }}>—</span>}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
 
             {/* ── Assignment List ── */}
             <div style={{ marginBottom: '48px' }}>
@@ -764,26 +1130,24 @@ function ReportCardInner() {
           </div>
         ) : null}
 
-        {/* ── Send Report Card Panel ── */}
+        {/* ── Comment & Send Panel ── */}
         {report && (
           <div className="no-print" style={{ marginTop: '40px', background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: '12px', padding: '32px', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
+
+            {/* ── Teacher Comment Section ── */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
               <div style={{ width: '36px', height: '36px', background: '#f5f3ff', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7b4fa6" strokeWidth="2">
-                  <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                  <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>
                 </svg>
               </div>
               <div>
-                <div style={{ fontFamily: 'var(--font-display)', fontSize: '18px', fontWeight: 700, color: 'var(--foreground)', lineHeight: 1.2 }}>Send Report Card</div>
-                <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginTop: '2px' }}>Email this report card to {report.studentName} and their linked parents</div>
+                <div style={{ fontFamily: 'var(--font-display)', fontSize: '18px', fontWeight: 700, color: 'var(--foreground)', lineHeight: 1.2 }}>Teacher Comment</div>
+                <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginTop: '2px' }}>This comment will appear on the printed report card and in the email</div>
               </div>
             </div>
 
-            {/* Comment area */}
             <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: 'var(--plum)', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: '8px' }}>
-                Teacher Comment <span style={{ fontSize: '11px', fontWeight: 400, color: 'var(--gray-mid)', textTransform: 'none', letterSpacing: 0 }}>(optional — shown in the email)</span>
-              </label>
               <textarea
                 value={comment}
                 onChange={e => { setComment(e.target.value); setSent(false) }}
@@ -803,10 +1167,16 @@ function ReportCardInner() {
                   boxSizing: 'border-box',
                 }}
               />
+              {savedComment && comment.trim() === savedComment && (
+                <div style={{ fontSize: '11px', color: '#16a34a', marginTop: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                  Comment saved
+                </div>
+              )}
             </div>
 
-            {/* AI buttons */}
-            <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap' }}>
+            {/* AI + Save buttons */}
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '24px', flexWrap: 'wrap' }}>
               <button
                 onClick={generateAiComment}
                 disabled={aiGenerating || aiPolishing}
@@ -864,12 +1234,46 @@ function ReportCardInner() {
                   </>
                 )}
               </button>
+
+              {comment.trim() && comment.trim() !== savedComment && (
+                <button
+                  onClick={saveComment}
+                  disabled={savingComment}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '6px',
+                    background: savingComment ? 'var(--gray-light)' : '#f0fdf4',
+                    color: savingComment ? 'var(--gray-mid)' : '#16a34a',
+                    border: '1px solid #bbf7d0',
+                    borderRadius: '8px',
+                    padding: '9px 16px',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    cursor: savingComment ? 'not-allowed' : 'pointer',
+                  }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
+                  </svg>
+                  {savingComment ? 'Saving…' : 'Save Comment'}
+                </button>
+              )}
             </div>
 
-            {/* Divider */}
-            <div style={{ height: '1px', background: 'var(--gray-light)', marginBottom: '20px' }} />
+            {/* ── Divider ── */}
+            <div style={{ height: '1px', background: 'var(--gray-light)', marginBottom: '24px' }} />
 
-            {/* Send button + status */}
+            {/* ── Send Section ── */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+              <div style={{ width: '36px', height: '36px', background: '#f5f3ff', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7b4fa6" strokeWidth="2">
+                  <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                </svg>
+              </div>
+              <div>
+                <div style={{ fontFamily: 'var(--font-display)', fontSize: '18px', fontWeight: 700, color: 'var(--foreground)', lineHeight: 1.2 }}>Send Report Card</div>
+                <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginTop: '2px' }}>Email this report card to {report.studentName} and their linked parents</div>
+              </div>
+            </div>
+
             <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
               <button
                 onClick={sendReportCard}
@@ -926,6 +1330,82 @@ function ReportCardInner() {
                 No email address found for this student — report card will be sent to parents only.
               </div>
             )}
+          </div>
+        )}
+
+        {/* ── Report Card History ── */}
+        {report && history.length > 0 && (
+          <div className="no-print" style={{ marginTop: '24px', background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: '12px', padding: '32px', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
+              <div style={{ width: '36px', height: '36px', background: '#f5f3ff', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7b4fa6" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                </svg>
+              </div>
+              <div>
+                <div style={{ fontFamily: 'var(--font-display)', fontSize: '18px', fontWeight: 700, color: 'var(--foreground)', lineHeight: 1.2 }}>Report Card History</div>
+                <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginTop: '2px' }}>{history.length} record{history.length !== 1 ? 's' : ''} for {report.studentName}</div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {history.map(record => {
+                const sentDate = new Date(record.sentAt)
+                const dateStr = sentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                const timeStr = sentDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+                const chip = record.finalLetter ? gradeChip(record.finalLetter) : { bg: '#f3f4f6', text: '#999' }
+
+                return (
+                  <div key={record.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '14px', padding: '14px 16px', background: 'rgba(123,79,166,0.02)', border: '1px solid var(--gray-light)', borderRadius: '10px' }}>
+                    {/* Grade badge */}
+                    <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: chip.bg, color: chip.text, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '18px', fontFamily: 'var(--font-display)', flexShrink: 0, border: `1px solid ${chip.text}22` }}>
+                      {record.finalLetter || '—'}
+                    </div>
+
+                    {/* Details */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--foreground)' }}>{record.reportTitle}</span>
+                        {record.weightedAvg !== null && (
+                          <span style={{ fontSize: '12px', color: 'var(--gray-mid)', background: 'var(--gray-light)', padding: '1px 8px', borderRadius: '20px' }}>
+                            {record.weightedAvg.toFixed(1)}%
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginTop: '4px' }}>
+                        {record.recipientEmails ? (
+                          <>
+                            <span style={{ color: '#16a34a', fontWeight: 600 }}>Sent</span> {dateStr} at {timeStr} to {record.recipientEmails}
+                          </>
+                        ) : (
+                          <>
+                            <span style={{ color: '#b45309', fontWeight: 600 }}>Draft saved</span> {dateStr} at {timeStr}
+                          </>
+                        )}
+                      </div>
+                      {record.comment && (
+                        <div style={{ fontSize: '13px', color: 'var(--foreground)', marginTop: '8px', fontStyle: 'italic', lineHeight: 1.5, background: 'var(--background)', padding: '8px 12px', borderRadius: '6px', borderLeft: '3px solid #7b4fa6' }}>
+                          &ldquo;{record.comment.length > 200 ? record.comment.slice(0, 200) + '…' : record.comment}&rdquo;
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Delete */}
+                    <button
+                      onClick={() => deleteRecord(record.id)}
+                      disabled={deletingRecordId === record.id}
+                      title="Delete this record"
+                      style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px', flexShrink: 0, opacity: deletingRecordId === record.id ? 0.4 : 0.5 }}
+                      onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+                      onMouseLeave={e => (e.currentTarget.style.opacity = '0.5')}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2">
+                        <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                      </svg>
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
           </div>
         )}
       </main>

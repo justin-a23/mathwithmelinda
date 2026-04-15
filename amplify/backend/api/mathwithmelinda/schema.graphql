@@ -25,6 +25,16 @@ type Semester @model {
   gradeC: Int
   gradeD: Int
   semesterType: String
+  quarters: [Quarter] @hasMany
+}
+
+type Quarter @model {
+  id: ID!
+  name: String!
+  startDate: String!
+  endDate: String!
+  order: Int!
+  semester: Semester @belongsTo
 }
 
 type StudentInvite @model {
@@ -286,4 +296,21 @@ type Announcement @model {
   recipientCount: Int
   courseId: String
   courseTitle: String
+}
+
+type ReportCardRecord @model {
+  id: ID!
+  studentId: String!
+  semesterId: String!
+  quarterId: String
+  studentName: String!
+  courseName: String!
+  semesterName: String!
+  reportTitle: String!
+  finalLetter: String
+  weightedAvg: Float
+  comment: String
+  sentAt: String!
+  recipientEmails: String
+  quarterBreakdown: String
 }
