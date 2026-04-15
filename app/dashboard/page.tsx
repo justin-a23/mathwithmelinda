@@ -494,7 +494,7 @@ export default function Dashboard() {
     const dayOfWeek = nowCT.toLocaleDateString('en-US', { weekday: 'long' })
 
     // Check localStorage cache — AI note + verse cached per day (Central Time)
-    const cacheKey = 'mwm:studentBriefingCache'
+    const cacheKey = 'mwm:studentBriefing:v2'
     try {
       const cached = JSON.parse(localStorage.getItem(cacheKey) || '{}')
       if (cached.date === todayStr && cached.text) {

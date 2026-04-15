@@ -163,7 +163,7 @@ export default function TeacherDashboard() {
   const [briefingLoading, setBriefingLoading] = useState(false)
   const [todayMeetings, setTodayMeetings] = useState<{ topic: string; startTime: string; startUrl: string | null; joinUrl: string }[]>([])
 
-  const BRIEFING_CACHE_KEY = 'mwm:teacherBriefing'
+  const BRIEFING_CACHE_KEY = 'mwm:teacherBriefing:v2'
 
   useEffect(() => {
     fetchAll()
