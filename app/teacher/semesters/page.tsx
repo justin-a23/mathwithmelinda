@@ -180,6 +180,49 @@ const DEFAULT_FORM: FormState = {
   academicYearId: '',
 }
 
+// ── Setup Wizard types ──
+
+type WizardState = {
+  step: 1 | 2 | 3
+  yearName: string
+  quarters: { name: string; startDate: string; endDate: string; order: number }[]
+  selectedCourseIds: string[]
+  termName: string
+  termStartDate: string
+  termEndDate: string
+  isActive: boolean
+  lessonWeight: string
+  quizWeight: string
+  testWeight: string
+  gradeA: string
+  gradeB: string
+  gradeC: string
+  gradeD: string
+}
+
+function getSchoolYearDefaults() {
+  const now = new Date()
+  const currentYear = now.getFullYear()
+  const currentMonth = now.getMonth()
+  const startYear = currentMonth >= 5 ? currentYear : currentYear - 1
+  const endYear = startYear + 1
+  const fmt = (y: number, m: number, d: number) =>
+    `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+  return {
+    yearName: `${startYear}-${endYear}`,
+    quarters: [
+      { name: 'Q1', startDate: fmt(startYear, 8, 12), endDate: fmt(startYear, 10, 17), order: 1 },
+      { name: 'Q2', startDate: fmt(startYear, 10, 20), endDate: fmt(startYear, 12, 19), order: 2 },
+      { name: 'Q3', startDate: fmt(endYear, 1, 6), endDate: fmt(endYear, 3, 13), order: 3 },
+      { name: 'Q4', startDate: fmt(endYear, 3, 16), endDate: fmt(endYear, 5, 22), order: 4 },
+    ],
+    termStartDate: fmt(startYear, 8, 12),
+    termEndDate: fmt(endYear, 5, 22),
+  }
+}
+
+const WIZARD_STEP_LABELS = ['Name the Year', 'Set Up Quarters', 'Create Course Terms']
+
 function formatDateRange(start: string, end: string): string {
   const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }
   const s = new Date(start).toLocaleDateString('en-US', opts)
@@ -213,6 +256,21 @@ export default function SemestersPage() {
   const [quarterForm, setQuarterForm] = useState<QuarterForm | null>(null)
   const [savingQuarter, setSavingQuarter] = useState(false)
   const [deletingQuarterId, setDeletingQuarterId] = useState<string | null>(null)
+
+  // Setup wizard
+  const [showWizard, setShowWizard] = useState(false)
+  const [wizard, setWizard] = useState<WizardState>({
+    step: 1, yearName: '', quarters: [
+      { name: 'Q1', startDate: '', endDate: '', order: 1 },
+      { name: 'Q2', startDate: '', endDate: '', order: 2 },
+      { name: 'Q3', startDate: '', endDate: '', order: 3 },
+      { name: 'Q4', startDate: '', endDate: '', order: 4 },
+    ],
+    selectedCourseIds: [], termName: '', termStartDate: '', termEndDate: '',
+    isActive: true, lessonWeight: '60', quizWeight: '20', testWeight: '20',
+    gradeA: '90', gradeB: '80', gradeC: '70', gradeD: '60',
+  })
+  const [wizardSaving, setWizardSaving] = useState(false)
 
   useEffect(() => {
     if (user === null) router.replace('/login')
@@ -441,6 +499,94 @@ export default function SemestersPage() {
     }
   }
 
+  // ── Wizard helpers ──
+
+  function openWizard() {
+    const defaults = getSchoolYearDefaults()
+    setWizard({
+      step: 1,
+      yearName: defaults.yearName,
+      quarters: defaults.quarters,
+      selectedCourseIds: courses.map(c => c.id),
+      termName: defaults.yearName,
+      termStartDate: defaults.termStartDate,
+      termEndDate: defaults.termEndDate,
+      isActive: true,
+      lessonWeight: '60', quizWeight: '20', testWeight: '20',
+      gradeA: '90', gradeB: '80', gradeC: '70', gradeD: '60',
+    })
+    setShowWizard(true)
+  }
+
+  function cancelWizard() {
+    setShowWizard(false)
+  }
+
+  async function submitWizard() {
+    setWizardSaving(true)
+    try {
+      // 1. Create AcademicYear
+      const ayRes = await (client.graphql({
+        query: CREATE_ACADEMIC_YEAR,
+        variables: { input: { year: wizard.yearName.trim() } },
+      }) as any)
+      const newAyId = ayRes.data.createAcademicYear.id
+
+      // 2. Create all quarters
+      await Promise.all(wizard.quarters.map(q =>
+        (client.graphql({
+          query: CREATE_QUARTER,
+          variables: {
+            input: {
+              name: q.name,
+              startDate: q.startDate,
+              endDate: q.endDate,
+              order: q.order,
+              academicYearQuartersId: newAyId,
+            },
+          },
+        }) as any)
+      ))
+
+      // 3. Create a term for each selected course
+      await Promise.all(wizard.selectedCourseIds.map(courseId =>
+        (client.graphql({
+          query: CREATE_SEMESTER,
+          variables: {
+            input: {
+              name: wizard.termName.trim(),
+              courseId,
+              startDate: wizard.termStartDate,
+              endDate: wizard.termEndDate,
+              isActive: wizard.isActive,
+              lessonWeightPercent: parseInt(wizard.lessonWeight) || 60,
+              quizWeightPercent: parseInt(wizard.quizWeight) || 20,
+              testWeightPercent: parseInt(wizard.testWeight) || 20,
+              gradeA: parseInt(wizard.gradeA) || 90,
+              gradeB: parseInt(wizard.gradeB) || 80,
+              gradeC: parseInt(wizard.gradeC) || 70,
+              gradeD: parseInt(wizard.gradeD) || 60,
+              academicYearSemestersId: newAyId,
+            },
+          },
+        }) as any)
+      ))
+
+      setShowWizard(false)
+      await loadData()
+    } catch (err) {
+      console.error('Wizard error:', err)
+      alert('Something went wrong during setup. Your academic year may have been partially created — you can finish setting up using the forms below.')
+    } finally {
+      setWizardSaving(false)
+    }
+  }
+
+  const wizardWeightSum = (parseInt(wizard.lessonWeight) || 0) + (parseInt(wizard.quizWeight) || 0) + (parseInt(wizard.testWeight) || 0)
+  const wizardWeightOk = wizardWeightSum === 100
+  const wizardStep2Valid = wizard.quarters.every(q => q.startDate && q.endDate)
+  const wizardStep3Valid = wizard.selectedCourseIds.length > 0 && wizard.termName.trim() && wizard.termStartDate && wizard.termEndDate && wizardWeightOk
+
   const weightSum = (parseInt(form.lessonWeight) || 0) + (parseInt(form.quizWeight) || 0) + (parseInt(form.testWeight) || 0)
   const weightOk = weightSum === 100
 
@@ -477,7 +623,283 @@ export default function SemestersPage() {
             <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '32px', color: 'var(--foreground)', marginBottom: '8px' }}>Academic Year</h1>
             <p style={{ color: 'var(--gray-mid)', margin: 0 }}>Manage academic years, quarters, and grading weights.</p>
           </div>
+          {!loading && !showWizard && (
+            <button onClick={openWizard} style={{ background: 'var(--plum)', color: 'white', padding: '10px 20px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '14px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px', whiteSpace: 'nowrap' }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
+              Set Up New Year
+            </button>
+          )}
         </div>
+
+        {/* ── Setup Wizard ── */}
+        {showWizard && (
+          <div style={{ background: 'var(--background)', border: '2px solid var(--plum)', borderRadius: 'var(--radius)', padding: '32px', marginBottom: '40px', boxShadow: '0 4px 24px rgba(123,79,166,0.10)' }}>
+            {/* Stepper */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0', marginBottom: '32px' }}>
+              {[1, 2, 3].map((stepNum) => (
+                <div key={stepNum} style={{ display: 'flex', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{
+                      width: '36px', height: '36px', borderRadius: '50%',
+                      background: wizard.step >= stepNum ? 'var(--plum)' : 'var(--gray-light)',
+                      color: wizard.step >= stepNum ? 'white' : 'var(--gray-mid)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: '14px', fontWeight: 700, transition: 'all 0.2s',
+                    }}>
+                      {wizard.step > stepNum ? '✓' : stepNum}
+                    </div>
+                    <span style={{ fontSize: '13px', fontWeight: wizard.step === stepNum ? 700 : 400, color: wizard.step === stepNum ? 'var(--foreground)' : 'var(--gray-mid)' }}>
+                      {WIZARD_STEP_LABELS[stepNum - 1]}
+                    </span>
+                  </div>
+                  {stepNum < 3 && (
+                    <div style={{ width: '48px', height: '2px', background: wizard.step > stepNum ? 'var(--plum)' : 'var(--gray-light)', margin: '0 16px', transition: 'background 0.2s' }} />
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* ── Step 1: Name the Year ── */}
+            {wizard.step === 1 && (
+              <div>
+                <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+                  <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', color: 'var(--foreground)', margin: '0 0 8px' }}>What school year are you setting up?</h2>
+                  <p style={{ color: 'var(--gray-mid)', margin: 0, fontSize: '14px' }}>This is just a label — you'll set the actual dates in the next steps.</p>
+                </div>
+                <div style={{ maxWidth: '320px', margin: '0 auto 32px' }}>
+                  <input
+                    type="text"
+                    value={wizard.yearName}
+                    onChange={e => setWizard(w => ({ ...w, yearName: e.target.value }))}
+                    placeholder={getSchoolYearDefaults().yearName}
+                    style={{ ...inputStyle, textAlign: 'center', fontSize: '20px', fontFamily: 'var(--font-display)', padding: '14px' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'center', gap: '12px' }}>
+                  <button onClick={cancelWizard} style={{ background: 'transparent', color: 'var(--gray-mid)', border: '1px solid var(--gray-light)', borderRadius: '8px', padding: '10px 24px', cursor: 'pointer', fontSize: '14px' }}>Cancel</button>
+                  <button
+                    onClick={() => setWizard(w => ({ ...w, step: 2, termName: w.yearName || w.termName }))}
+                    disabled={!wizard.yearName.trim()}
+                    style={{ background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '8px', padding: '10px 28px', cursor: wizard.yearName.trim() ? 'pointer' : 'not-allowed', fontSize: '14px', fontWeight: 600, opacity: wizard.yearName.trim() ? 1 : 0.5 }}>
+                    Next →
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* ── Step 2: Define Quarters ── */}
+            {wizard.step === 2 && (
+              <div>
+                <div style={{ textAlign: 'center', marginBottom: '8px' }}>
+                  <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', color: 'var(--foreground)', margin: '0 0 8px' }}>When does each quarter start and end?</h2>
+                  <p style={{ color: 'var(--gray-mid)', margin: '0 0 20px', fontSize: '14px' }}>These quarters are shared by all your courses. You can edit them later if dates change.</p>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '20px' }}>
+                  <button
+                    onClick={() => {
+                      const defaults = getSchoolYearDefaults()
+                      setWizard(w => ({ ...w, quarters: defaults.quarters, termStartDate: defaults.termStartDate, termEndDate: defaults.termEndDate }))
+                    }}
+                    style={{ background: '#f0eaf8', color: 'var(--plum)', border: '1px solid var(--plum)', borderRadius: '8px', padding: '8px 18px', cursor: 'pointer', fontSize: '13px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                    Use typical Aug–May dates
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '28px' }}>
+                  {wizard.quarters.map((q, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', background: q.startDate && q.endDate ? '#f0eaf8' : 'rgba(0,0,0,0.02)', border: '1px solid var(--gray-light)', borderRadius: '10px', flexWrap: 'wrap' }}>
+                      <div style={{ width: '36px', height: '36px', borderRadius: '8px', background: q.startDate && q.endDate ? 'var(--plum)' : 'var(--gray-light)', color: q.startDate && q.endDate ? 'white' : 'var(--gray-mid)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 800, flexShrink: 0 }}>
+                        {q.name}
+                      </div>
+                      <div style={{ flex: '1 1 140px', minWidth: '140px' }}>
+                        <label style={{ ...labelStyle, fontSize: '11px' }}>Start Date</label>
+                        <input
+                          type="date"
+                          value={q.startDate}
+                          onChange={e => setWizard(w => ({ ...w, quarters: w.quarters.map((qq, j) => j === i ? { ...qq, startDate: e.target.value } : qq) }))}
+                          style={inputStyle}
+                        />
+                      </div>
+                      <div style={{ flex: '1 1 140px', minWidth: '140px' }}>
+                        <label style={{ ...labelStyle, fontSize: '11px' }}>End Date</label>
+                        <input
+                          type="date"
+                          value={q.endDate}
+                          onChange={e => setWizard(w => ({ ...w, quarters: w.quarters.map((qq, j) => j === i ? { ...qq, endDate: e.target.value } : qq) }))}
+                          style={inputStyle}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'center', gap: '12px' }}>
+                  <button onClick={() => setWizard(w => ({ ...w, step: 1 }))} style={{ background: 'transparent', color: 'var(--gray-mid)', border: '1px solid var(--gray-light)', borderRadius: '8px', padding: '10px 24px', cursor: 'pointer', fontSize: '14px' }}>← Back</button>
+                  <button
+                    onClick={() => {
+                      // Auto-fill term dates from Q1 start → Q4 end
+                      const sorted = [...wizard.quarters].sort((a, b) => a.order - b.order)
+                      setWizard(w => ({
+                        ...w,
+                        step: 3,
+                        termStartDate: w.termStartDate || sorted[0]?.startDate || '',
+                        termEndDate: w.termEndDate || sorted[sorted.length - 1]?.endDate || '',
+                      }))
+                    }}
+                    disabled={!wizardStep2Valid}
+                    style={{ background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '8px', padding: '10px 28px', cursor: wizardStep2Valid ? 'pointer' : 'not-allowed', fontSize: '14px', fontWeight: 600, opacity: wizardStep2Valid ? 1 : 0.5 }}>
+                    Next →
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* ── Step 3: Create Course Terms ── */}
+            {wizard.step === 3 && (
+              <div>
+                <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+                  <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', color: 'var(--foreground)', margin: '0 0 8px' }}>Which courses are you teaching this year?</h2>
+                  <p style={{ color: 'var(--gray-mid)', margin: 0, fontSize: '14px' }}>A term will be created for each selected course with the same grading settings.</p>
+                </div>
+
+                {/* Course checkboxes */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', justifyContent: 'center', marginBottom: '28px' }}>
+                  {courses.map(c => {
+                    const checked = wizard.selectedCourseIds.includes(c.id)
+                    return (
+                      <label key={c.id} style={{
+                        display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px', borderRadius: '10px', cursor: 'pointer', userSelect: 'none',
+                        border: checked ? '2px solid var(--plum)' : '1px solid var(--gray-light)',
+                        background: checked ? '#f0eaf8' : 'var(--background)',
+                        fontWeight: checked ? 600 : 400, fontSize: '14px', color: checked ? 'var(--plum)' : 'var(--foreground)',
+                      }}>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={e => {
+                            setWizard(w => ({
+                              ...w,
+                              selectedCourseIds: e.target.checked
+                                ? [...w.selectedCourseIds, c.id]
+                                : w.selectedCourseIds.filter(id => id !== c.id)
+                            }))
+                          }}
+                          style={{ width: '16px', height: '16px', accentColor: 'var(--plum)', cursor: 'pointer' }}
+                        />
+                        {c.title}
+                      </label>
+                    )
+                  })}
+                </div>
+
+                {/* Shared settings */}
+                <div style={{ background: 'rgba(0,0,0,0.02)', border: '1px solid var(--gray-light)', borderRadius: '12px', padding: '24px', marginBottom: '24px' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--plum)', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '16px' }}>Term Settings (applies to all selected courses)</div>
+
+                  {/* Term name + dates */}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', marginBottom: '16px' }}>
+                    <div style={{ flex: '1 1 180px', minWidth: '180px' }}>
+                      <label style={labelStyle}>Term Name</label>
+                      <input
+                        type="text"
+                        value={wizard.termName}
+                        onChange={e => setWizard(w => ({ ...w, termName: e.target.value }))}
+                        placeholder="e.g. 2026-2027"
+                        style={inputStyle}
+                      />
+                    </div>
+                    <div style={{ flex: '1 1 150px', minWidth: '150px' }}>
+                      <label style={labelStyle}>Start Date</label>
+                      <input type="date" value={wizard.termStartDate} onChange={e => setWizard(w => ({ ...w, termStartDate: e.target.value }))} style={inputStyle} />
+                    </div>
+                    <div style={{ flex: '1 1 150px', minWidth: '150px' }}>
+                      <label style={labelStyle}>End Date</label>
+                      <input type="date" value={wizard.termEndDate} onChange={e => setWizard(w => ({ ...w, termEndDate: e.target.value }))} style={inputStyle} />
+                    </div>
+                  </div>
+
+                  {/* Active toggle */}
+                  <div style={{ marginBottom: '20px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', userSelect: 'none' }}>
+                      <input type="checkbox" checked={wizard.isActive} onChange={e => setWizard(w => ({ ...w, isActive: e.target.checked }))} style={{ width: '16px', height: '16px', accentColor: 'var(--plum)', cursor: 'pointer' }} />
+                      <span style={{ fontSize: '14px', color: 'var(--foreground)', fontWeight: 500 }}>Mark as active term</span>
+                    </label>
+                  </div>
+
+                  {/* Grade weights */}
+                  <div style={{ marginBottom: '20px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '10px' }}>
+                      <label style={{ ...labelStyle, marginBottom: 0 }}>Grading Weights</label>
+                      <span style={{ fontSize: '12px', fontWeight: 600, padding: '2px 10px', borderRadius: '20px', background: wizardWeightOk ? '#dcfce7' : '#fee2e2', color: wizardWeightOk ? '#16a34a' : '#dc2626' }}>
+                        Sum: {wizardWeightSum}%{wizardWeightOk ? ' ✓' : ' — must equal 100'}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px' }}>
+                      {[
+                        { label: 'Lessons %', key: 'lessonWeight' as const },
+                        { label: 'Participation %', key: 'quizWeight' as const },
+                        { label: 'Tests %', key: 'testWeight' as const },
+                      ].map(({ label, key }) => (
+                        <div key={key} style={{ flex: '1 1 120px', minWidth: '100px' }}>
+                          <label style={labelStyle}>{label}</label>
+                          <input type="number" min={0} max={100} value={wizard[key]} onChange={e => setWizard(w => ({ ...w, [key]: e.target.value }))} onFocus={e => e.target.select()} style={inputStyle} />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Grade cutoffs */}
+                  <div>
+                    <label style={{ ...labelStyle, marginBottom: '10px' }}>Grade Cutoffs</label>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px' }}>
+                      {(['gradeA', 'gradeB', 'gradeC', 'gradeD'] as const).map(key => (
+                        <div key={key} style={{ flex: '1 1 80px', minWidth: '70px' }}>
+                          <label style={labelStyle}>{key.replace('grade', '')} ≥</label>
+                          <input type="number" min={0} max={100} value={wizard[key]} onChange={e => setWizard(w => ({ ...w, [key]: e.target.value }))} onFocus={e => e.target.select()} style={inputStyle} />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Summary + submit */}
+                <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+                  <div style={{ fontSize: '13px', color: 'var(--gray-mid)' }}>
+                    This will create: <strong>1 academic year</strong>, <strong>4 quarters</strong>, and <strong>{wizard.selectedCourseIds.length} course term{wizard.selectedCourseIds.length !== 1 ? 's' : ''}</strong>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'center', gap: '12px' }}>
+                  <button onClick={() => setWizard(w => ({ ...w, step: 2 }))} disabled={wizardSaving} style={{ background: 'transparent', color: 'var(--gray-mid)', border: '1px solid var(--gray-light)', borderRadius: '8px', padding: '10px 24px', cursor: 'pointer', fontSize: '14px' }}>← Back</button>
+                  <button
+                    onClick={submitWizard}
+                    disabled={wizardSaving || !wizardStep3Valid}
+                    style={{ background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '8px', padding: '12px 32px', cursor: (wizardSaving || !wizardStep3Valid) ? 'not-allowed' : 'pointer', fontSize: '15px', fontWeight: 700, opacity: (wizardSaving || !wizardStep3Valid) ? 0.6 : 1 }}>
+                    {wizardSaving ? 'Setting up…' : `Create ${wizard.yearName}`}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Empty state: guide to wizard ── */}
+        {!loading && !showWizard && academicYears.length === 0 && semesters.length === 0 && (
+          <div style={{ textAlign: 'center', padding: '60px 24px', color: 'var(--gray-mid)', background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', marginBottom: '40px' }}>
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--plum)" strokeWidth="1.5" style={{ display: 'block', margin: '0 auto 16px', opacity: 0.6 }}>
+              <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+            </svg>
+            <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', color: 'var(--foreground)', margin: '0 0 8px' }}>Welcome! Let's set up your school year</h2>
+            <p style={{ fontSize: '14px', maxWidth: '420px', margin: '0 auto 24px', lineHeight: 1.5 }}>
+              The setup wizard will walk you through creating your academic year, quarter dates, and course terms — all in about 2 minutes.
+            </p>
+            <button onClick={openWizard} style={{ background: 'var(--plum)', color: 'white', padding: '12px 28px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '15px', fontWeight: 600 }}>
+              Get Started →
+            </button>
+          </div>
+        )}
 
         {/* ── Academic Years & Quarters ── */}
         {!loading && (
