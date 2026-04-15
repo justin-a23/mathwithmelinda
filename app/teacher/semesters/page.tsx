@@ -34,6 +34,18 @@ const CREATE_ACADEMIC_YEAR = /* GraphQL */ `
   }
 `
 
+const UPDATE_ACADEMIC_YEAR = /* GraphQL */ `
+  mutation UpdateAcademicYear($input: UpdateAcademicYearInput!) {
+    updateAcademicYear(input: $input) { id year }
+  }
+`
+
+const DELETE_ACADEMIC_YEAR = /* GraphQL */ `
+  mutation DeleteAcademicYear($input: DeleteAcademicYearInput!) {
+    deleteAcademicYear(input: $input) { id }
+  }
+`
+
 const LIST_SEMESTERS = /* GraphQL */ `
   query ListSemesters {
     listSemesters(limit: 100) {
@@ -189,10 +201,12 @@ export default function SemestersPage() {
   const [saving, setSaving] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
-  // Academic year creation
+  // Academic year creation/edit
   const [newAyYear, setNewAyYear] = useState('')
   const [creatingAy, setCreatingAy] = useState(false)
   const [showAyForm, setShowAyForm] = useState(false)
+  const [editingAyId, setEditingAyId] = useState<string | null>(null)
+  const [deletingAyId, setDeletingAyId] = useState<string | null>(null)
 
   // Quarter state (at AY level)
   const [expandedAyId, setExpandedAyId] = useState<string | null>(null)
@@ -248,6 +262,36 @@ export default function SemestersPage() {
       console.error('Error creating academic year:', err)
     } finally {
       setCreatingAy(false)
+    }
+  }
+
+  async function updateAcademicYear(id: string, year: string) {
+    try {
+      await (client.graphql({ query: UPDATE_ACADEMIC_YEAR, variables: { input: { id, year } } }) as any)
+      setEditingAyId(null)
+      await loadData()
+    } catch (err) {
+      console.error('Error updating academic year:', err)
+    }
+  }
+
+  async function deleteAcademicYear(id: string) {
+    const ay = academicYears.find(a => a.id === id)
+    const quarters = ay?.quarters?.items || []
+    const linkedSems = semesters.filter(s => s.academicYearSemestersId === id)
+    if (quarters.length > 0 || linkedSems.length > 0) {
+      alert(`Cannot delete — this academic year has ${quarters.length} quarter(s) and ${linkedSems.length} term(s). Remove them first.`)
+      return
+    }
+    if (!confirm('Delete this academic year?')) return
+    setDeletingAyId(id)
+    try {
+      await (client.graphql({ query: DELETE_ACADEMIC_YEAR, variables: { input: { id } } }) as any)
+      await loadData()
+    } catch (err) {
+      console.error('Error deleting academic year:', err)
+    } finally {
+      setDeletingAyId(null)
     }
   }
 
@@ -370,7 +414,7 @@ export default function SemestersPage() {
               startDate: quarterForm.startDate,
               endDate: quarterForm.endDate,
               order: parseInt(quarterForm.order) || 1,
-              quarterAcademicYearId: ayId,
+              academicYearQuartersId: ayId,
             },
           },
         }) as any)
@@ -492,8 +536,18 @@ export default function SemestersPage() {
               return (
                 <div key={ay.id} style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', overflow: 'hidden', marginBottom: '12px' }}>
                   <div style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <span style={{ fontFamily: 'var(--font-display)', fontSize: '18px', color: 'var(--foreground)' }}>{ay.year}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: 0 }}>
+                      {editingAyId === ay.id ? (
+                        <input
+                          autoFocus
+                          defaultValue={ay.year}
+                          onKeyDown={e => { if (e.key === 'Enter') updateAcademicYear(ay.id, (e.target as HTMLInputElement).value); if (e.key === 'Escape') setEditingAyId(null) }}
+                          onBlur={e => updateAcademicYear(ay.id, e.target.value)}
+                          style={{ fontFamily: 'var(--font-display)', fontSize: '18px', color: 'var(--foreground)', border: '1px solid var(--plum)', borderRadius: '4px', padding: '2px 8px', background: 'var(--background)', width: '160px' }}
+                        />
+                      ) : (
+                        <span style={{ fontFamily: 'var(--font-display)', fontSize: '18px', color: 'var(--foreground)' }}>{ay.year}</span>
+                      )}
                       <span style={{ fontSize: '11px', color: 'var(--gray-mid)', background: 'var(--gray-light)', padding: '2px 10px', borderRadius: '20px' }}>
                         {semCount} term{semCount !== 1 ? 's' : ''}
                       </span>
@@ -503,14 +557,27 @@ export default function SemestersPage() {
                         </span>
                       )}
                     </div>
-                    <button
-                      onClick={() => setExpandedAyId(isExpanded ? null : ay.id)}
-                      style={{ background: 'transparent', color: 'var(--gray-mid)', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--gray-light)', cursor: 'pointer', fontSize: '13px', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      Quarters
-                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>
-                        <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                    </button>
+                    <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                      <button
+                        onClick={() => setEditingAyId(ay.id)}
+                        style={{ background: 'transparent', color: 'var(--plum)', border: '1px solid var(--plum)', borderRadius: '4px', padding: '4px 10px', cursor: 'pointer', fontSize: '11px', fontWeight: 500 }}>
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => deleteAcademicYear(ay.id)}
+                        disabled={deletingAyId === ay.id}
+                        style={{ background: 'transparent', color: '#dc2626', border: '1px solid #fca5a5', borderRadius: '4px', padding: '4px 10px', cursor: 'pointer', fontSize: '11px', opacity: deletingAyId === ay.id ? 0.6 : 1 }}>
+                        {deletingAyId === ay.id ? '...' : 'Delete'}
+                      </button>
+                      <button
+                        onClick={() => setExpandedAyId(isExpanded ? null : ay.id)}
+                        style={{ background: 'transparent', color: 'var(--gray-mid)', padding: '6px 12px', borderRadius: '6px', border: '1px solid var(--gray-light)', cursor: 'pointer', fontSize: '13px', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        Quarters
+                        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>
+                          <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </button>
+                    </div>
                   </div>
 
                   {/* Quarter Management Panel */}
