@@ -585,7 +585,10 @@ function LessonPageInner() {
       formData.append('studentId', user?.signInDetails?.loginId || user?.userId || 'unknown')
       formData.append('lessonId', planItem?.lesson?.id || itemId || 'unknown')
       const res = await apiFetch('/api/submit', { method: 'POST', body: formData })
-      if (!res.ok) throw new Error('Upload failed')
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}))
+        throw new Error(errBody.error || `Upload failed (${res.status})`)
+      }
       const { key } = await res.json()
       setFiles(prev => prev.map(f => f.uid === uid ? { ...f, key, status: 'done', progress: 100 } : f))
     } catch (err) {
@@ -710,9 +713,18 @@ function LessonPageInner() {
         }) as any)
         setSubmitted(true)
       }
-    } catch (err) {
-      console.error(err)
-      setError('Submission failed. Please try again.')
+    } catch (err: any) {
+      console.error('Submission error:', JSON.stringify(err, null, 2), err?.errors || err?.message || err)
+      // Surface a useful error message
+      const gqlErrors = err?.errors || []
+      const firstMsg = gqlErrors[0]?.message || err?.message || ''
+      if (firstMsg.includes('Not Authorized') || firstMsg.includes('UnauthorizedException')) {
+        setError('Your session may have expired. Please refresh the page and try again.')
+      } else if (firstMsg.includes('Network') || firstMsg.includes('fetch')) {
+        setError('Network error — check your internet connection and try again.')
+      } else {
+        setError(`Submission failed: ${firstMsg || 'Unknown error'}. Please try again.`)
+      }
     } finally {
       setSubmitting(false)
     }
