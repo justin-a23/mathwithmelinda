@@ -29,6 +29,10 @@ export async function POST(req: NextRequest) {
       subject,
       html,
       text,
+      headers: {
+        'List-Unsubscribe': `<mailto:${process.env.SES_FROM_EMAIL}?subject=unsubscribe>`,
+        'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+      },
     })
 
     return NextResponse.json({ success: true })

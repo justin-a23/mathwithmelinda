@@ -7,12 +7,13 @@ import { generateClient } from 'aws-amplify/api'
 import ImageCropper from '../components/ImageCropper'
 import StudentNav from '../components/StudentNav'
 import { apiFetch } from '@/app/lib/apiFetch'
+import { useRoleGuard } from '@/app/hooks/useRoleGuard'
 
 const client = generateClient()
 
 const getProfileQuery = /* GraphQL */`
   query GetProfile($userId: String!) {
-    listStudentProfiles(filter: { userId: { eq: $userId } }, limit: 1) {
+    listStudentProfiles(filter: { userId: { eq: $userId } }, limit: 500) {
       items {
         id
         firstName
@@ -24,6 +25,29 @@ const getProfileQuery = /* GraphQL */`
         profilePictureKey
       }
     }
+  }
+`
+
+const getProfileByEmailQuery = /* GraphQL */`
+  query GetProfileByEmail($email: String!) {
+    listStudentProfiles(filter: { email: { eq: $email } }, limit: 500) {
+      items {
+        id
+        firstName
+        lastName
+        preferredName
+        email
+        gradeLevel
+        courseId
+        profilePictureKey
+      }
+    }
+  }
+`
+
+const updateProfileUserIdMutation = /* GraphQL */`
+  mutation UpdateProfileUserId($input: UpdateStudentProfileInput!) {
+    updateStudentProfile(input: $input) { id userId }
   }
 `
 
@@ -67,6 +91,7 @@ const readOnlyStyle: React.CSSProperties = {
 }
 
 export default function ProfilePage() {
+  const { checking } = useRoleGuard('student')
   const { user, signOut } = useAuthenticator()
   const router = useRouter()
 
@@ -92,19 +117,36 @@ export default function ProfilePage() {
   const [passSaved, setPassSaved] = useState(false)
 
   useEffect(() => {
-    if (user === null) router.replace('/login')
-  }, [user, router])
+    if (!checking && user === null) router.replace('/login')
+  }, [checking, user, router])
 
   useEffect(() => {
     const userId = user?.userId || user?.username || ''
     if (!userId) return
+    const loginId = user?.signInDetails?.loginId || ''
     async function load() {
       try {
         const [profileRes, courseRes] = await Promise.all([
           client.graphql({ query: getProfileQuery, variables: { userId } }) as any,
           client.graphql({ query: listCoursesQuery }) as any,
         ])
-        const items = profileRes.data.listStudentProfiles.items
+        let items = profileRes.data.listStudentProfiles.items
+
+        // Fallback: if no profile found by userId, try by email (handles re-created accounts)
+        if (items.length === 0 && loginId) {
+          const emailRes = await client.graphql({ query: getProfileByEmailQuery, variables: { email: loginId } }) as any
+          items = emailRes.data.listStudentProfiles.items
+          // Update the profile's userId to the current one so future queries work directly
+          if (items.length > 0) {
+            try {
+              await client.graphql({
+                query: updateProfileUserIdMutation,
+                variables: { input: { id: items[0].id, userId } }
+              })
+            } catch (e) { console.error('Failed to update profile userId:', e) }
+          }
+        }
+
         if (items.length > 0) {
           const p = items[0] as Profile
           setProfile(p)
@@ -124,6 +166,8 @@ export default function ProfilePage() {
             const match = courses.find(c => c.id === p.courseId)
             if (match) setCourseName(match.title)
           }
+        } else {
+          // No profile at all — leave profile as null, UI will show setup prompt
         }
       } catch (err) {
         console.error('Error loading profile:', err)
@@ -233,10 +277,15 @@ export default function ProfilePage() {
             <div style={{ width: '56px', height: '56px', background: 'var(--plum-light)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--plum)" strokeWidth="1.8"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
             </div>
-            <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', color: 'var(--foreground)', marginBottom: '8px' }}>Not enrolled yet</h2>
+            <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', color: 'var(--foreground)', marginBottom: '8px' }}>Profile not set up yet</h2>
             <p style={{ color: 'var(--gray-mid)', fontSize: '14px', lineHeight: '1.6', maxWidth: '360px', margin: '0 auto 24px' }}>
-              Your account is created but you haven't been added to a course yet. Your teacher will set up your profile and enroll you — reach out to let them know you're ready!
+              Complete your profile setup so your teacher can enroll you in a course.
             </p>
+            <button
+              onClick={() => router.push('/profile/setup')}
+              style={{ background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '8px', padding: '12px 28px', cursor: 'pointer', fontSize: '15px', fontWeight: 600, fontFamily: 'var(--font-body)', marginBottom: '16px' }}>
+              Set Up Profile
+            </button>
             <p style={{ fontSize: '13px', color: 'var(--gray-mid)', background: 'var(--page-bg)', borderRadius: '8px', padding: '12px 16px', display: 'inline-block' }}>
               Signed in as <strong>{user?.signInDetails?.loginId}</strong>
             </p>

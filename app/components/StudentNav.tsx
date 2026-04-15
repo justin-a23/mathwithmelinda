@@ -18,7 +18,7 @@ const LIST_MY_MESSAGES = /* GraphQL */ `
 
 const GET_STUDENT_PROFILE = /* GraphQL */ `
   query GetStudentProfile($userId: String!) {
-    listStudentProfiles(filter: { userId: { eq: $userId } }, limit: 1) {
+    listStudentProfiles(filter: { userId: { eq: $userId } }, limit: 500) {
       items { firstName profilePictureKey }
     }
   }
@@ -193,7 +193,7 @@ export default function StudentNav({ unreadCount: propUnread }: Props = {}) {
       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
         {primaryBtn('My Grades', '/student/grades', isGrades)}
         {primaryBtn('Messages', '/student/messages', isMessages, unread)}
-        {primaryBtn('My Work', '/student/submissions', isWork)}
+        {primaryBtn('Turned In', '/student/submissions', isWork)}
       </div>
 
       {/* Divider */}

@@ -200,7 +200,13 @@ Only include questions you are grading in questionResults (not teacher-confirmed
 
     const text = (message.content[0] as { type: string; text: string }).text
     // Strip markdown code fences if present
-    const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+    let cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+    // Extract JSON object even if there's preamble text (e.g. "Looking at the work... {}")
+    const jsonStart = cleaned.indexOf('{')
+    const jsonEnd = cleaned.lastIndexOf('}')
+    if (jsonStart > 0 && jsonEnd > jsonStart) {
+      cleaned = cleaned.slice(jsonStart, jsonEnd + 1)
+    }
     const parsed = JSON.parse(cleaned)
 
     return NextResponse.json({

@@ -116,7 +116,7 @@ const listMySubmissionsQuery = /* GraphQL */`
 
 const getStudentProfileQuery = /* GraphQL */`
   query GetStudentProfileByUser($userId: String!) {
-    listStudentProfiles(filter: { userId: { eq: $userId } }, limit: 1) {
+    listStudentProfiles(filter: { userId: { eq: $userId } }, limit: 500) {
       items {
         id
         firstName
@@ -128,6 +128,29 @@ const getStudentProfileQuery = /* GraphQL */`
         courseId
       }
     }
+  }
+`
+
+const getStudentProfileByEmailQuery = /* GraphQL */`
+  query GetStudentProfileByEmail($email: String!) {
+    listStudentProfiles(filter: { email: { eq: $email } }, limit: 500) {
+      items {
+        id
+        firstName
+        lastName
+        preferredName
+        profilePictureKey
+        status
+        statusReason
+        courseId
+      }
+    }
+  }
+`
+
+const updateStudentProfileUserIdMutation = /* GraphQL */`
+  mutation UpdateStudentProfileUserId($input: UpdateStudentProfileInput!) {
+    updateStudentProfile(input: $input) { id userId }
   }
 `
 
@@ -254,8 +277,23 @@ export default function Dashboard() {
       try {
         // 1. Fetch profile first — we need courseId before we can filter plans
         const profileResult = await client.graphql({ query: getStudentProfileQuery, variables: { userId } }) as any
-        const profileItems = profileResult.data.listStudentProfiles.items
+        let profileItems = profileResult.data.listStudentProfiles.items
         let studentCourseId = ''
+
+        // Fallback: if no profile found by userId, try by email (handles re-created accounts)
+        if (profileItems.length === 0 && loginId) {
+          const emailResult = await client.graphql({ query: getStudentProfileByEmailQuery, variables: { email: loginId } }) as any
+          profileItems = emailResult.data.listStudentProfiles.items
+          // If found by email, update the profile's userId to the current one
+          if (profileItems.length > 0) {
+            try {
+              await client.graphql({
+                query: updateStudentProfileUserIdMutation,
+                variables: { input: { id: profileItems[0].id, userId } }
+              })
+            } catch (e) { console.error('Failed to update profile userId:', e) }
+          }
+        }
 
         if (profileItems.length > 0) {
           const p = profileItems[0]
@@ -277,8 +315,9 @@ export default function Dashboard() {
             }
           }
         } else {
-          // No profile found — student was deleted or revoked. Sign them out.
-          signOut()
+          // No profile found — show setup prompt (don't redirect to avoid loops)
+          setHasProfile(false)
+          setLoading(false)
           return
         }
 
@@ -310,7 +349,7 @@ export default function Dashboard() {
             if (!p.assignedStudentIds) return true
             try {
               const ids: string[] = JSON.parse(p.assignedStudentIds)
-              return ids.length === 0 || ids.includes(userId)
+              return ids.length === 0 || ids.includes(userId) || (loginId && ids.includes(loginId))
             } catch { return true }
           })
           .sort((a, b) => new Date(a.weekStartDate).getTime() - new Date(b.weekStartDate).getTime())
@@ -834,10 +873,15 @@ export default function Dashboard() {
             <div style={{ width: '56px', height: '56px', background: 'var(--plum-light)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--plum)" strokeWidth="1.8"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
             </div>
-            <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', color: 'var(--foreground)', marginBottom: '8px' }}>Not enrolled yet</h2>
-            <p style={{ color: 'var(--gray-mid)', fontSize: '14px', lineHeight: '1.6', margin: '0 auto' }}>
-              Your account is set up but you haven't been added to a course yet. Reach out to your teacher to get enrolled — your lessons will appear here once you're set up.
+            <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', color: 'var(--foreground)', marginBottom: '8px' }}>Welcome!</h2>
+            <p style={{ color: 'var(--gray-mid)', fontSize: '14px', lineHeight: '1.6', margin: '0 auto 24px' }}>
+              Let&apos;s get you set up. Complete your profile so your teacher can enroll you in a course.
             </p>
+            <button
+              onClick={() => router.push('/profile/setup')}
+              style={{ background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '8px', padding: '12px 28px', cursor: 'pointer', fontSize: '15px', fontWeight: 600, fontFamily: 'var(--font-body)' }}>
+              Set Up Profile
+            </button>
           </div>
         ) : weeklyPlans.length === 0 ? (
           <p style={{ color: 'var(--gray-mid)' }}>No lessons scheduled yet. Check back soon!</p>
@@ -899,10 +943,10 @@ export default function Dashboard() {
                           </div>
                           <div style={{ textAlign: 'right', flexShrink: 0 }}>
                             <div style={{ fontSize: '12px', color: isOverdue ? '#b91c1c' : 'var(--gray-mid)', marginBottom: '8px' }}>
-                              Due by {dueLabel}
+                              Due {item.dayOfWeek} by {dueLabel}
                             </div>
                             <span style={{ background: isOverdue ? '#b91c1c' : 'var(--plum)', color: 'white', fontSize: '12px', padding: '4px 12px', borderRadius: '20px' }}>
-                              {isOverdue ? 'Submit Late →' : 'Watch →'}
+                              {isOverdue ? 'Open Late →' : 'Watch →'}
                             </span>
                           </div>
                         </div>

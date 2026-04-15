@@ -1399,6 +1399,7 @@ export const createAssignmentQuestion = /* GraphQL */ `mutation CreateAssignment
     questionType
     choices
     correctAnswer
+    diagramKey
     lessonTemplate {
       id
       lessonNumber
@@ -1435,6 +1436,7 @@ export const updateAssignmentQuestion = /* GraphQL */ `mutation UpdateAssignment
     questionType
     choices
     correctAnswer
+    diagramKey
     lessonTemplate {
       id
       lessonNumber
@@ -1471,6 +1473,7 @@ export const deleteAssignmentQuestion = /* GraphQL */ `mutation DeleteAssignment
     questionType
     choices
     correctAnswer
+    diagramKey
     lessonTemplate {
       id
       lessonNumber

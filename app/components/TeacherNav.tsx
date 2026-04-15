@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter, usePathname } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useAuthenticator } from '@aws-amplify/ui-react'
 import { generateClient } from 'aws-amplify/api'
 import ThemeToggle from './ThemeToggle'
@@ -47,14 +47,26 @@ export default function TeacherNav({ ungradedCount: propUngraded, unreadCount: p
   const [pendingStudents, setPendingStudents] = useState(0)
   const [displayName, setDisplayName] = useState('')
   const [picUrl, setPicUrl] = useState<string | null>(null)
+  const [moreOpen, setMoreOpen] = useState(false)
+  const moreRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    // Only fetch counts if not provided by parent
     if (propUngraded === undefined || propUnread === undefined) {
       fetchCounts()
     }
     fetchProfile()
   }, [])
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (moreRef.current && !moreRef.current.contains(e.target as Node)) {
+        setMoreOpen(false)
+      }
+    }
+    if (moreOpen) document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [moreOpen])
 
   async function fetchCounts() {
     try {
@@ -95,13 +107,22 @@ export default function TeacherNav({ ungradedCount: propUngraded, unreadCount: p
   const isGrades = pathname === '/teacher/grades'
   const isSchedule = pathname === '/teacher/schedule'
   const isMessages = pathname === '/teacher/messages'
-  const isLessons = pathname.startsWith('/teacher/library')
-  const isGradebook = pathname === '/teacher/gradebook'
   const isStudents = pathname === '/teacher/students'
+  const isLessons = pathname.startsWith('/teacher/library')
+  // "More" items
+  const isGradebook = pathname === '/teacher/gradebook'
   const isTerms = pathname === '/teacher/semesters'
   const isPlans = pathname === '/teacher/plans'
   const isSyllabi = pathname === '/teacher/syllabus'
   const isZoom = pathname === '/teacher/zoom'
+  const isReportCard = pathname.startsWith('/teacher/report-card')
+  const isPayments = pathname === '/teacher/payments'
+  const isProfile = pathname === '/teacher/profile'
+
+  const moreIsActive = isGradebook || isTerms || isPlans || isSyllabi || isZoom || isReportCard || isPayments
+
+  // Label for "More" button when a sub-item is active
+  const moreActiveLabel = isGradebook ? 'Gradebook' : isReportCard ? 'Report Card' : isPlans ? 'Assigned Work' : isTerms ? 'Academic Year' : isSyllabi ? 'Syllabi' : isZoom ? 'Meetings' : isPayments ? 'Payments' : null
 
   function primaryBtn(label: string, path: string, active: boolean, badge?: number) {
     return (
@@ -146,44 +167,30 @@ export default function TeacherNav({ ungradedCount: propUngraded, unreadCount: p
     )
   }
 
-  function secondaryLink(label: string, path: string, active: boolean, badge?: number) {
+  function dropdownItem(label: string, path: string, active: boolean) {
     return (
       <button
         key={path}
-        onClick={() => router.push(path)}
+        onClick={() => { setMoreOpen(false); router.push(path) }}
         style={{
-          background: 'none',
+          display: 'block',
+          width: '100%',
+          textAlign: 'left',
+          background: active ? 'var(--plum)' : 'transparent',
+          color: active ? 'white' : 'var(--foreground)',
           border: 'none',
-          color: active ? 'white' : 'rgba(255,255,255,0.55)',
+          padding: '10px 16px',
           cursor: 'pointer',
           fontSize: '13px',
           fontWeight: active ? 600 : 400,
           fontFamily: 'var(--font-body)',
-          padding: '4px 2px',
-          textDecoration: active ? 'underline' : 'none',
-          textUnderlineOffset: '3px',
-          whiteSpace: 'nowrap',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '5px',
+          borderRadius: '6px',
+          transition: 'background 0.1s',
         }}
-        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = 'white' }}
-        onMouseLeave={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.color = 'rgba(255,255,255,0.55)' }}
+        onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--plum-light)' }}
+        onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}
       >
         {label}
-        {badge && badge > 0 ? (
-          <span style={{
-            background: '#f59e0b',
-            color: 'white',
-            fontSize: '10px',
-            fontWeight: 700,
-            padding: '1px 6px',
-            borderRadius: '20px',
-            lineHeight: 1.4,
-          }}>
-            {badge}
-          </span>
-        ) : null}
       </button>
     )
   }
@@ -219,25 +226,70 @@ export default function TeacherNav({ ungradedCount: propUngraded, unreadCount: p
       {/* Divider */}
       <div style={{ width: '1px', height: '28px', background: 'rgba(255,255,255,0.15)', marginRight: '20px', flexShrink: 0 }} />
 
-      {/* Primary actions */}
+      {/* Primary actions — daily use items */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
         {primaryBtn('Grade Work', '/teacher/grades', isGrades, ungraded)}
         {primaryBtn('Schedule', '/teacher/schedule', isSchedule)}
         {primaryBtn('Messages', '/teacher/messages', isMessages, unread)}
-        {primaryBtn('Manage Lessons', '/teacher/library', isLessons)}
+        {primaryBtn('Lessons', '/teacher/library', isLessons)}
+        {primaryBtn('Students', '/teacher/students', isStudents, pendingStudents)}
       </div>
 
       {/* Divider */}
-      <div style={{ width: '1px', height: '28px', background: 'rgba(255,255,255,0.15)', margin: '0 20px', flexShrink: 0 }} />
+      <div style={{ width: '1px', height: '28px', background: 'rgba(255,255,255,0.15)', margin: '0 16px', flexShrink: 0 }} />
 
-      {/* Secondary links */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexShrink: 0 }}>
-        {secondaryLink('Assigned Work', '/teacher/plans', isPlans)}
-        {secondaryLink('Gradebook', '/teacher/gradebook', isGradebook)}
-        {secondaryLink('Students', '/teacher/students', isStudents, pendingStudents)}
-        {secondaryLink('Meetings', '/teacher/zoom', isZoom)}
-        {secondaryLink('Academic Year', '/teacher/semesters', isTerms)}
-        {secondaryLink('Syllabi', '/teacher/syllabus', isSyllabi)}
+      {/* More dropdown */}
+      <div ref={moreRef} style={{ position: 'relative', flexShrink: 0 }}>
+        <button
+          onClick={() => setMoreOpen(prev => !prev)}
+          style={{
+            background: moreIsActive ? 'white' : moreOpen ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.08)',
+            color: moreIsActive ? 'var(--plum)' : 'rgba(255,255,255,0.85)',
+            border: 'none',
+            padding: '7px 14px',
+            borderRadius: '20px',
+            cursor: 'pointer',
+            fontSize: '13px',
+            fontWeight: moreIsActive ? 700 : 500,
+            fontFamily: 'var(--font-body)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '5px',
+            whiteSpace: 'nowrap',
+            transition: 'background 0.15s',
+          }}
+          onMouseEnter={e => { if (!moreIsActive && !moreOpen) e.currentTarget.style.background = 'rgba(255,255,255,0.15)' }}
+          onMouseLeave={e => { if (!moreIsActive && !moreOpen) e.currentTarget.style.background = 'rgba(255,255,255,0.08)' }}
+        >
+          {moreActiveLabel || 'More'}
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ transform: moreOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>
+            <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </button>
+
+        {moreOpen && (
+          <div style={{
+            position: 'absolute',
+            top: 'calc(100% + 8px)',
+            left: 0,
+            background: 'var(--background)',
+            border: '1px solid var(--gray-light)',
+            borderRadius: '12px',
+            padding: '6px',
+            minWidth: '200px',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
+            zIndex: 200,
+          }}>
+            {dropdownItem('Assigned Work', '/teacher/plans', isPlans)}
+            {dropdownItem('Gradebook', '/teacher/gradebook', isGradebook)}
+            <div style={{ height: '1px', background: 'var(--gray-light)', margin: '4px 8px' }} />
+            {dropdownItem('Meetings', '/teacher/zoom', isZoom)}
+            {dropdownItem('Academic Year', '/teacher/semesters', isTerms)}
+            {dropdownItem('Syllabi', '/teacher/syllabus', isSyllabi)}
+            <div style={{ height: '1px', background: 'var(--gray-light)', margin: '4px 8px' }} />
+            {dropdownItem('Payments', '/teacher/payments', isPayments)}
+          </div>
+        )}
       </div>
 
       {/* Spacer */}
@@ -269,7 +321,7 @@ export default function TeacherNav({ ungradedCount: propUngraded, unreadCount: p
         </button>
 
         <button
-          onClick={() => { signOut(); router.replace('/login') }}
+          onClick={() => signOut()}
           style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.7)', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontFamily: 'var(--font-body)', whiteSpace: 'nowrap' }}
         >
           Sign out

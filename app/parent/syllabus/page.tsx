@@ -19,7 +19,7 @@ const LIST_PARENT_STUDENTS = /* GraphQL */ `
 
 const GET_STUDENT_PROFILE_BY_EMAIL = /* GraphQL */ `
   query GetStudentProfileByEmail($email: String!) {
-    listStudentProfiles(filter: { email: { eq: $email } }, limit: 1) {
+    listStudentProfiles(filter: { email: { eq: $email } }, limit: 500) {
       items { id courseId }
     }
   }

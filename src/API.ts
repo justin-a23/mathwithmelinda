@@ -304,6 +304,7 @@ export type AssignmentQuestion = {
   questionType: string,
   choices?: string | null,
   correctAnswer?: string | null,
+  diagramKey?: string | null,
   lessonTemplate?: LessonTemplate | null,
   createdAt: string,
   updatedAt: string,
@@ -783,6 +784,7 @@ export type CreateAssignmentQuestionInput = {
   questionType: string,
   choices?: string | null,
   correctAnswer?: string | null,
+  diagramKey?: string | null,
   lessonTemplateQuestionsId?: string | null,
 };
 
@@ -792,6 +794,7 @@ export type ModelAssignmentQuestionConditionInput = {
   questionType?: ModelStringInput | null,
   choices?: ModelStringInput | null,
   correctAnswer?: ModelStringInput | null,
+  diagramKey?: ModelStringInput | null,
   and?: Array< ModelAssignmentQuestionConditionInput | null > | null,
   or?: Array< ModelAssignmentQuestionConditionInput | null > | null,
   not?: ModelAssignmentQuestionConditionInput | null,
@@ -807,6 +810,7 @@ export type UpdateAssignmentQuestionInput = {
   questionType?: string | null,
   choices?: string | null,
   correctAnswer?: string | null,
+  diagramKey?: string | null,
   lessonTemplateQuestionsId?: string | null,
 };
 
@@ -3542,6 +3546,7 @@ export type CreateAssignmentQuestionMutation = {
     questionType: string,
     choices?: string | null,
     correctAnswer?: string | null,
+    diagramKey?: string | null,
     lessonTemplate?:  {
       __typename: "LessonTemplate",
       id: string,
@@ -3577,6 +3582,7 @@ export type UpdateAssignmentQuestionMutation = {
     questionType: string,
     choices?: string | null,
     correctAnswer?: string | null,
+    diagramKey?: string | null,
     lessonTemplate?:  {
       __typename: "LessonTemplate",
       id: string,
@@ -3612,6 +3618,7 @@ export type DeleteAssignmentQuestionMutation = {
     questionType: string,
     choices?: string | null,
     correctAnswer?: string | null,
+    diagramKey?: string | null,
     lessonTemplate?:  {
       __typename: "LessonTemplate",
       id: string,
@@ -5112,6 +5119,7 @@ export type GetAssignmentQuestionQuery = {
     questionType: string,
     choices?: string | null,
     correctAnswer?: string | null,
+    diagramKey?: string | null,
     lessonTemplate?:  {
       __typename: "LessonTemplate",
       id: string,
@@ -5150,6 +5158,7 @@ export type ListAssignmentQuestionsQuery = {
       questionType: string,
       choices?: string | null,
       correctAnswer?: string | null,
+      diagramKey?: string | null,
       createdAt: string,
       updatedAt: string,
       lessonTemplateQuestionsId?: string | null,

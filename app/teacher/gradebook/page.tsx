@@ -17,6 +17,7 @@ const LIST_SEMESTERS = /* GraphQL */ `
         lessonWeightPercent testWeightPercent quizWeightPercent
         gradeA gradeB gradeC gradeD
         course { id title }
+        quarters { items { id name startDate endDate order } }
       }
     }
   }
@@ -39,9 +40,10 @@ const LIST_WEEKLY_PLANS = /* GraphQL */ `
 `
 
 const LIST_LESSON_TEMPLATES = /* GraphQL */ `
-  query ListLessonTemplates($filter: ModelLessonTemplateFilterInput) {
-    listLessonTemplates(filter: $filter, limit: 200) {
+  query ListLessonTemplates($filter: ModelLessonTemplateFilterInput, $limit: Int, $nextToken: String) {
+    listLessonTemplates(filter: $filter, limit: $limit, nextToken: $nextToken) {
       items { id lessonCategory lessonNumber }
+      nextToken
     }
   }
 `
@@ -62,6 +64,14 @@ const LIST_ALL_SUBMISSIONS = /* GraphQL */ `
   }
 `
 
+type Quarter = {
+  id: string
+  name: string
+  startDate: string
+  endDate: string
+  order: number
+}
+
 type Semester = {
   id: string
   name: string
@@ -77,6 +87,7 @@ type Semester = {
   gradeC: number | null
   gradeD: number | null
   course: { id: string; title: string } | null
+  quarters: { items: Quarter[] } | null
 }
 
 type PlanItem = {
@@ -170,6 +181,9 @@ export default function GradebookPage() {
   const [columns, setColumns] = useState<LessonColumn[]>([])
   const [rows, setRows] = useState<StudentRow[]>([])
 
+  // Quarter filter
+  const [selectedQuarterId, setSelectedQuarterId] = useState<string>('')
+
   // View state
   const [view, setView] = useState<'students' | 'assignment'>('students')
   const [expandedStudentId, setExpandedStudentId] = useState<string | null>(null)
@@ -187,7 +201,7 @@ export default function GradebookPage() {
     if (selectedSemesterId) {
       loadGradebook(selectedSemesterId)
     }
-  }, [selectedSemesterId])
+  }, [selectedSemesterId, selectedQuarterId])
 
   async function loadSemesters() {
     setLoading(true)
@@ -215,9 +229,14 @@ export default function GradebookPage() {
       const plansRes = await (client.graphql({ query: LIST_WEEKLY_PLANS }) as any)
       const allPlans: WeeklyPlan[] = plansRes.data.listWeeklyPlans.items
 
-      // 2. Filter to this course + semester date range
+      // 2. Filter to this course + date range (quarter or full semester)
+      const quarters = [...(sem.quarters?.items || [])].sort((a, b) => a.order - b.order)
+      const selectedQ = quarters.find(q => q.id === selectedQuarterId)
+      const filterStart = selectedQ ? selectedQ.startDate : sem.startDate
+      const filterEnd = selectedQ ? selectedQ.endDate : sem.endDate
+
       const plansInRange = allPlans.filter(p => {
-        const inRange = p.weekStartDate >= sem.startDate && p.weekStartDate <= sem.endDate
+        const inRange = p.weekStartDate >= filterStart && p.weekStartDate <= filterEnd
         const courseMatch = !sem.courseId || p.courseWeeklyPlansId === sem.courseId
         return inRange && courseMatch
       })
@@ -240,16 +259,20 @@ export default function GradebookPage() {
         }
       }
 
-      // 5. Load lesson templates for category info
+      // 5. Load lesson templates for category info (paginated)
       const templateMap = new Map<string, LessonTemplate>()
       if (templateIds.size > 0) {
-        const tmplRes = await (client.graphql({
-          query: LIST_LESSON_TEMPLATES,
-          variables: { filter: { courseLessonTemplatesId: { eq: sem.courseId } } },
-        }) as any)
-        for (const t of tmplRes.data.listLessonTemplates.items as LessonTemplate[]) {
-          templateMap.set(t.id, t)
-        }
+        let tmplNextToken: string | null = null
+        do {
+          const tmplRes = await (client.graphql({
+            query: LIST_LESSON_TEMPLATES,
+            variables: { filter: { courseLessonTemplatesId: { eq: sem.courseId } }, limit: 500, nextToken: tmplNextToken },
+          }) as any)
+          for (const t of tmplRes.data.listLessonTemplates.items as LessonTemplate[]) {
+            templateMap.set(t.id, t)
+          }
+          tmplNextToken = tmplRes.data.listLessonTemplates.nextToken
+        } while (tmplNextToken)
       }
 
       // 6. Build sorted columns
@@ -406,7 +429,7 @@ export default function GradebookPage() {
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: '24px', marginBottom: '32px', flexWrap: 'wrap' }}>
           <div>
             <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--gray-mid)', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '8px' }}>Term</label>
-            <select value={selectedSemesterId} onChange={e => { setSelectedSemesterId(e.target.value); setExpandedStudentId(null) }}
+            <select value={selectedSemesterId} onChange={e => { setSelectedSemesterId(e.target.value); setSelectedQuarterId(''); setExpandedStudentId(null) }}
               style={{ padding: '10px 36px 10px 14px', border: '1px solid var(--gray-light)', borderRadius: '8px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)', minWidth: '280px', cursor: 'pointer', appearance: 'none', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23999' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' }}>
               <option value="">Select a term…</option>
               {semesters.map(s => (
@@ -414,6 +437,23 @@ export default function GradebookPage() {
               ))}
             </select>
           </div>
+
+          {/* Quarter filter — only show if semester has quarters */}
+          {selectedSemester && (() => {
+            const quarters = [...(selectedSemester.quarters?.items || [])].sort((a, b) => a.order - b.order)
+            return quarters.length > 0 ? (
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--gray-mid)', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '8px' }}>Quarter</label>
+                <select value={selectedQuarterId} onChange={e => { setSelectedQuarterId(e.target.value); setExpandedStudentId(null) }}
+                  style={{ padding: '10px 36px 10px 14px', border: '1px solid var(--gray-light)', borderRadius: '8px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)', minWidth: '180px', cursor: 'pointer', appearance: 'none', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23999' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' }}>
+                  <option value="">Full Semester</option>
+                  {quarters.map(q => (
+                    <option key={q.id} value={q.id}>{q.name}</option>
+                  ))}
+                </select>
+              </div>
+            ) : null
+          })()}
 
           {selectedSemester && !dataLoading && rows.length > 0 && (
             <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
@@ -546,13 +586,15 @@ export default function GradebookPage() {
                             <button
                               onClick={e => {
                                 e.stopPropagation()
-                                router.push(`/teacher/report-card?studentId=${row.student.id}&semesterId=${selectedSemesterId}`)
+                                const params = new URLSearchParams({ studentId: row.student.id, semesterId: selectedSemesterId })
+                                if (selectedQuarterId) params.set('quarterId', selectedQuarterId)
+                                router.push(`/teacher/report-card?${params.toString()}`)
                               }}
                               style={{ background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '6px', padding: '6px 14px', cursor: 'pointer', fontSize: '12px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
                               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                 <polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>
                               </svg>
-                              Print Report Card
+                              {selectedQuarterId ? `Report Card (${(() => { const q = (selectedSemester?.quarters?.items || []).find((q: Quarter) => q.id === selectedQuarterId); return q ? q.name : 'Quarter' })()})` : 'Report Card'}
                             </button>
                           </div>
                           {columns.map((col, i) => {

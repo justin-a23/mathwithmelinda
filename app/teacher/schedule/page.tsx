@@ -100,13 +100,18 @@ function ScheduleWeekInner() {
 
     async function fetchLessons() {
       try {
-        const result = await client.graphql({
-          query: listLessonTemplates,
-          variables: { filter: { courseLessonTemplatesId: { eq: selectedCourseId } }, limit: 500 }
-        })
-        const sorted = (result.data.listLessonTemplates.items as LessonTemplate[])
-          .sort((a, b) => a.lessonNumber - b.lessonNumber)
-        setLessonTemplates(sorted)
+        let allItems: LessonTemplate[] = []
+        let nextToken: string | null = null
+        do {
+          const result: any = await client.graphql({
+            query: listLessonTemplates,
+            variables: { filter: { courseLessonTemplatesId: { eq: selectedCourseId } }, limit: 500, nextToken }
+          })
+          allItems = [...allItems, ...result.data.listLessonTemplates.items]
+          nextToken = result.data.listLessonTemplates.nextToken
+        } while (nextToken)
+        allItems.sort((a, b) => a.lessonNumber - b.lessonNumber)
+        setLessonTemplates(allItems)
       } catch (err) { console.error(err) }
     }
 

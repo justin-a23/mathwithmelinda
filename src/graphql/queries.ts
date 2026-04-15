@@ -736,6 +736,7 @@ export const getAssignmentQuestion = /* GraphQL */ `query GetAssignmentQuestion(
     questionType
     choices
     correctAnswer
+    diagramKey
     lessonTemplate {
       id
       lessonNumber
@@ -778,6 +779,7 @@ export const listAssignmentQuestions = /* GraphQL */ `query ListAssignmentQuesti
       questionType
       choices
       correctAnswer
+      diagramKey
       createdAt
       updatedAt
       lessonTemplateQuestionsId

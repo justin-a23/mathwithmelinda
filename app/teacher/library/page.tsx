@@ -19,7 +19,13 @@ export default function LessonLibraryIndex() {
   useEffect(() => {
     if (checking) return
     client.graphql({ query: listCourses }).then((res: any) => {
-      setCourses(res.data.listCourses.items)
+      const items = res.data.listCourses.items as Course[]
+      items.sort((a, b) => {
+        const ga = parseInt(a.gradeLevel || '99')
+        const gb = parseInt(b.gradeLevel || '99')
+        return ga - gb
+      })
+      setCourses(items)
     }).catch(console.error)
   }, [checking])
 
@@ -62,7 +68,7 @@ export default function LessonLibraryIndex() {
                   {course.title}
                 </div>
                 {course.gradeLevel && (
-                  <div style={{ fontSize: '13px', color: 'var(--gray-mid)' }}>{course.gradeLevel}</div>
+                  <div style={{ fontSize: '13px', color: 'var(--gray-mid)' }}>Grade {course.gradeLevel}</div>
                 )}
               </div>
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
