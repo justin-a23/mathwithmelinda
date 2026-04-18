@@ -127,6 +127,7 @@ export default function TeacherNav({ ungradedCount: propUngraded, unreadCount: p
   const isMessages = pathname === '/teacher/messages'
   const isStudents = pathname === '/teacher/students'
   const isLessons = pathname.startsWith('/teacher/library')
+  const isImport = pathname.startsWith('/teacher/lessons/import')
   // "More" items
   const isGradebook = pathname === '/teacher/gradebook'
   const isTerms = pathname === '/teacher/semesters'
@@ -137,10 +138,10 @@ export default function TeacherNav({ ungradedCount: propUngraded, unreadCount: p
   const isPayments = pathname === '/teacher/payments'
   const isProfile = pathname === '/teacher/profile'
 
-  const moreIsActive = isGradebook || isTerms || isPlans || isSyllabi || isZoom || isReportCard || isPayments
+  const moreIsActive = isGradebook || isTerms || isPlans || isSyllabi || isZoom || isReportCard || isPayments || isImport
 
   // Label for "More" button when a sub-item is active
-  const moreActiveLabel = isGradebook ? 'Gradebook' : isReportCard ? 'Report Card' : isPlans ? 'Assigned Work' : isTerms ? 'Academic Year' : isSyllabi ? 'Syllabi' : isZoom ? 'Meetings' : isPayments ? 'Payments' : null
+  const moreActiveLabel = isGradebook ? 'Gradebook' : isReportCard ? 'Report Card' : isPlans ? 'Assigned Work' : isTerms ? 'Academic Year' : isSyllabi ? 'Syllabi' : isZoom ? 'Meetings' : isPayments ? 'Payments' : isImport ? 'Import Lesson' : null
 
   function primaryBtn(label: string, path: string, active: boolean, badge?: number) {
     return (
@@ -294,6 +295,7 @@ export default function TeacherNav({ ungradedCount: propUngraded, unreadCount: p
           }}>
             {dropdownItem('Assigned Work', '/teacher/plans', isPlans)}
             {dropdownItem('Gradebook', '/teacher/gradebook', isGradebook)}
+            {dropdownItem('Import Lesson', '/teacher/lessons/import', isImport)}
             <div style={{ height: '1px', background: 'var(--gray-light)', margin: '4px 8px' }} />
             {dropdownItem('Meetings', '/teacher/zoom', isZoom)}
             {dropdownItem('Academic Year', '/teacher/semesters', isTerms)}

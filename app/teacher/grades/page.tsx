@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, Suspense } from 'react'
 import { generateClient } from 'aws-amplify/api'
 import { useTheme } from '../../ThemeProvider'
 import MathRenderer from '../../components/MathRenderer'
+import DiagramRenderer from '../../components/DiagramRenderer'
 import TeacherNav from '../../components/TeacherNav'
 import { useRoleGuard } from '../../hooks/useRoleGuard'
 import { apiFetch } from '@/app/lib/apiFetch'
@@ -118,6 +119,7 @@ const getLessonTemplateQuestions = /* GraphQL */`
           questionText
           questionType
           correctAnswer
+          diagramSpec
         }
       }
     }
@@ -179,7 +181,7 @@ type Submission = {
   } | null
 }
 
-type Question = { id: string; order: number; questionText: string; questionType: string; correctAnswer?: string | null }
+type Question = { id: string; order: number; questionText: string; questionType: string; correctAnswer?: string | null; diagramSpec?: string | null }
 
 function getSubmissionCourseId(s: Submission): string {
   if (s.assignment?.course?.id) return s.assignment.course.id
@@ -374,6 +376,11 @@ function QuestionScorecardSection({ questions, content, worksheetImageUrls, ques
                   <div style={{ fontSize: '14px', color: resolvedTextColor, marginBottom: '8px', lineHeight: 1.5 }}>
                     <MathRenderer text={qBody} />
                   </div>
+                  {q.diagramSpec && (
+                    <div style={{ marginBottom: '8px' }}>
+                      <DiagramRenderer spec={q.diagramSpec} />
+                    </div>
+                  )}
 
                   {isShowWork ? (
                     <span style={{ fontSize: '12px', color: resolvedSubtleColor, fontStyle: 'italic' }}>

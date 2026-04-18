@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState, useRef, Suspense } from 'react'
 import { generateClient } from 'aws-amplify/api'
 import MathRenderer from '../components/MathRenderer'
+import DiagramRenderer from '../components/DiagramRenderer'
 import MathInput from '../components/MathInput'
 import StudentNav from '../components/StudentNav'
 import SubmissionMethodPicker from '../components/SubmissionMethodPicker'
@@ -67,6 +68,7 @@ const getLessonTemplateQuery = /* GraphQL */`
           choices
           correctAnswer
           diagramKey
+          diagramSpec
         }
       }
     }
@@ -129,6 +131,7 @@ type AssignmentQuestion = {
   choices: string | null
   correctAnswer: string | null
   diagramKey: string | null
+  diagramSpec: string | null
 }
 
 type LessonTemplateData = {
@@ -1202,6 +1205,12 @@ function LessonPageInner() {
                                           alt="Diagram"
                                           style={{ width: '100%', borderRadius: '8px', border: '1px solid var(--gray-light)', display: 'block' }}
                                         />
+                                      </div>
+                                    )}
+                                    {/* Generated diagram from JSON spec */}
+                                    {q.diagramSpec && (
+                                      <div style={{ marginBottom: '14px' }}>
+                                        <DiagramRenderer spec={q.diagramSpec} />
                                       </div>
                                     )}
                                     {q.questionType === 'number' && (
