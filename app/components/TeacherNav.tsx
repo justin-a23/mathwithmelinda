@@ -55,8 +55,19 @@ export default function TeacherNav({ ungradedCount: propUngraded, unreadCount: p
     if (propUngraded === undefined || propUnread === undefined) {
       fetchCounts()
     }
-    fetchProfile()
   }, [])
+
+  // Re-fetch profile whenever user identity becomes available (avoids race where
+  // the auth user wasn't ready on first render and picUrl stays empty)
+  useEffect(() => {
+    if (user?.userId || user?.username) fetchProfile()
+  }, [user?.userId, user?.username])
+
+  // After signOut(), `user` becomes null — redirect to login. signOut() itself
+  // is not truly async, so we can't await it; this effect handles the redirect.
+  useEffect(() => {
+    if (user === null) router.replace('/login')
+  }, [user, router])
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -93,11 +104,17 @@ export default function TeacherNav({ ungradedCount: propUngraded, unreadCount: p
           setPicUrl(p.profilePictureKey)
         } else {
           const res = await apiFetch('/api/profile-pic?key=' + encodeURIComponent(p.profilePictureKey))
-          const { url } = await res.json()
-          setPicUrl(url)
+          if (!res.ok) {
+            console.warn('Profile pic fetch failed:', res.status, await res.text().catch(() => ''))
+            return
+          }
+          const data = await res.json()
+          if (data?.url) setPicUrl(data.url)
         }
       }
-    } catch { /* silent */ }
+    } catch (err) {
+      console.warn('fetchProfile error:', err)
+    }
   }
 
   const initials = displayName

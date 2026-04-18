@@ -98,7 +98,7 @@ const listPendingStudentsQuery = /* GraphQL */`
 const listActiveStudentsQuery = /* GraphQL */`
   query ListActiveStudents {
     listStudentProfiles(limit: 200, filter: { status: { eq: "active" } }) {
-      items { id userId email firstName lastName }
+      items { id userId email firstName lastName courseId }
     }
   }
 `
@@ -124,7 +124,18 @@ const listWeeklyPlansQuery = /* GraphQL */`
       items {
         id
         weekStartDate
+        assignedStudentIds
+        courseWeeklyPlansId
         course { id title }
+        items {
+          items {
+            id
+            dayOfWeek
+            dueTime
+            isPublished
+            lesson { id title }
+          }
+        }
       }
     }
   }
@@ -359,11 +370,85 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
       ])
 
       const allSubs = subsResult?.data?.listSubmissions?.items ?? []
-      const activeStudents: { id: string; userId: string; email: string; firstName: string; lastName: string }[] =
+      const activeStudents: { id: string; userId: string; email: string; firstName: string; lastName: string; courseId?: string | null }[] =
         studentsResult?.data?.listStudentProfiles?.items ?? []
-      const weeklyPlans: { id: string; weekStartDate: string; course?: { id: string; title: string } }[] =
-        plansResult?.data?.listWeeklyPlans?.items ?? []
+      const weeklyPlans: any[] = plansResult?.data?.listWeeklyPlans?.items ?? []
       const hasAnyAssignments = (assignResult?.data?.listAssignments?.items?.length ?? 0) > 0
+
+      // Helper: compute due datetime for a plan item (mirrors getDueStatus on dashboard)
+      function dueDateOf(weekStartDate: string, dayOfWeek: string, dueTime: string | null): Date | null {
+        if (!dueTime) return null
+        if (dueTime.includes('T') && dueTime.length > 10) {
+          const d = new Date(dueTime)
+          return isNaN(d.getTime()) ? null : d
+        }
+        const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+        const offset = days.indexOf(dayOfWeek)
+        if (offset < 0) return null
+        const base = new Date(weekStartDate + 'T00:00:00')
+        base.setDate(base.getDate() + offset)
+        const timePart = dueTime.includes('T') ? dueTime.split('T')[1] : dueTime
+        const y = base.getFullYear()
+        const mo = String(base.getMonth() + 1).padStart(2, '0')
+        const d = String(base.getDate()).padStart(2, '0')
+        const dt = new Date(`${y}-${mo}-${d}T${timePart}`)
+        return isNaN(dt.getTime()) ? null : dt
+      }
+
+      // Build per-student late-assignment counts.
+      // For each plan item that's past due, check each assigned student's submission.
+      const lateByStudent = new Map<string, { name: string; count: number; firstName: string }>()
+      if (hasAnyAssignments) {
+        // Index submissions by studentId → set of submitted lessonIds
+        const submittedLessonsByStudent = new Map<string, Set<string>>()
+        for (const s of allSubs) {
+          if (s.isArchived) continue
+          if (!s.submittedAt) continue
+          let lessonId: string | null = null
+          try { lessonId = JSON.parse(s.content || '{}').lessonId || null } catch { /* skip */ }
+          if (!lessonId) continue
+          if (!submittedLessonsByStudent.has(s.studentId)) submittedLessonsByStudent.set(s.studentId, new Set())
+          submittedLessonsByStudent.get(s.studentId)!.add(lessonId)
+        }
+
+        for (const plan of weeklyPlans) {
+          const courseId = plan.courseWeeklyPlansId || plan.course?.id
+          if (!courseId) continue
+
+          // Determine which students this plan applies to
+          let assignedIds: string[] | null = null
+          if (plan.assignedStudentIds) {
+            try {
+              const parsed = typeof plan.assignedStudentIds === 'string'
+                ? JSON.parse(plan.assignedStudentIds)
+                : plan.assignedStudentIds
+              if (Array.isArray(parsed) && parsed.length > 0) assignedIds = parsed
+            } catch { /* ignore */ }
+          }
+          // Default = all active students enrolled in this course
+          const studentsForPlan = assignedIds
+            ? activeStudents.filter(st => assignedIds!.includes(st.userId))
+            : activeStudents.filter(st => st.courseId === courseId)
+
+          const planItems = plan.items?.items || []
+          for (const item of planItems) {
+            if (!item.lesson) continue
+            if (item.isPublished === false) continue
+            const due = dueDateOf(plan.weekStartDate, item.dayOfWeek, item.dueTime)
+            if (!due || due >= now) continue // not due yet
+            // For each assigned student, count missing submission for this lesson
+            for (const st of studentsForPlan) {
+              const submittedSet = submittedLessonsByStudent.get(st.userId) || submittedLessonsByStudent.get(st.email) || new Set()
+              if (submittedSet.has(item.lesson.id)) continue
+              const key = st.id
+              if (!lateByStudent.has(key)) {
+                lateByStudent.set(key, { name: `${st.firstName} ${st.lastName}`, firstName: st.firstName, count: 0 })
+              }
+              lateByStudent.get(key)!.count++
+            }
+          }
+        }
+      }
 
       const fiveDaysAgo = new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000)
       const weekStartMs = monday.getTime()
@@ -379,6 +464,20 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
             id: 'stale-ungraded',
             level: 'urgent',
             message: `${staleUngraded.length} submission${staleUngraded.length > 1 ? 's have' : ' has'} been waiting to be graded for 5+ days`,
+            href: '/teacher/grades',
+          })
+        }
+
+        // 1b. Students with past-due assignments not turned in
+        if (lateByStudent.size > 0) {
+          const lateRows = Array.from(lateByStudent.values()).sort((a, b) => b.count - a.count)
+          const totalLate = lateRows.reduce((sum, r) => sum + r.count, 0)
+          const namesPart = lateRows.slice(0, 3).map(r => `${r.firstName} (${r.count})`).join(', ')
+          const extra = lateRows.length > 3 ? ` +${lateRows.length - 3} more` : ''
+          newAlerts.push({
+            id: 'late-assignments',
+            level: 'urgent',
+            message: `${totalLate} late assignment${totalLate > 1 ? 's' : ''} across ${lateRows.length} student${lateRows.length > 1 ? 's' : ''} — ${namesPart}${extra}`,
             href: '/teacher/grades',
           })
         }
