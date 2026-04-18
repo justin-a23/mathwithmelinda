@@ -55,7 +55,7 @@ const LIST_LESSON_TEMPLATES = /* GraphQL */ `
 const LIST_STUDENT_PROFILE = /* GraphQL */ `
   query ListStudentProfile($filter: ModelStudentProfileFilterInput) {
     listStudentProfiles(filter: $filter, limit: 500) {
-      items { id userId email firstName lastName courseId }
+      items { id userId email firstName lastName courseId enrolledAt }
     }
   }
 `
@@ -323,8 +323,11 @@ function ReportCardInner() {
     try {
       // Check if there's an existing record for this exact student/semester/quarter
       const match = history.find(r => (r.quarterId || '') === quarterId)
-      if (match) {
-        // Update existing record's comment
+      // Sent records (recipientEmails non-null) are immutable — parents have the
+      // original. Create a new draft instead of overwriting.
+      const isSent = match && match.recipientEmails
+      if (match && !isSent) {
+        // Update existing draft's comment
         await (client.graphql({
           query: UPDATE_REPORT_CARD,
           variables: { input: { id: match.id, comment: comment.trim() } },
@@ -361,7 +364,14 @@ function ReportCardInner() {
   }
 
   async function deleteRecord(id: string) {
-    if (!confirm('Delete this report card record? This cannot be undone.')) return
+    // Only drafts (records without recipientEmails) can be deleted.
+    // Sent records are a permanent audit trail of what parents received.
+    const record = history.find(r => r.id === id)
+    if (record && record.recipientEmails) {
+      alert('Sent report cards cannot be deleted — they\'re a record of what was sent to parents. Only drafts can be removed.')
+      return
+    }
+    if (!confirm('Delete this draft? This cannot be undone.')) return
     setDeletingRecordId(id)
     try {
       await (client.graphql({ query: DELETE_REPORT_CARD, variables: { input: { id } } }) as any)
@@ -410,9 +420,17 @@ function ReportCardInner() {
       const plansRes = await (client.graphql({ query: LIST_WEEKLY_PLANS }) as any)
       const allPlans: WeeklyPlan[] = plansRes.data.listWeeklyPlans.items
 
-      // Helper: check if a plan is assigned to this student
+      // Helper: check if a plan is assigned to this student (respects assignedStudentIds
+      // on the plan AND the student's enrolledAt — pre-enrollment plans don't count).
       const studentUserId = prof.userId || ''
+      const enrolledAtMs = prof.enrolledAt ? new Date(prof.enrolledAt).getTime() : null
       function isPlanAssignedToStudent(plan: WeeklyPlan): boolean {
+        // Enrollment cutoff: pre-enrollment plans don't count
+        if (enrolledAtMs !== null) {
+          const weekStart = new Date(plan.weekStartDate + 'T00:00:00')
+          const weekEnd = new Date(weekStart); weekEnd.setDate(weekStart.getDate() + 7)
+          if (weekEnd.getTime() < enrolledAtMs) return false
+        }
         if (!plan.assignedStudentIds) return true // null = all students
         try {
           const ids = typeof plan.assignedStudentIds === 'string'
@@ -1390,18 +1408,24 @@ function ReportCardInner() {
                       )}
                     </div>
 
-                    {/* Delete */}
-                    <button
-                      onClick={() => deleteRecord(record.id)}
-                      disabled={deletingRecordId === record.id}
-                      title="Delete this record"
-                      style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px', flexShrink: 0, opacity: deletingRecordId === record.id ? 0.4 : 0.5 }}
-                      onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
-                      onMouseLeave={e => (e.currentTarget.style.opacity = '0.5')}>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2">
-                        <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
-                      </svg>
-                    </button>
+                    {/* Delete — only drafts. Sent records are immutable audit trail. */}
+                    {record.recipientEmails ? (
+                      <span title="Sent — can't be modified" style={{ fontSize: '10px', fontWeight: 600, color: 'var(--gray-mid)', background: 'var(--gray-light)', padding: '2px 8px', borderRadius: '20px', flexShrink: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        🔒 Sent
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => deleteRecord(record.id)}
+                        disabled={deletingRecordId === record.id}
+                        title="Delete this draft"
+                        style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px', flexShrink: 0, opacity: deletingRecordId === record.id ? 0.4 : 0.5 }}
+                        onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+                        onMouseLeave={e => (e.currentTarget.style.opacity = '0.5')}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2">
+                          <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                        </svg>
+                      </button>
+                    )}
                   </div>
                 )
               })}

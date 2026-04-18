@@ -12,7 +12,7 @@ const client = generateClient()
 const GET_STUDENT_PROFILE = /* GraphQL */ `
   query GetStudentProfile($userId: String!) {
     listStudentProfiles(filter: { userId: { eq: $userId } }, limit: 500) {
-      items { id firstName lastName email courseId }
+      items { id firstName lastName email courseId enrolledAt }
     }
   }
 `
@@ -69,6 +69,7 @@ type StudentProfile = {
   lastName: string
   email: string
   courseId: string | null
+  enrolledAt: string | null
 }
 
 type Semester = {
@@ -211,11 +212,19 @@ export default function StudentGradesPage() {
       const plansRes = await (client.graphql({ query: LIST_WEEKLY_PLANS }) as any)
       const allPlans = plansRes.data.listWeeklyPlans.items
 
-      // Filter by date range, course, AND assignedStudentIds
+      // Filter by date range, course, enrollment cutoff, AND assignedStudentIds
       const studentUserId = user?.userId || ''
+      // Enrollment cutoff — hide plans whose week ended before student enrolled.
+      // Compare against end of week so enrolling mid-week still shows that week.
+      const enrolledAtMs = profile.enrolledAt ? new Date(profile.enrolledAt).getTime() : null
       const plansInRange = allPlans.filter((p: any) => {
         if (p.weekStartDate < sem.startDate || p.weekStartDate > sem.endDate) return false
         if (p.courseWeeklyPlansId !== sem.courseId) return false
+        if (enrolledAtMs !== null) {
+          const weekStart = new Date(p.weekStartDate + 'T00:00:00')
+          const weekEnd = new Date(weekStart); weekEnd.setDate(weekStart.getDate() + 7)
+          if (weekEnd.getTime() < enrolledAtMs) return false
+        }
         // Check assignedStudentIds: null/empty = all students, otherwise must include this student
         if (p.assignedStudentIds) {
           try {

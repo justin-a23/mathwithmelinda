@@ -51,7 +51,7 @@ const LIST_LESSON_TEMPLATES = /* GraphQL */ `
 const LIST_STUDENTS = /* GraphQL */ `
   query ListStudents($filter: ModelStudentProfileFilterInput) {
     listStudentProfiles(filter: $filter, limit: 200) {
-      items { id userId email firstName lastName courseId status }
+      items { id userId email firstName lastName courseId status enrolledAt }
     }
   }
 `
@@ -120,6 +120,7 @@ type StudentProfile = {
   lastName: string
   courseId: string | null
   status: string | null
+  enrolledAt: string | null
 }
 
 type Submission = {
@@ -245,7 +246,9 @@ export default function GradebookPage() {
 
       // 3. Collect all plan items with lessons + track assigned students per lesson
       // lessonAssignedStudents: lessonId → null (all students) or Set<userId>
+      // lessonWeekEndMs: lessonId → latest week-end-ms (used for enrollment-date filtering)
       const lessonAssignedStudents = new Map<string, Set<string> | null>()
+      const lessonWeekEndMs = new Map<string, number>()
       const allPlanItems: PlanItem[] = []
       for (const plan of plansInRange) {
         // Parse assignedStudentIds for this plan
@@ -258,6 +261,11 @@ export default function GradebookPage() {
             if (Array.isArray(parsed) && parsed.length > 0) planStudentIds = parsed
           } catch { /* parse error — treat as all students */ }
         }
+
+        // Compute end-of-week ms for this plan (Sunday end)
+        const weekStartDate = new Date(plan.weekStartDate + 'T00:00:00')
+        const weekEnd = new Date(weekStartDate); weekEnd.setDate(weekStartDate.getDate() + 7)
+        const planWeekEndMs = weekEnd.getTime()
 
         for (const item of plan.items?.items || []) {
           if (item.lesson) {
@@ -276,6 +284,9 @@ export default function GradebookPage() {
               // Merge: add these students to existing set
               for (const sid of planStudentIds) existing.add(sid)
             }
+            // Track latest week this lesson appeared in
+            const prev = lessonWeekEndMs.get(lid) || 0
+            if (planWeekEndMs > prev) lessonWeekEndMs.set(lid, planWeekEndMs)
           }
         }
       }
@@ -356,11 +367,18 @@ export default function GradebookPage() {
       const quizW = (sem.quizWeightPercent ?? 20) / 100
       const testW = (sem.testWeightPercent ?? 20) / 100
 
-      // Helper: check if a student is assigned to a lesson
-      function isStudentAssigned(studentUserId: string, lessonId: string): boolean {
+      // Helper: check if a student is assigned to a lesson (respects assignedStudentIds
+      // on the plan AND the student's enrolledAt — pre-enrollment lessons don't count).
+      function isStudentAssigned(studentUserId: string, studentEnrolledAt: string | null, lessonId: string): boolean {
         const assigned = lessonAssignedStudents.get(lessonId)
-        if (assigned === null || assigned === undefined) return true // null = all students, undefined = not tracked (show)
-        return assigned.has(studentUserId)
+        if (assigned !== null && assigned !== undefined && !assigned.has(studentUserId)) return false
+        // Enrollment cutoff: if student enrolled after the lesson's week ended, they don't get it.
+        if (studentEnrolledAt) {
+          const enrolledMs = new Date(studentEnrolledAt).getTime()
+          const weekEnd = lessonWeekEndMs.get(lessonId)
+          if (weekEnd && weekEnd < enrolledMs) return false
+        }
+        return true
       }
 
       const studentRows: StudentRow[] = []
@@ -375,13 +393,13 @@ export default function GradebookPage() {
         // Only include grades for lessons this student is assigned to
         const grades: Record<string, string | null | 'pending'> = {}
         for (const sub of studentSubs) {
-          if (isStudentAssigned(student.userId, sub.lessonId)) {
+          if (isStudentAssigned(student.userId, student.enrolledAt, sub.lessonId)) {
             grades[sub.lessonId] = sub.grade ? sub.grade : 'pending'
           }
         }
 
         // Only calculate averages for assigned lessons
-        const studentCols = cols.filter(col => isStudentAssigned(student.userId, col.lessonId))
+        const studentCols = cols.filter(col => isStudentAssigned(student.userId, student.enrolledAt, col.lessonId))
         const assignedLessonIds = new Set(studentCols.map(c => c.lessonId))
         const byCategory: Record<string, number[]> = { lesson: [], quiz: [], test: [] }
         for (const col of studentCols) {

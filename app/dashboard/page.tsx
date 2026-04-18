@@ -126,6 +126,7 @@ const getStudentProfileQuery = /* GraphQL */`
         status
         statusReason
         courseId
+        enrolledAt
       }
     }
   }
@@ -143,6 +144,7 @@ const getStudentProfileByEmailQuery = /* GraphQL */`
         status
         statusReason
         courseId
+        enrolledAt
       }
     }
   }
@@ -282,6 +284,7 @@ export default function Dashboard() {
         const profileResult = await client.graphql({ query: getStudentProfileQuery, variables: { userId } }) as any
         let profileItems = profileResult.data.listStudentProfiles.items
         let studentCourseId = ''
+        let studentEnrolledAt: string | null = null
 
         // Fallback: if no profile found by userId, try by email (handles re-created accounts)
         if (profileItems.length === 0 && loginId) {
@@ -307,6 +310,7 @@ export default function Dashboard() {
           setProfileId(p.id)
           setProfileName((p.preferredName || p.firstName) + ' ' + p.lastName)
           studentCourseId = p.courseId || ''
+          studentEnrolledAt = p.enrolledAt || null
           if (p.profilePictureKey) {
             setProfilePicKey(p.profilePictureKey)
             if (p.profilePictureKey.startsWith('data:')) {
@@ -340,6 +344,11 @@ export default function Dashboard() {
         const hourUTC = now.getUTCHours()
         const showNextWeek = (dayOfWeek === 5 && hourUTC >= 13) || dayOfWeek === 0 || dayOfWeek === 6
         const futureLimit = new Date(now.getTime() + (showNextWeek ? 14 : 7) * 24 * 60 * 60 * 1000)
+        // Enrollment cutoff: hide any plan whose week ended before the student enrolled.
+        // Null enrolledAt (legacy profiles) preserves old behavior of seeing everything.
+        // Compare against the week's END (Sunday 23:59) so a student enrolled mid-week
+        // still sees that week's assignments.
+        const enrolledAtMs = studentEnrolledAt ? new Date(studentEnrolledAt).getTime() : null
         // No past cutoff: show all past unsubmitted assignments for the entire academic year
         // Past weeks where all items are submitted will render empty and be hidden naturally
         const relevant = allPlans
@@ -348,6 +357,11 @@ export default function Dashboard() {
             if (d > futureLimit) return false
             // Only show plans for the student's enrolled course
             if (studentCourseId && p.course?.id !== studentCourseId) return false
+            // Enrollment date cutoff
+            if (enrolledAtMs !== null) {
+              const weekEnd = new Date(d); weekEnd.setDate(d.getDate() + 7)
+              if (weekEnd.getTime() < enrolledAtMs) return false
+            }
             // Within their course: null/empty assignedStudentIds = all enrolled students
             if (!p.assignedStudentIds) return true
             try {

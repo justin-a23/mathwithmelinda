@@ -3,6 +3,8 @@ import { CognitoIdentityProviderClient, AdminAddUserToGroupCommand, ListUsersCom
 import { requireAuth } from '@/app/lib/auth'
 
 const USER_POOL_ID = process.env.COGNITO_USER_POOL_ID || 'us-east-1_LvIY8oPmV'
+const APPSYNC_ENDPOINT = 'https://irzsqprjcjco5kq7w7g72zm7qy.appsync-api.us-east-1.amazonaws.com/graphql'
+const APPSYNC_API_KEY = process.env.APPSYNC_API_KEY || 'da2-qgdyi5epjjarbjhwhqq7mrdbsy'
 
 function makeCognitoClient() {
   const accessKeyId = process.env.MWM_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID
@@ -17,9 +19,32 @@ function makeCognitoClient() {
 }
 
 /**
+ * Verify the authenticated user has at least one ParentStudent record —
+ * meaning they've actually accepted a valid parent invite. Without this check,
+ * any logged-in user (e.g. a student) could flip themselves into the parent
+ * group via this endpoint.
+ */
+async function userHasParentStudentLink(userId: string): Promise<boolean> {
+  const query = /* GraphQL */`
+    query CheckParentLink($parentId: String!) {
+      listParentStudents(filter: { parentId: { eq: $parentId } }, limit: 1) {
+        items { id }
+      }
+    }
+  `
+  const res = await fetch(APPSYNC_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': APPSYNC_API_KEY },
+    body: JSON.stringify({ query, variables: { parentId: userId } }),
+  })
+  const json = await res.json()
+  return (json?.data?.listParentStudents?.items?.length ?? 0) > 0
+}
+
+/**
  * Add the authenticated user to a Cognito group.
- * Only allows adding to 'parent' group (self-service during invite acceptance).
- * Students and teachers are managed separately by the teacher.
+ * Only allows adding to 'parent' group, and only if the user has accepted
+ * at least one parent invite (enforced via ParentStudent record lookup).
  */
 export async function POST(req: NextRequest) {
   const auth = await requireAuth(req)
@@ -36,6 +61,12 @@ export async function POST(req: NextRequest) {
     // Already in the group? Skip.
     if (auth.groups.includes('parent')) {
       return NextResponse.json({ success: true, alreadyInGroup: true })
+    }
+
+    // Verify this user actually has a ParentStudent link — i.e. they've accepted a real invite.
+    const hasLink = await userHasParentStudentLink(auth.userId)
+    if (!hasLink) {
+      return NextResponse.json({ error: 'No parent invite has been accepted for this account' }, { status: 403 })
     }
 
     const cognito = makeCognitoClient()

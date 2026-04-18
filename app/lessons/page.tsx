@@ -18,7 +18,7 @@ const client = generateClient()
 const getStudentNameQuery = /* GraphQL */`
   query GetStudentName($userId: String!) {
     listStudentProfiles(filter: { userId: { eq: $userId } }, limit: 500) {
-      items { firstName lastName preferredName }
+      items { firstName lastName preferredName enrolledAt }
     }
   }
 `
@@ -32,6 +32,7 @@ const getWeeklyPlanItemQuery = /* GraphQL */`
       lessonTemplateId
       weeklyPlan {
         weekStartDate
+        assignedStudentIds
         course {
           id
           title
@@ -105,6 +106,7 @@ type WeeklyPlanItemData = {
   lessonTemplateId: string | null
   weeklyPlan?: {
     weekStartDate?: string | null
+    assignedStudentIds?: string | null
     course?: {
       id: string
       title: string
@@ -191,6 +193,8 @@ function LessonPageInner() {
   const [lessonTemplate, setLessonTemplate] = useState<LessonTemplateData | null>(null)
   const [answers, setAnswers] = useState<Record<string, string>>({})
   const [studentName, setStudentName] = useState('')
+  const [studentEnrolledAt, setStudentEnrolledAt] = useState<string | null>(null)
+  const [accessDenied, setAccessDenied] = useState(false)
 
   const [scanPageUrls, setScanPageUrls] = useState<string[]>([])
   const [diagramUrls, setDiagramUrls] = useState<Record<string, string>>({})  // questionId → presigned URL
@@ -318,11 +322,50 @@ function LessonPageInner() {
       try {
         const res = await (client.graphql({ query: getStudentNameQuery, variables: { userId } }) as any)
         const p = res.data.listStudentProfiles.items?.[0]
-        if (p) setStudentName((p.preferredName || p.firstName) + ' ' + p.lastName)
+        if (p) {
+          setStudentName((p.preferredName || p.firstName) + ' ' + p.lastName)
+          setStudentEnrolledAt(p.enrolledAt || null)
+        }
       } catch { /* non-critical */ }
     }
     fetchName()
   }, [user?.userId, user?.username])
+
+  // Access guard: once both plan item and student info are loaded, verify the
+  // student is allowed to view this lesson. Blocks: stale URL with a lesson
+  // they were unassigned from, or a lesson that predates their enrollment.
+  useEffect(() => {
+    if (!planItem || !user?.userId) return
+    const userId = user.userId
+    const loginId = user.signInDetails?.loginId || ''
+    const plan = planItem.weeklyPlan
+    if (!plan) return
+
+    // Assignment check: if assignedStudentIds is set to a non-empty list, student must be in it
+    if (plan.assignedStudentIds) {
+      try {
+        const ids: string[] = typeof plan.assignedStudentIds === 'string'
+          ? JSON.parse(plan.assignedStudentIds)
+          : plan.assignedStudentIds
+        if (Array.isArray(ids) && ids.length > 0 && !ids.includes(userId) && !ids.includes(loginId)) {
+          setAccessDenied(true)
+          return
+        }
+      } catch { /* treat as all students */ }
+    }
+
+    // Enrollment-date check: plan's week must not end before student enrolled
+    if (studentEnrolledAt && plan.weekStartDate) {
+      const weekStart = new Date(plan.weekStartDate + 'T00:00:00')
+      const weekEnd = new Date(weekStart); weekEnd.setDate(weekStart.getDate() + 7)
+      if (weekEnd.getTime() < new Date(studentEnrolledAt).getTime()) {
+        setAccessDenied(true)
+        return
+      }
+    }
+
+    setAccessDenied(false)
+  }, [planItem, user?.userId, user?.signInDetails?.loginId, studentEnrolledAt])
 
   // Check for existing / returned submission when lesson loads
   useEffect(() => {
@@ -684,6 +727,24 @@ function LessonPageInner() {
         answers,
       }
       if (existingSubmissionId) {
+        // Server-verified guard: re-fetch current state before overwriting.
+        // A graded submission that's NOT in "returned" state is locked — prevent
+        // re-submission from a stale tab or malicious client.
+        try {
+          const { getSubmission } = await import('../../src/graphql/queries')
+          const curRes = await (client.graphql({
+            query: getSubmission,
+            variables: { id: existingSubmissionId },
+          }) as any)
+          const cur = curRes?.data?.getSubmission
+          if (cur && cur.grade && cur.status !== 'returned') {
+            setError('This submission has already been graded. It cannot be changed.')
+            setSubmitted(true)
+            setIsReturned(false)
+            return
+          }
+        } catch { /* if the fetch fails, fall through and let the mutation be attempted */ }
+
         const { updateSubmission } = await import('../../src/graphql/mutations')
         await (client.graphql({
           query: updateSubmission,
@@ -938,6 +999,16 @@ function LessonPageInner() {
           <div style={{ textAlign: 'center', padding: '64px 0' }}>
             <p style={{ fontFamily: 'var(--font-display)', fontSize: '24px', color: 'var(--foreground)', marginBottom: '12px' }}>No lesson selected</p>
             <p style={{ color: 'var(--gray-mid)', marginBottom: '24px' }}>Please go back to the dashboard and select a lesson.</p>
+            <button onClick={() => router.push('/dashboard')} style={{ background: 'var(--plum)', color: 'white', padding: '10px 24px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '14px' }}>
+              Back to Dashboard
+            </button>
+          </div>
+        ) : accessDenied ? (
+          <div style={{ textAlign: 'center', padding: '64px 0' }}>
+            <p style={{ fontFamily: 'var(--font-display)', fontSize: '24px', color: 'var(--foreground)', marginBottom: '12px' }}>This lesson isn&apos;t assigned to you</p>
+            <p style={{ color: 'var(--gray-mid)', marginBottom: '24px', maxWidth: '420px', margin: '0 auto 24px', lineHeight: 1.5 }}>
+              You aren&apos;t on the assignment list for this lesson, or it was scheduled before you were enrolled. If you think this is a mistake, please message Melinda.
+            </p>
             <button onClick={() => router.push('/dashboard')} style={{ background: 'var(--plum)', color: 'white', padding: '10px 24px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '14px' }}>
               Back to Dashboard
             </button>

@@ -25,6 +25,7 @@ const listStudentProfilesQuery = /* GraphQL */`
         profilePictureKey
         status
         statusReason
+        enrolledAt
       }
     }
   }
@@ -183,6 +184,7 @@ type Student = {
   profilePictureKey?: string | null
   status?: string | null
   statusReason?: string | null
+  enrolledAt?: string | null
 }
 
 type Course = { id: string; title: string; isArchived: boolean | null }
@@ -246,7 +248,20 @@ type ParentStudentRecord = {
   studentName: string
 }
 
+// Use the Web Crypto API for a cryptographically secure, unguessable token.
+// crypto.randomUUID() returns a 36-char hex UUID with ~122 bits of entropy —
+// adequate as an authorization bearer for student/parent invites.
 function randomToken() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID().replace(/-/g, '')
+  }
+  // Fallback using crypto.getRandomValues for older browsers
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    const bytes = new Uint8Array(16)
+    crypto.getRandomValues(bytes)
+    return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('')
+  }
+  // Last-resort fallback — should never hit in practice
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
   return Array.from({ length: 32 }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
 }
@@ -540,16 +555,21 @@ export default function StudentsPage() {
     setApproving(true)
     try {
       const { updateStudentProfile } = await import('../../../src/graphql/mutations')
+      // Preserve existing enrolledAt if student was previously active (reinstate case);
+      // otherwise stamp with today's date so they only see plans from now on.
+      const enrolledAt = approveStudent.enrolledAt || new Date().toISOString()
       await client.graphql({
         query: updateStudentProfile,
         variables: {
+          // enrolledAt is a newly-added schema field; cast while generated types catch up
           input: {
             id: approveStudent.id,
             status: 'active',
             courseId: approveCourseId,
             planType: approvePlanType,
             gradeLevel: approveGradeLevel || approveStudent.gradeLevel || null,
-          }
+            enrolledAt,
+          } as any
         }
       })
       // Create enrollment (with optional semester)
@@ -660,7 +680,7 @@ export default function StudentsPage() {
       const res = await apiFetch('/api/delete-student', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: s.userId, profileId: s.id }),
+        body: JSON.stringify({ username: s.userId, profileId: s.id, email: s.email }),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || 'Delete failed')
