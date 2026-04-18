@@ -20,8 +20,10 @@ type Course = {
 
 type CourseWeekStats = {
   courseId: string
-  received: number
-  graded: number
+  assigned: number   // total expected this week (plan items × assigned students)
+  received: number   // actually submitted this week
+  graded: number     // graded submissions this week
+  late: number       // past due, no submission
 }
 
 const listRecentSubmissionsQuery = /* GraphQL */`
@@ -29,6 +31,7 @@ const listRecentSubmissionsQuery = /* GraphQL */`
     listSubmissions(limit: 500) {
       items {
         id
+        studentId
         content
         grade
         status
@@ -83,6 +86,49 @@ function GradingBar({ graded, received }: { graded: number; received: number }) 
           transition: 'width 0.8s cubic-bezier(0.4,0,0.2,1)',
         }} />
       )}
+    </div>
+  )
+}
+
+/**
+ * Submission bar — shows how many of the assigned items have been turned in.
+ * Late segment (past-due, not turned in) is drawn in red next to the filled plum.
+ * Layout (stacked):
+ *   [  turned-in (plum)  |  late (red)  |  not yet due (gray)  ]
+ */
+function SubmissionBar({ submitted, late, assigned }: { submitted: number; late: number; assigned: number }) {
+  const [ready, setReady] = useState(false)
+  useEffect(() => {
+    const t = setTimeout(() => setReady(true), 100)
+    return () => clearTimeout(t)
+  }, [])
+
+  if (assigned <= 0) {
+    return (
+      <div style={{ position: 'relative', height: '12px', borderRadius: '6px', background: 'var(--gray-light)', overflow: 'hidden', flex: 1 }} />
+    )
+  }
+
+  const submittedPct = Math.min(100, (submitted / assigned) * 100)
+  const latePct = Math.min(100 - submittedPct, (late / assigned) * 100)
+
+  return (
+    <div style={{
+      position: 'relative', height: '12px', borderRadius: '6px',
+      background: 'rgba(164,120,200,0.18)', overflow: 'hidden', flex: 1, display: 'flex',
+    }}>
+      {/* Submitted portion (plum) */}
+      <div style={{
+        width: ready ? submittedPct + '%' : '0%',
+        background: 'var(--plum)',
+        transition: 'width 0.8s cubic-bezier(0.4,0,0.2,1)',
+      }} />
+      {/* Late portion (red) */}
+      <div style={{
+        width: ready ? latePct + '%' : '0%',
+        background: '#dc2626',
+        transition: 'width 0.8s cubic-bezier(0.4,0,0.2,1)',
+      }} />
     </div>
   )
 }
@@ -558,41 +604,118 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
 
   async function fetchWeekStats() {
     try {
-      const monday = getMonday(new Date())
+      const now = new Date()
+      const monday = getMonday(now)
       const weekStartMs = monday.getTime()
+      const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6); sunday.setHours(23, 59, 59, 999)
+      const mondayDateStr = `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, '0')}-${String(monday.getDate()).padStart(2, '0')}`
 
-      const result = await (client.graphql({ query: listRecentSubmissionsQuery }) as any)
-      const allSubs = result.data.listSubmissions.items as {
-        id: string
-        content: string | null
-        grade: string | null
-        status: string | null
-        submittedAt: string | null
-        isArchived: boolean | null
-      }[]
+      // Helper: parse dueTime ("HH:mm" or full ISO) using weekStart + dayOfWeek
+      function dueDateOf(weekStartDate: string, dayOfWeek: string, dueTime: string | null): Date | null {
+        if (!dueTime) return null
+        if (dueTime.includes('T') && dueTime.length > 10) {
+          const d = new Date(dueTime)
+          return isNaN(d.getTime()) ? null : d
+        }
+        const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+        const offset = days.indexOf(dayOfWeek)
+        if (offset < 0) return null
+        const base = new Date(weekStartDate + 'T00:00:00')
+        base.setDate(base.getDate() + offset)
+        const timePart = dueTime.includes('T') ? dueTime.split('T')[1] : dueTime
+        const y = base.getFullYear()
+        const mo = String(base.getMonth() + 1).padStart(2, '0')
+        const d = String(base.getDate()).padStart(2, '0')
+        const dt = new Date(`${y}-${mo}-${d}T${timePart}`)
+        return isNaN(dt.getTime()) ? null : dt
+      }
 
-      const byCourse: Record<string, { received: number; graded: number }> = {}
+      // Fetch everything in parallel
+      const safeQ = (p: Promise<any>) => p.then(r => r).catch(() => null)
+      const [subsRes, plansRes, studentsRes] = await Promise.all([
+        safeQ(client.graphql({ query: listRecentSubmissionsQuery }) as any),
+        safeQ(client.graphql({ query: listWeeklyPlansQuery }) as any),
+        safeQ(client.graphql({ query: listActiveStudentsQuery }) as any),
+      ])
 
+      const allSubs = subsRes?.data?.listSubmissions?.items ?? []
+      const allPlans = plansRes?.data?.listWeeklyPlans?.items ?? []
+      const activeStudents: { id: string; userId: string; email: string; courseId?: string | null }[] =
+        studentsRes?.data?.listStudentProfiles?.items ?? []
+
+      // Build: submittedLessonsByStudent for "is this lesson turned in?" lookup
+      const submittedLessonsByStudent = new Map<string, Set<string>>()
+      for (const sub of allSubs) {
+        if (sub.isArchived) continue
+        if (!sub.submittedAt) continue
+        let lessonId: string | null = null
+        try { lessonId = JSON.parse(sub.content || '{}').lessonId || null } catch { continue }
+        if (!lessonId) continue
+        if (!submittedLessonsByStudent.has(sub.studentId)) submittedLessonsByStudent.set(sub.studentId, new Set())
+        submittedLessonsByStudent.get(sub.studentId)!.add(lessonId)
+      }
+
+      // Initialize per-course counters
+      const byCourse: Record<string, CourseWeekStats> = {}
+      const bumpCourse = (courseId: string) => {
+        if (!byCourse[courseId]) byCourse[courseId] = { courseId, assigned: 0, received: 0, graded: 0, late: 0 }
+        return byCourse[courseId]
+      }
+
+      // ── Count "assigned" and "late" from the weekly plans for THIS WEEK ──
+      const thisWeeksPlans = allPlans.filter((p: any) => p.weekStartDate === mondayDateStr)
+      for (const plan of thisWeeksPlans) {
+        const courseId = plan.courseWeeklyPlansId || plan.course?.id
+        if (!courseId) continue
+
+        // Who are the students assigned to this plan?
+        let assignedIds: string[] | null = null
+        if (plan.assignedStudentIds) {
+          try {
+            const parsed = typeof plan.assignedStudentIds === 'string'
+              ? JSON.parse(plan.assignedStudentIds)
+              : plan.assignedStudentIds
+            if (Array.isArray(parsed) && parsed.length > 0) assignedIds = parsed
+          } catch { /* treat as all */ }
+        }
+        const studentsForPlan = assignedIds
+          ? activeStudents.filter(st => assignedIds!.includes(st.userId))
+          : activeStudents.filter(st => st.courseId === courseId)
+
+        const items = plan.items?.items || []
+        for (const item of items) {
+          if (!item.lesson) continue
+          if (item.isPublished === false) continue
+          const due = dueDateOf(plan.weekStartDate, item.dayOfWeek, item.dueTime)
+          for (const st of studentsForPlan) {
+            bumpCourse(courseId).assigned += 1
+            // Late if due date passed and student hasn't submitted this lesson
+            if (due && due < now) {
+              const submittedSet = submittedLessonsByStudent.get(st.userId)
+                || submittedLessonsByStudent.get(st.email)
+                || new Set()
+              if (!submittedSet.has(item.lesson.id)) {
+                bumpCourse(courseId).late += 1
+              }
+            }
+          }
+        }
+      }
+
+      // ── Count "received" and "graded" from submissions this week ──
       for (const sub of allSubs) {
         if (sub.isArchived) continue
         if (!sub.submittedAt) continue
         if (new Date(sub.submittedAt).getTime() < weekStartMs) continue
 
         let courseId = ''
-        try {
-          const parsed = JSON.parse(sub.content || '{}')
-          courseId = parsed.courseId || ''
-        } catch { continue }
-
+        try { courseId = JSON.parse(sub.content || '{}').courseId || '' } catch { continue }
         if (!courseId) continue
-        if (!byCourse[courseId]) byCourse[courseId] = { received: 0, graded: 0 }
-        byCourse[courseId].received += 1
-        if (sub.grade) byCourse[courseId].graded += 1
+        bumpCourse(courseId).received += 1
+        if (sub.grade) bumpCourse(courseId).graded += 1
       }
 
-      setWeekStats(
-        Object.entries(byCourse).map(([courseId, data]) => ({ courseId, ...data }))
-      )
+      setWeekStats(Object.values(byCourse))
     } catch (err) {
       console.error('Error fetching week stats:', err)
     } finally {
@@ -810,12 +933,18 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
           </div>
 
           {loading || statsLoading ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
               {[1, 2, 3].map(i => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+                <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   <div style={{ width: '160px', height: '16px', borderRadius: '4px', background: 'var(--gray-light)' }} />
-                  <div style={{ flex: 1, height: '12px', borderRadius: '6px', background: 'var(--gray-light)' }} />
-                  <div style={{ width: '140px', height: '14px', borderRadius: '4px', background: 'var(--gray-light)' }} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    <div style={{ width: '90px', height: '10px', borderRadius: '4px', background: 'var(--gray-light)' }} />
+                    <div style={{ flex: 1, height: '10px', borderRadius: '4px', background: 'var(--gray-light)' }} />
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    <div style={{ width: '90px', height: '10px', borderRadius: '4px', background: 'var(--gray-light)' }} />
+                    <div style={{ flex: 1, height: '10px', borderRadius: '4px', background: 'var(--gray-light)' }} />
+                  </div>
                 </div>
               ))}
             </div>
@@ -825,49 +954,98 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
             <div>
               {activeCourses.map((course, idx) => {
                 const stat = weekStats.find(s => s.courseId === course.id)
+                const assigned = stat?.assigned ?? 0
                 const received = stat?.received ?? 0
                 const graded = stat?.graded ?? 0
-                const pct = received > 0 ? Math.round((graded / received) * 100) : null
-                const allDone = pct === 100
+                const late = stat?.late ?? 0
                 const isLast = idx === activeCourses.length - 1
+                const submissionPct = assigned > 0 ? Math.round((received / assigned) * 100) : 0
+                const gradingPct = received > 0 ? Math.round((graded / received) * 100) : 0
+                const allSubmitted = assigned > 0 && received >= assigned
+                const allGraded = received > 0 && graded >= received
 
                 return (
                   <div key={course.id} style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '20px',
-                    paddingTop: '14px',
-                    paddingBottom: '14px',
+                    paddingTop: '18px', paddingBottom: '18px',
                     borderBottom: isLast ? 'none' : '1px solid var(--gray-light)',
                   }}>
-                    <span style={{ width: '160px', flexShrink: 0, fontFamily: 'var(--font-display)', fontSize: '16px', color: 'var(--foreground)', lineHeight: 1.2 }}>
-                      {course.title}
-                    </span>
-                    <GradingBar graded={graded} received={received} />
-                    <div style={{ width: '200px', flexShrink: 0, textAlign: 'right', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
-                      {received > 0 ? (
-                        <>
-                          <span style={{ fontSize: '13px', color: 'var(--gray-mid)' }}>
-                            <span style={{ fontWeight: 600, color: allDone ? '#16a34a' : 'var(--foreground)' }}>{graded}</span>
-                            {' of '}
-                            <span style={{ fontWeight: 600, color: 'var(--foreground)' }}>{received}</span>
-                            {' graded'}
-                          </span>
-                          <span style={{
-                            fontSize: '12px', fontWeight: 700,
-                            color: allDone ? '#16a34a' : 'var(--plum)',
-                            background: allDone ? '#dcfce7' : 'var(--plum-light)',
-                            padding: '2px 8px', borderRadius: '20px',
-                          }}>
-                            {allDone ? '✓ Done' : pct + '%'}
-                          </span>
-                        </>
-                      ) : (
-                        <span style={{ fontSize: '13px', color: 'var(--gray-light)', fontStyle: 'italic' }}>
-                          No submissions yet
-                        </span>
-                      )}
+                    {/* Course title + overall summary */}
+                    <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '10px', gap: '12px' }}>
+                      <span style={{ fontFamily: 'var(--font-display)', fontSize: '16px', color: 'var(--foreground)', lineHeight: 1.2 }}>
+                        {course.title}
+                      </span>
+                      <span style={{ fontSize: '12px', color: 'var(--gray-mid)' }}>
+                        {assigned > 0 ? `${assigned} assigned` : 'No assignments this week'}
+                      </span>
                     </div>
+
+                    {assigned === 0 ? (
+                      <div style={{ fontSize: '13px', color: 'var(--gray-light)', fontStyle: 'italic', paddingLeft: '4px' }}>
+                        Nothing scheduled this week.
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        {/* Submitted row */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                          <span style={{ width: '90px', flexShrink: 0, fontSize: '12px', color: 'var(--gray-dark)', fontWeight: 600, letterSpacing: '0.3px' }}>
+                            Submitted
+                          </span>
+                          <SubmissionBar submitted={received} late={late} assigned={assigned} />
+                          <div style={{ width: '200px', flexShrink: 0, textAlign: 'right', fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
+                            <span style={{ color: 'var(--gray-mid)' }}>
+                              <span style={{ fontWeight: 600, color: allSubmitted ? '#16a34a' : 'var(--foreground)' }}>{received}</span>
+                              {' of '}
+                              <span style={{ fontWeight: 600, color: 'var(--foreground)' }}>{assigned}</span>
+                            </span>
+                            {late > 0 ? (
+                              <span style={{ fontSize: '12px', fontWeight: 700, color: '#dc2626', background: '#fee2e2', padding: '2px 8px', borderRadius: '20px', border: '1px solid #fecaca' }}>
+                                ⚠ {late} late
+                              </span>
+                            ) : allSubmitted ? (
+                              <span style={{ fontSize: '12px', fontWeight: 700, color: '#16a34a', background: '#dcfce7', padding: '2px 8px', borderRadius: '20px' }}>
+                                ✓ All in
+                              </span>
+                            ) : (
+                              <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--gray-mid)', background: 'var(--gray-light)', padding: '2px 8px', borderRadius: '20px' }}>
+                                {submissionPct}%
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Graded row */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                          <span style={{ width: '90px', flexShrink: 0, fontSize: '12px', color: 'var(--gray-dark)', fontWeight: 600, letterSpacing: '0.3px' }}>
+                            Graded
+                          </span>
+                          <GradingBar graded={graded} received={received} />
+                          <div style={{ width: '200px', flexShrink: 0, textAlign: 'right', fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
+                            {received > 0 ? (
+                              <>
+                                <span style={{ color: 'var(--gray-mid)' }}>
+                                  <span style={{ fontWeight: 600, color: allGraded ? '#16a34a' : 'var(--foreground)' }}>{graded}</span>
+                                  {' of '}
+                                  <span style={{ fontWeight: 600, color: 'var(--foreground)' }}>{received}</span>
+                                  {' turned in'}
+                                </span>
+                                <span style={{
+                                  fontSize: '12px', fontWeight: 700,
+                                  color: allGraded ? '#16a34a' : 'var(--plum)',
+                                  background: allGraded ? '#dcfce7' : 'var(--plum-light)',
+                                  padding: '2px 8px', borderRadius: '20px',
+                                }}>
+                                  {allGraded ? '✓ Done' : gradingPct + '%'}
+                                </span>
+                              </>
+                            ) : (
+                              <span style={{ fontSize: '12px', color: 'var(--gray-light)', fontStyle: 'italic' }}>
+                                Nothing to grade yet
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )
               })}
