@@ -331,10 +331,12 @@ export default function GradebookPage() {
       // 7. Load students
       const studentsRes = await (client.graphql({
         query: LIST_STUDENTS,
-        variables: { filter: { courseId: { eq: sem.courseId }, status: { ne: 'removed' } } },
+        variables: { filter: { courseId: { eq: sem.courseId } } },
       }) as any)
+      // Exclude removed, archived, pending, and declined students — only currently-active
+      // students belong in the live gradebook. Past students have their own transcript view.
       const students: StudentProfile[] = studentsRes.data.listStudentProfiles.items.filter(
-        (s: StudentProfile) => s.status !== 'removed'
+        (s: StudentProfile) => s.status === 'active'
       )
 
       // 8. Load all submissions

@@ -38,7 +38,8 @@ async function markProfileArchived(profileId: string) {
     headers: { 'Content-Type': 'application/json', 'x-api-key': APPSYNC_API_KEY },
     body: JSON.stringify({
       query: archiveStudentProfileMutation,
-      variables: { input: { id: profileId, status: 'archived' } },
+      // Stamp archivedAt so past students can be grouped by year in the transcript view
+      variables: { input: { id: profileId, status: 'archived', archivedAt: new Date().toISOString() } },
     }),
   })
   const json = await res.json()

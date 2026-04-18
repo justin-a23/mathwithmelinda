@@ -229,6 +229,7 @@ type StudentProfile @model {
   parentEmail2: String
   parentName2: String
   enrolledAt: String
+  archivedAt: String
   parentLinks: [ParentStudentLink] @hasMany
 }
 

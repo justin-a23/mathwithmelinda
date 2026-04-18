@@ -26,6 +26,7 @@ const listStudentProfilesQuery = /* GraphQL */`
         status
         statusReason
         enrolledAt
+        archivedAt
       }
     }
   }
@@ -108,6 +109,16 @@ const listParentInvitesQuery = /* GraphQL */`
   }
 `
 
+// Report cards — used by year-end wizard to check if final reports have been sent
+// Fetch all and filter client-side for records with recipientEmails set (= actually sent).
+const listSentReportCardsQuery = /* GraphQL */`
+  query ListSentReportCards {
+    listReportCardRecords(limit: 500) {
+      items { id studentId sentAt recipientEmails }
+    }
+  }
+`
+
 const createParentInvite = /* GraphQL */`
   mutation CreateParentInvite($input: CreateParentInviteInput!) {
     createParentInvite(input: $input) {
@@ -185,6 +196,7 @@ type Student = {
   status?: string | null
   statusReason?: string | null
   enrolledAt?: string | null
+  archivedAt?: string | null
 }
 
 type Course = { id: string; title: string; isArchived: boolean | null }
@@ -251,6 +263,28 @@ type ParentStudentRecord = {
 // Use the Web Crypto API for a cryptographically secure, unguessable token.
 // crypto.randomUUID() returns a 36-char hex UUID with ~122 bits of entropy —
 // adequate as an authorization bearer for student/parent invites.
+/**
+ * Derive an academic year label ("2024-2025") from a timestamp. Uses the
+ * standard North American academic year convention: Aug–Dec belongs to
+ * year starting that summer, Jan–Jul belongs to year starting previous summer.
+ */
+function academicYearLabel(ts: string | null | undefined): string {
+  if (!ts) return 'Unknown year'
+  const d = new Date(ts)
+  if (isNaN(d.getTime())) return 'Unknown year'
+  const y = d.getFullYear()
+  const m = d.getMonth() // 0-11
+  const startYear = m >= 7 ? y : y - 1 // Aug (month 7) onwards = new year
+  return `${startYear}-${startYear + 1}`
+}
+
+function formatArchivedDate(ts: string | null | undefined): string {
+  if (!ts) return ''
+  const d = new Date(ts)
+  if (isNaN(d.getTime())) return ''
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
 function randomToken() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID().replace(/-/g, '')
@@ -302,6 +336,12 @@ export default function StudentsPage() {
   const [yearEndConfirm, setYearEndConfirm] = useState(false)
   const [yearEndRunning, setYearEndRunning] = useState(false)
   const [yearEndProgress, setYearEndProgress] = useState({ done: 0, total: 0 })
+  // Wizard-specific state
+  const [yearEndStep, setYearEndStep] = useState<1 | 2 | 3>(1)
+  const [yearEndSelected, setYearEndSelected] = useState<Set<string>>(new Set())
+  const [yearEndReportCards, setYearEndReportCards] = useState<Map<string, { sent: number; latest: string | null }>>(new Map())
+  const [yearEndReportsConfirmed, setYearEndReportsConfirmed] = useState(false)
+  const [yearEndComplete, setYearEndComplete] = useState(false)
 
   // Pending approval modal
   const [approveStudent, setApproveStudent] = useState<Student | null>(null)
@@ -748,14 +788,18 @@ export default function StudentsPage() {
   }
 
   async function archiveAllStudents() {
-    const toArchive = activeStudents.filter(s => s.status === 'active')
-    const uniqueParentIds = [...new Set(allParentStudents.map(p => p.parentId))]
+    // Only archive the students the teacher selected in the wizard
+    const toArchive = activeStudents.filter(s => s.status === 'active' && yearEndSelected.has(s.id))
+    // Only delete parent accounts tied to students being archived
+    const emailsBeingArchived = new Set(toArchive.map(s => s.email.toLowerCase()))
+    const affectedParentStudents = allParentStudents.filter(ps => emailsBeingArchived.has((ps.studentEmail || '').toLowerCase()))
+    const uniqueParentIds = [...new Set(affectedParentStudents.map(p => p.parentId))]
     const totalWork = toArchive.length + uniqueParentIds.length
     setYearEndRunning(true)
     setYearEndProgress({ done: 0, total: totalWork })
     let done = 0
 
-    // Archive all students
+    // Archive selected students
     for (const s of toArchive) {
       try {
         await apiFetch('/api/archive-student', {
@@ -763,7 +807,7 @@ export default function StudentsPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ userId: s.userId, profileId: s.id }),
         })
-        setStudents(prev => prev.map(st => st.id === s.id ? { ...st, status: 'archived' } : st))
+        setStudents(prev => prev.map(st => st.id === s.id ? { ...st, status: 'archived', archivedAt: new Date().toISOString() } : st))
       } catch (err) {
         console.error('Failed to archive', s.firstName, s.lastName, err)
       }
@@ -771,7 +815,7 @@ export default function StudentsPage() {
       setYearEndProgress({ done, total: totalWork })
     }
 
-    // Remove all parent accounts
+    // Remove parent accounts linked to archived students
     for (const parentId of uniqueParentIds) {
       try {
         const profile = parentProfiles.find(p => p.userId === parentId) || null
@@ -791,7 +835,54 @@ export default function StudentsPage() {
     }
 
     setYearEndRunning(false)
+    setYearEndComplete(true)
+  }
+
+  async function openYearEndWizard() {
+    // Default: select all active students. Teacher can uncheck individuals.
+    const active = students.filter(s => s.status === 'active')
+    setYearEndSelected(new Set(active.map(s => s.id)))
+    setYearEndStep(1)
+    setYearEndReportsConfirmed(false)
+    setYearEndComplete(false)
+    setYearEndConfirm(true)
+
+    // Fetch sent report cards so Step 2 can show who has/hasn't received one
+    try {
+      const res = await (client.graphql({ query: listSentReportCardsQuery }) as any)
+      const items = res.data?.listReportCardRecords?.items ?? []
+      const map = new Map<string, { sent: number; latest: string | null }>()
+      for (const r of items) {
+        const sid = r.studentId
+        if (!sid) continue
+        if (!r.recipientEmails) continue // drafts don't count — only actually-sent records
+        const prev = map.get(sid) || { sent: 0, latest: null }
+        prev.sent += 1
+        if (!prev.latest || (r.sentAt && r.sentAt > prev.latest)) prev.latest = r.sentAt
+        map.set(sid, prev)
+      }
+      setYearEndReportCards(map)
+    } catch (err) {
+      console.error('Failed to load report cards for wizard:', err)
+    }
+  }
+
+  function closeYearEndWizard() {
     setYearEndConfirm(false)
+    setYearEndRunning(false)
+    setYearEndComplete(false)
+    setYearEndStep(1)
+  }
+
+  // Auto-detect which academic year is ending (based on current date)
+  function currentAcademicYearLabel(): string {
+    const now = new Date()
+    const m = now.getMonth() // 0-11
+    const y = now.getFullYear()
+    // If Aug+, we're in a year that started this summer.
+    // If Jan-Jul, we're in the year that started last summer.
+    const startYear = m >= 7 ? y : y - 1
+    return `${startYear}-${startYear + 1}`
   }
 
   async function createParentInviteForStudent() {
@@ -1161,50 +1252,273 @@ export default function StudentsPage() {
           </div>
         )}
 
-        {/* ── YEAR-END ARCHIVE MODAL ── */}
-        {yearEndConfirm && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
-            <div style={{ background: 'var(--background)', borderRadius: '16px', padding: '32px', maxWidth: '480px', width: '100%', boxShadow: '0 24px 64px rgba(0,0,0,0.25)' }}>
-              <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px' }}>
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#D97706" strokeWidth="2"><path d="M21 8v13H3V8"/><path d="M23 3H1v5h22V3z"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
-              </div>
-              <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', color: 'var(--foreground)', marginBottom: '10px' }}>End of Year Reset</h2>
-              <p style={{ fontSize: '14px', color: 'var(--gray-mid)', lineHeight: 1.6, marginBottom: '16px' }}>
-                This will reset access for <strong>{activeStudents.filter(s => s.status === 'active').length} students</strong> and <strong>{[...new Set(allParentStudents.map(p => p.parentId))].length} parents</strong>:
-              </p>
-              <ul style={{ fontSize: '13px', color: 'var(--gray-mid)', lineHeight: 1.8, paddingLeft: '20px', marginBottom: '20px' }}>
-                <li>All <strong>student and parent Cognito logins are deleted</strong> — no one can sign in next year</li>
-                <li>All <strong>grades, submissions, and comments are preserved</strong> for your records</li>
-                <li>Student names remain visible in the gradebook and grade history</li>
-                <li>Next year everyone creates a <strong>fresh account</strong> from their new invite links</li>
-              </ul>
-              {yearEndRunning && (
-                <div style={{ marginBottom: '20px' }}>
-                  <div style={{ fontSize: '13px', color: 'var(--gray-mid)', marginBottom: '8px' }}>
-                    Resetting… {yearEndProgress.done} / {yearEndProgress.total}
+        {/* ── YEAR-END WIZARD ── */}
+        {yearEndConfirm && (() => {
+          const activeList = students.filter(s => s.status === 'active')
+          const selectedStudents = activeList.filter(s => yearEndSelected.has(s.id))
+          const emailsInScope = new Set(selectedStudents.map(s => s.email.toLowerCase()))
+          const affectedParents = allParentStudents.filter(ps => emailsInScope.has((ps.studentEmail || '').toLowerCase()))
+          const uniqueAffectedParents = new Set(affectedParents.map(p => p.parentId))
+          const yearLabel = currentAcademicYearLabel()
+
+          // Step 2 data: per-student report card status
+          const studentsWithoutReports = selectedStudents.filter(s => !yearEndReportCards.has(s.id))
+          const studentsWithReports = selectedStudents.filter(s => yearEndReportCards.has(s.id))
+
+          return (
+            <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px', overflowY: 'auto' }}>
+              <div style={{ background: 'var(--background)', borderRadius: '16px', padding: '32px', maxWidth: '640px', width: '100%', boxShadow: '0 24px 64px rgba(0,0,0,0.25)', maxHeight: '90vh', overflowY: 'auto' }}>
+
+                {/* Stepper */}
+                {!yearEndComplete && (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0', marginBottom: '24px' }}>
+                    {[1, 2, 3].map(n => {
+                      const isActive = yearEndStep === n
+                      const isDone = yearEndStep > n
+                      return (
+                        <div key={n} style={{ display: 'flex', alignItems: 'center' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <div style={{
+                              width: '32px', height: '32px', borderRadius: '50%',
+                              background: isActive || isDone ? 'var(--plum)' : 'var(--gray-light)',
+                              color: isActive || isDone ? 'white' : 'var(--gray-mid)',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              fontSize: '13px', fontWeight: 700,
+                            }}>
+                              {isDone ? '✓' : n}
+                            </div>
+                            <span style={{ fontSize: '12px', fontWeight: isActive ? 700 : 400, color: isActive ? 'var(--foreground)' : 'var(--gray-mid)' }}>
+                              {['Review', 'Report Cards', 'Confirm'][n - 1]}
+                            </span>
+                          </div>
+                          {n < 3 && <div style={{ width: '36px', height: '2px', background: yearEndStep > n ? 'var(--plum)' : 'var(--gray-light)', margin: '0 12px' }} />}
+                        </div>
+                      )
+                    })}
                   </div>
-                  <div style={{ height: '6px', background: 'var(--gray-light)', borderRadius: '3px', overflow: 'hidden' }}>
-                    <div style={{ height: '100%', background: 'var(--plum)', borderRadius: '3px', width: `${yearEndProgress.total > 0 ? (yearEndProgress.done / yearEndProgress.total) * 100 : 0}%`, transition: 'width 0.3s ease' }} />
+                )}
+
+                {/* ── STEP 1: Review ── */}
+                {!yearEndComplete && yearEndStep === 1 && (
+                  <div>
+                    <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+                      <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '24px', color: 'var(--foreground)', margin: '0 0 8px' }}>
+                        Ending the {yearLabel} school year
+                      </h2>
+                      <p style={{ fontSize: '14px', color: 'var(--gray-mid)', margin: 0, lineHeight: 1.5 }}>
+                        Review who&apos;s being archived. Uncheck any student you want to keep active (e.g., summer enrollees).
+                      </p>
+                    </div>
+
+                    {activeList.length === 0 ? (
+                      <p style={{ textAlign: 'center', color: 'var(--gray-mid)', padding: '24px 0' }}>No active students to archive.</p>
+                    ) : (
+                      <>
+                        <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--plum)', letterSpacing: '0.5px', textTransform: 'uppercase', marginBottom: '8px' }}>
+                          Students ({selectedStudents.length} of {activeList.length} selected)
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '240px', overflowY: 'auto', padding: '4px', border: '1px solid var(--gray-light)', borderRadius: '8px', marginBottom: '16px' }}>
+                          {activeList
+                            .slice()
+                            .sort((a, b) => a.lastName.localeCompare(b.lastName))
+                            .map(s => {
+                              const checked = yearEndSelected.has(s.id)
+                              const courseName = s.courseId ? (courseMap[s.courseId] || '') : ''
+                              return (
+                                <label key={s.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', background: checked ? 'var(--plum-light)' : 'transparent' }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={e => {
+                                      setYearEndSelected(prev => {
+                                        const next = new Set(prev)
+                                        if (e.target.checked) next.add(s.id); else next.delete(s.id)
+                                        return next
+                                      })
+                                    }}
+                                    style={{ width: '16px', height: '16px', accentColor: 'var(--plum)', cursor: 'pointer' }}
+                                  />
+                                  <span style={{ fontSize: '14px', color: 'var(--foreground)', flex: 1 }}>
+                                    {s.firstName} {s.lastName}
+                                  </span>
+                                  {courseName && (
+                                    <span style={{ fontSize: '11px', color: 'var(--gray-mid)', background: 'var(--gray-light)', padding: '2px 8px', borderRadius: '10px' }}>{courseName}</span>
+                                  )}
+                                </label>
+                              )
+                            })}
+                        </div>
+                      </>
+                    )}
+
+                    <div style={{ fontSize: '12px', color: 'var(--gray-mid)', background: 'var(--plum-light)', border: '1px solid var(--plum-mid)', borderRadius: '8px', padding: '10px 14px', marginBottom: '20px' }}>
+                      <strong style={{ color: 'var(--plum)' }}>{uniqueAffectedParents.size} parent account{uniqueAffectedParents.size !== 1 ? 's' : ''}</strong> linked to these students will also be removed. Grades and submissions for all students are preserved forever — only login access is reset.
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'center', gap: '10px' }}>
+                      <button onClick={closeYearEndWizard} style={{ padding: '10px 24px', borderRadius: '8px', border: '1px solid var(--gray-light)', background: 'transparent', color: 'var(--gray-mid)', fontSize: '14px', cursor: 'pointer', fontFamily: 'var(--font-body)' }}>Cancel</button>
+                      <button
+                        onClick={() => setYearEndStep(2)}
+                        disabled={selectedStudents.length === 0}
+                        style={{ padding: '10px 28px', borderRadius: '8px', border: 'none', background: 'var(--plum)', color: 'white', fontSize: '14px', fontWeight: 600, cursor: selectedStudents.length === 0 ? 'not-allowed' : 'pointer', opacity: selectedStudents.length === 0 ? 0.5 : 1 }}>
+                        Next →
+                      </button>
+                    </div>
                   </div>
-                </div>
-              )}
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <button
-                  onClick={() => setYearEndConfirm(false)}
-                  disabled={yearEndRunning}
-                  style={{ flex: 1, padding: '11px', borderRadius: '8px', border: '1px solid var(--gray-light)', background: 'transparent', color: 'var(--gray-mid)', fontSize: '14px', cursor: yearEndRunning ? 'not-allowed' : 'pointer', fontFamily: 'var(--font-body)' }}>
-                  Cancel
-                </button>
-                <button
-                  onClick={archiveAllStudents}
-                  disabled={yearEndRunning}
-                  style={{ flex: 2, padding: '11px', borderRadius: '8px', border: 'none', background: yearEndRunning ? '#92400E' : '#D97706', color: 'white', fontSize: '14px', fontWeight: 600, cursor: yearEndRunning ? 'not-allowed' : 'pointer', fontFamily: 'var(--font-body)' }}>
-                  {yearEndRunning ? `Resetting… ${yearEndProgress.done}/${yearEndProgress.total}` : 'Reset All Access'}
-                </button>
+                )}
+
+                {/* ── STEP 2: Report Card Check ── */}
+                {!yearEndComplete && yearEndStep === 2 && (
+                  <div>
+                    <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+                      <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '24px', color: 'var(--foreground)', margin: '0 0 8px' }}>
+                        Last call for report cards
+                      </h2>
+                      <p style={{ fontSize: '14px', color: 'var(--gray-mid)', margin: 0, lineHeight: 1.5 }}>
+                        Once archived, you can still view and print transcripts — but it&apos;s a good idea to send any final report cards to parents first.
+                      </p>
+                    </div>
+
+                    {studentsWithoutReports.length > 0 && (
+                      <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: '8px', padding: '14px 18px', marginBottom: '16px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#D97706" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                          <strong style={{ fontSize: '13px', color: '#92400E' }}>
+                            No report cards sent yet for {studentsWithoutReports.length} student{studentsWithoutReports.length !== 1 ? 's' : ''}
+                          </strong>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginLeft: '24px', marginBottom: '10px' }}>
+                          {studentsWithoutReports.map(s => (
+                            <div key={s.id} style={{ fontSize: '13px', color: '#78350F' }}>
+                              ⚠ {s.firstName} {s.lastName}
+                            </div>
+                          ))}
+                        </div>
+                        <button
+                          onClick={() => { closeYearEndWizard(); router.push('/teacher/report-card') }}
+                          style={{ fontSize: '12px', fontWeight: 600, color: 'var(--plum)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}>
+                          Send report cards now →
+                        </button>
+                      </div>
+                    )}
+
+                    {studentsWithReports.length > 0 && (
+                      <div style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: '8px', padding: '14px 18px', marginBottom: '16px' }}>
+                        <div style={{ fontSize: '13px', color: '#15803D', marginBottom: '6px' }}>
+                          <strong>✓ Report cards already sent</strong> for {studentsWithReports.length} student{studentsWithReports.length !== 1 ? 's' : ''}
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginLeft: '20px' }}>
+                          {studentsWithReports.map(s => {
+                            const info = yearEndReportCards.get(s.id)!
+                            return (
+                              <div key={s.id} style={{ fontSize: '12px', color: '#166534' }}>
+                                • {s.firstName} {s.lastName} — {info.sent} sent
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px', borderRadius: '8px', background: yearEndReportsConfirmed ? 'var(--plum-light)' : 'var(--gray-light)', cursor: 'pointer', marginBottom: '20px', border: '1px solid', borderColor: yearEndReportsConfirmed ? 'var(--plum)' : 'var(--gray-light)' }}>
+                      <input
+                        type="checkbox"
+                        checked={yearEndReportsConfirmed}
+                        onChange={e => setYearEndReportsConfirmed(e.target.checked)}
+                        style={{ width: '16px', height: '16px', accentColor: 'var(--plum)', cursor: 'pointer' }}
+                      />
+                      <span style={{ fontSize: '14px', color: 'var(--foreground)' }}>
+                        I&apos;ve sent all the report cards I need to send for this year.
+                      </span>
+                    </label>
+
+                    <div style={{ display: 'flex', justifyContent: 'center', gap: '10px' }}>
+                      <button onClick={() => setYearEndStep(1)} style={{ padding: '10px 24px', borderRadius: '8px', border: '1px solid var(--gray-light)', background: 'transparent', color: 'var(--gray-mid)', fontSize: '14px', cursor: 'pointer', fontFamily: 'var(--font-body)' }}>← Back</button>
+                      <button
+                        onClick={() => setYearEndStep(3)}
+                        disabled={!yearEndReportsConfirmed}
+                        style={{ padding: '10px 28px', borderRadius: '8px', border: 'none', background: 'var(--plum)', color: 'white', fontSize: '14px', fontWeight: 600, cursor: !yearEndReportsConfirmed ? 'not-allowed' : 'pointer', opacity: !yearEndReportsConfirmed ? 0.5 : 1 }}>
+                        Next →
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── STEP 3: Confirm & Execute ── */}
+                {!yearEndComplete && yearEndStep === 3 && (
+                  <div>
+                    <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+                      <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+                        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#D97706" strokeWidth="2"><path d="M21 8v13H3V8"/><path d="M23 3H1v5h22V3z"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
+                      </div>
+                      <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '24px', color: 'var(--foreground)', margin: '0 0 8px' }}>
+                        Ready to close the year?
+                      </h2>
+                      <p style={{ fontSize: '14px', color: 'var(--gray-mid)', margin: 0, lineHeight: 1.5, maxWidth: '440px', marginLeft: 'auto', marginRight: 'auto' }}>
+                        Here&apos;s what will happen when you click &ldquo;End {yearLabel} School Year&rdquo;:
+                      </p>
+                    </div>
+
+                    <div style={{ background: 'var(--gray-light)', borderRadius: '8px', padding: '16px 20px', marginBottom: '20px' }}>
+                      <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '13px', color: 'var(--gray-dark)', lineHeight: 1.8 }}>
+                        <li><strong>{selectedStudents.length} student account{selectedStudents.length !== 1 ? 's' : ''}</strong> archived — logins removed</li>
+                        <li><strong>{uniqueAffectedParents.size} parent account{uniqueAffectedParents.size !== 1 ? 's' : ''}</strong> deleted — logins removed</li>
+                        <li>All grades, submissions, messages, and report cards <strong>preserved forever</strong></li>
+                        <li>Past students stay visible under &ldquo;Past Students&rdquo; with full transcripts</li>
+                        <li>In the fall, you&apos;ll send fresh invite links to welcome everyone back</li>
+                      </ul>
+                    </div>
+
+                    {yearEndRunning && (
+                      <div style={{ marginBottom: '20px' }}>
+                        <div style={{ fontSize: '13px', color: 'var(--gray-mid)', marginBottom: '8px', textAlign: 'center' }}>
+                          Closing the year… {yearEndProgress.done} / {yearEndProgress.total}
+                        </div>
+                        <div style={{ height: '6px', background: 'var(--gray-light)', borderRadius: '3px', overflow: 'hidden' }}>
+                          <div style={{ height: '100%', background: 'var(--plum)', borderRadius: '3px', width: `${yearEndProgress.total > 0 ? (yearEndProgress.done / yearEndProgress.total) * 100 : 0}%`, transition: 'width 0.3s ease' }} />
+                        </div>
+                      </div>
+                    )}
+
+                    <div style={{ display: 'flex', justifyContent: 'center', gap: '10px' }}>
+                      <button onClick={() => setYearEndStep(2)} disabled={yearEndRunning} style={{ padding: '10px 24px', borderRadius: '8px', border: '1px solid var(--gray-light)', background: 'transparent', color: 'var(--gray-mid)', fontSize: '14px', cursor: yearEndRunning ? 'not-allowed' : 'pointer', fontFamily: 'var(--font-body)' }}>← Back</button>
+                      <button
+                        onClick={archiveAllStudents}
+                        disabled={yearEndRunning}
+                        style={{ padding: '12px 32px', borderRadius: '8px', border: 'none', background: yearEndRunning ? '#92400E' : '#D97706', color: 'white', fontSize: '15px', fontWeight: 700, cursor: yearEndRunning ? 'not-allowed' : 'pointer' }}>
+                        {yearEndRunning ? 'Closing year…' : `End ${yearLabel} School Year`}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── SUCCESS SCREEN ── */}
+                {yearEndComplete && (
+                  <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                    <div style={{ width: '72px', height: '72px', borderRadius: '50%', background: '#DCFCE7', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+                      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#16A34A" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                    </div>
+                    <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '26px', color: 'var(--foreground)', margin: '0 0 12px' }}>
+                      {yearLabel} School Year Closed
+                    </h2>
+                    <p style={{ fontSize: '14px', color: 'var(--gray-mid)', margin: '0 auto 24px', maxWidth: '420px', lineHeight: 1.6 }}>
+                      All grades, submissions, and report cards are safely preserved.
+                      You can view transcripts for any past student from the &ldquo;Past Students&rdquo; section below.
+                    </p>
+                    <div style={{ display: 'flex', justifyContent: 'center', gap: '10px' }}>
+                      <button
+                        onClick={closeYearEndWizard}
+                        style={{ padding: '10px 28px', borderRadius: '8px', border: 'none', background: 'var(--plum)', color: 'white', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>
+                        Done
+                      </button>
+                    </div>
+                  </div>
+                )}
+
               </div>
             </div>
-          </div>
-        )}
+          )
+        })()}
 
         {/* ── PENDING APPROVAL ── */}
         {pendingStudents.length > 0 && (
@@ -1391,7 +1705,7 @@ export default function StudentsPage() {
           </div>
           {activeStudents.filter(s => s.status === 'active').length > 0 && (
             <button
-              onClick={() => setYearEndConfirm(true)}
+              onClick={openYearEndWizard}
               style={{ display: 'flex', alignItems: 'center', gap: '7px', padding: '9px 18px', borderRadius: '8px', border: '1px solid #FDE68A', background: '#FFFBEB', color: '#92400E', fontSize: '13px', fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font-body)', whiteSpace: 'nowrap' }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 8v13H3V8"/><path d="M23 3H1v5h22V3z"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
               End of Year…
@@ -1915,54 +2229,79 @@ export default function StudentsPage() {
           </div>
         )}
 
-        {/* ── ARCHIVED STUDENTS ── */}
-        {archivedStudents.length > 0 && (
-          <div style={{ marginBottom: '56px' }}>
-            <button
-              onClick={() => setShowArchived(v => !v)}
-              style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'none', border: 'none', cursor: 'pointer', padding: '0 0 12px', fontFamily: 'var(--font-body)' }}
-            >
-              <span style={{ fontSize: '11px', fontWeight: 500, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--gray-mid)' }}>
-                Archived — Past Students ({archivedStudents.length})
-              </span>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--gray-mid)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-                style={{ transform: showArchived ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
-                <polyline points="6 9 12 15 18 9"/>
-              </svg>
-            </button>
-            {showArchived && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {archivedStudents
-                  .slice()
-                  .sort((a, b) => (a.firstName + a.lastName).localeCompare(b.firstName + b.lastName))
-                  .map(s => {
-                    const courseName = s.courseId ? (courseMap[s.courseId] || '') : ''
-                    return (
-                      <div key={s.id} style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', padding: '12px 20px', display: 'flex', alignItems: 'center', gap: '16px', opacity: 0.75 }}>
-                        <div style={{ width: '34px', height: '34px', borderRadius: '50%', background: 'var(--gray-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                          <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--gray-mid)' }}>{s.firstName.charAt(0)}{s.lastName.charAt(0)}</span>
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                            <span style={{ fontWeight: 600, fontSize: '14px', color: 'var(--foreground)' }}>{s.firstName} {s.lastName}</span>
-                            {courseName && (
-                              <span style={{ background: 'var(--gray-light)', color: 'var(--gray-dark)', fontSize: '11px', padding: '2px 8px', borderRadius: '20px' }}>{courseName}</span>
-                            )}
-                            <span style={{ background: 'var(--gray-light)', color: 'var(--gray-mid)', fontSize: '11px', fontWeight: 500, padding: '2px 8px', borderRadius: '20px' }}>Archived</span>
-                          </div>
-                          <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginTop: '2px' }}>{s.email}</div>
-                        </div>
-                        <span style={{ fontSize: '11px', color: 'var(--gray-mid)', whiteSpace: 'nowrap' }}>History preserved</span>
+        {/* ── PAST STUDENTS (grouped by academic year) ── */}
+        {archivedStudents.length > 0 && (() => {
+          // Group archived students by the academic year they were archived in
+          const byYear = new Map<string, Student[]>()
+          for (const s of archivedStudents) {
+            const yr = academicYearLabel(s.archivedAt)
+            if (!byYear.has(yr)) byYear.set(yr, [])
+            byYear.get(yr)!.push(s)
+          }
+          const sortedYears = Array.from(byYear.keys()).sort((a, b) => b.localeCompare(a)) // newest first
+          return (
+            <div style={{ marginBottom: '56px' }}>
+              <button
+                onClick={() => setShowArchived(v => !v)}
+                style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'none', border: 'none', cursor: 'pointer', padding: '0 0 12px', fontFamily: 'var(--font-body)' }}
+              >
+                <span style={{ fontSize: '11px', fontWeight: 500, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--gray-mid)' }}>
+                  Past Students ({archivedStudents.length})
+                </span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--gray-mid)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                  style={{ transform: showArchived ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
+                  <polyline points="6 9 12 15 18 9"/>
+                </svg>
+              </button>
+              {showArchived && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                  {sortedYears.map(year => (
+                    <div key={year}>
+                      <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--plum)', marginBottom: '8px', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
+                        {year} ({byYear.get(year)!.length} student{byYear.get(year)!.length !== 1 ? 's' : ''})
                       </div>
-                    )
-                  })}
-                <p style={{ fontSize: '12px', color: 'var(--gray-mid)', fontStyle: 'italic', marginTop: '4px' }}>
-                  These students&apos; grades and submissions remain accessible in your gradebook and grade history. Their login has been removed — to re-enroll next year, they sign up fresh.
-                </p>
-              </div>
-            )}
-          </div>
-        )}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {byYear.get(year)!
+                          .slice()
+                          .sort((a, b) => (a.lastName + a.firstName).localeCompare(b.lastName + b.firstName))
+                          .map(s => {
+                            const courseName = s.courseId ? (courseMap[s.courseId] || '') : ''
+                            const archivedDate = formatArchivedDate(s.archivedAt)
+                            return (
+                              <div key={s.id} style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', padding: '12px 20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
+                                <div style={{ width: '34px', height: '34px', borderRadius: '50%', background: 'var(--gray-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                  <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--gray-mid)' }}>{s.firstName.charAt(0)}{s.lastName.charAt(0)}</span>
+                                </div>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                    <span style={{ fontWeight: 600, fontSize: '14px', color: 'var(--foreground)' }}>{s.firstName} {s.lastName}</span>
+                                    {courseName && (
+                                      <span style={{ background: 'var(--gray-light)', color: 'var(--gray-dark)', fontSize: '11px', padding: '2px 8px', borderRadius: '20px' }}>{courseName}</span>
+                                    )}
+                                  </div>
+                                  <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginTop: '2px' }}>
+                                    {s.email}{archivedDate ? ` · archived ${archivedDate}` : ''}
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={() => router.push(`/teacher/transcripts/${s.id}`)}
+                                  style={{ background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '6px', padding: '6px 14px', cursor: 'pointer', fontSize: '12px', fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0 }}>
+                                  View Transcript →
+                                </button>
+                              </div>
+                            )
+                          })}
+                      </div>
+                    </div>
+                  ))}
+                  <p style={{ fontSize: '12px', color: 'var(--gray-mid)', fontStyle: 'italic', marginTop: '4px' }}>
+                    All grades, submissions, and report cards are preserved for past students. Use &ldquo;View Transcript&rdquo; to see a full history for printing or emailing to parents.
+                  </p>
+                </div>
+              )}
+            </div>
+          )
+        })()}
 
         {/* ── ADD CO-OP STUDENT ── */}
         <div style={{ borderTop: '1px solid var(--gray-light)', paddingTop: '48px', marginBottom: '48px' }}>
