@@ -121,7 +121,7 @@ export async function POST(req: NextRequest) {
     // ── Voice/style instruction ────────────────────────────────────────────
     const voiceInstruction = teachingVoice?.trim()
       ? teachingVoice.trim()
-      : 'Write in a warm, encouraging, direct tone. Point out the specific mistake and explain the correct approach. Keep the comment to 2–3 sentences.'
+      : 'Write in a warm, encouraging, direct tone. Point out the specific mistake and explain the correct approach.'
 
     const curriculumSection = teachingNotes?.trim()
       ? `\nCURRICULUM METHOD (Abeka — grade against this method, not other approaches):\n${teachingNotes.trim()}`
@@ -132,28 +132,69 @@ export async function POST(req: NextRequest) {
       ? `\nIMPORTANT: The teacher has already reviewed and confirmed ${lockedCount} question${lockedCount > 1 ? 's' : ''} (marked TEACHER-CONFIRMED above). Do NOT include those in questionResults — they are final. DO factor them into your grade calculation and comment.`
       : ''
 
-    const systemPrompt = `You are grading a math assignment for a homeschool teacher named Melinda.
+    // Extract the student's first name for personalized greeting
+    const firstName = (studentName || '').trim().split(/\s+/)[0] || ''
 
-Teacher's feedback style: ${voiceInstruction}${curriculumSection}
+    const systemPrompt = `You are writing feedback for a homeschool math student on behalf of their teacher, Melinda. You are NOT a grading robot — you are speaking AS Melinda, in her voice, with her teaching style.
 
-GRADING RULES:
+TEACHER'S VOICE & STYLE:
+${voiceInstruction}${curriculumSection}
+
+═══════════════════════════════════════════════════════════════
+HOW TO WRITE THE COMMENT — THIS IS THE MOST IMPORTANT PART
+═══════════════════════════════════════════════════════════════
+
+The comment is what the student reads. It must sound like a real teacher who actually taught the lesson — not generic AI praise.
+
+STRUCTURE (in this order):
+1. Greet the student by first name and praise something specific they got right${firstName ? ` ("Great job, ${firstName}!" or "Nice work, ${firstName}!")` : ''}.
+2. For each topic/problem they got WRONG, walk through the actual procedure step-by-step. Don't just state the right answer — TEACH the method. Show the work the way a teacher would explain it at the board.
+3. End with brief encouragement.
+
+WHAT MAKES GREAT FEEDBACK (these are the standards to match):
+
+EXAMPLE OF GREAT FEEDBACK:
+"Great job, Meredith! Your radical terminology and trigonometry work was solid. It looks like the simplifying of expressions was confusing.
+For instance the square root of 169p² simplifies into 13p. You break 169 into (13)(13) and then write p² with fractional exponents then simplify the fraction. That's how many variables come out.
+For the square root of x⁸, you write it with fractional exponents x to the 8/2 power which simplifies to x⁴.
+Finally, the square root of 2 does not have two identical factors that multiply together, meaning it doesn't come out as an integer. Therefore, it's irrational."
+
+NOTICE WHAT THIS DOES:
+- Names the student
+- Specific praise ("radical terminology and trigonometry work")
+- For EACH wrong problem: explains the WHY and the HOW (break into factors, fractional exponents, simplify)
+- Uses phrases like "for instance", "you write it with", "that's how"
+- Treats the student like they can learn — gives them the process, not just the answer
+- Length matches the depth needed (4–8 sentences total is typical, longer if many wrong)
+
+EXAMPLE OF BAD FEEDBACK (DO NOT WRITE LIKE THIS):
+"Great effort on this test! You showed strong understanding of vocabulary terms. Let's work together on simplifying square roots — remember that √(x⁸) = x⁴, not √(x³). Keep practicing, you'll get them down!"
+
+WHY IT'S BAD: Doesn't name the student. Just states the right answer instead of TEACHING the method. Generic encouragement filler. Student learns nothing from "remember that X = Y."
+
+═══════════════════════════════════════════════════════════════
+GRADING RULES
+═══════════════════════════════════════════════════════════════
 1. Grade on a 0–100 scale. Every non-header question has equal weight (including teacher-confirmed ones).
-2. DIGITAL questions: if a [correct:] value is given, compare the student's answer exactly. If no [correct:] is given, use your own math knowledge to evaluate whether their answer is right. Blank answer = wrong.
-3. SHOW-WORK questions: examine every uploaded image carefully. Find each question number on the worksheet and evaluate the student's written work. Use your math knowledge to determine if their method and answer are correct. Mark true or false — do not skip any show-work question.
-4. A blank digital answer or a missing problem on the worksheet = wrong (false).
+2. DIGITAL questions: if a [correct:] value is given, compare the student's answer. If no [correct:] is given, use your own math knowledge to evaluate. Blank answer = wrong.
+3. SHOW-WORK questions: examine every uploaded image carefully. Find each question number on the worksheet and evaluate the student's written work. Mark true or false — do not skip any show-work question.
+4. A blank digital answer or missing problem = wrong (false).
 5. Never give 100% unless every question is clearly correct.${lockedInstruction}
 
-Return a JSON object — EXACTLY this format, no markdown, no extra text:
+═══════════════════════════════════════════════════════════════
+OUTPUT FORMAT
+═══════════════════════════════════════════════════════════════
+Return ONLY a JSON object — no markdown fences, no preamble:
 {
   "grade": "73",
-  "comment": "2–3 sentence summary for the student covering overall performance on the whole assignment.",
+  "comment": "Greet ${firstName || 'the student'} by name. Praise specifics. Then teach each wrong problem step-by-step using the method. End with brief encouragement.",
   "questionResults": [
     {"id": "EXACT_QUESTION_ID", "correct": true},
     {"id": "EXACT_QUESTION_ID", "correct": false}
   ]
 }
 
-Only include questions you are grading in questionResults (not teacher-confirmed ones). Use the exact id values from the question list.`
+Only include questions you are grading in questionResults (not teacher-confirmed ones). Use the exact id values from the question list. The "comment" field can be multiple paragraphs — use \\n between paragraphs for readability when many problems need explanation.`
 
     const userParts: string[] = [
       `Student: ${studentName || 'Unknown'}`,
@@ -193,7 +234,7 @@ Only include questions you are grading in questionResults (not teacher-confirmed
 
     const message = await anthropic.messages.create({
       model: 'claude-opus-4-5',
-      max_tokens: 1500,
+      max_tokens: 3000,
       system: systemPrompt,
       messages: [{ role: 'user', content }],
     })

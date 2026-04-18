@@ -350,38 +350,46 @@ function QuestionScorecardSection({ questions, content, worksheetImageUrls, ques
             fontFamily: 'var(--font-body)', lineHeight: 1,
           }
 
+          // When background is hardcoded light (correct=green, incorrect=red), text/math colors
+          // must also be hardcoded dark or they become invisible in dark mode (where var(--foreground)
+          // is white). Only neutral row uses var(--foreground).
+          const isResolved = result === true || result === false
+          const resolvedTextColor = result === true ? '#14532d' : result === false ? '#7f1d1d' : 'var(--foreground)'
+          const resolvedSubtleColor = result === true ? '#3f6e3f' : result === false ? '#9b3a3a' : 'var(--gray-mid)'
+
           return (
             <div key={q.id} style={{
               marginBottom: '10px', padding: '12px 14px',
               background: result === true ? '#f0fdf4' : result === false ? '#fef2f2' : 'var(--background)',
               border: `1px solid ${result === true ? '#bbf7d0' : result === false ? '#fecaca' : 'var(--gray-light)'}`,
               borderRadius: '8px', transition: 'background 0.15s, border-color 0.15s',
+              color: resolvedTextColor,
             }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
                 {/* Number */}
-                <span style={{ fontWeight: 700, color: 'var(--plum)', fontSize: '14px', minWidth: '24px', paddingTop: '1px', flexShrink: 0 }}>{qLabel}</span>
+                <span style={{ fontWeight: 700, color: isResolved ? resolvedTextColor : 'var(--plum)', fontSize: '14px', minWidth: '24px', paddingTop: '1px', flexShrink: 0 }}>{qLabel}</span>
 
                 {/* Content */}
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: '14px', color: 'var(--foreground)', marginBottom: '8px', lineHeight: 1.5 }}>
+                  <div style={{ fontSize: '14px', color: resolvedTextColor, marginBottom: '8px', lineHeight: 1.5 }}>
                     <MathRenderer text={qBody} />
                   </div>
 
                   {isShowWork ? (
-                    <span style={{ fontSize: '12px', color: 'var(--gray-mid)', fontStyle: 'italic' }}>
+                    <span style={{ fontSize: '12px', color: resolvedSubtleColor, fontStyle: 'italic' }}>
                       {worksheetImageUrls.length > 0 ? 'See worksheet photo above' : 'No worksheet uploaded'}
                     </span>
                   ) : (
                     <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'baseline' }}>
                       <div style={{ fontSize: '13px' }}>
-                        <span style={{ color: 'var(--gray-mid)', marginRight: '4px' }}>Student:</span>
-                        <span style={{ fontWeight: 600, color: answer ? 'var(--foreground)' : 'var(--gray-mid)', fontStyle: answer ? 'normal' : 'italic' }}>
+                        <span style={{ color: resolvedSubtleColor, marginRight: '4px' }}>Student:</span>
+                        <span style={{ fontWeight: 600, color: answer ? resolvedTextColor : resolvedSubtleColor, fontStyle: answer ? 'normal' : 'italic' }}>
                           {answer ? <MathRenderer text={answer} /> : 'no answer'}
                         </span>
                       </div>
                       {q.correctAnswer && (
                         <div style={{ fontSize: '13px' }}>
-                          <span style={{ color: 'var(--gray-mid)', marginRight: '4px' }}>Correct:</span>
+                          <span style={{ color: resolvedSubtleColor, marginRight: '4px' }}>Correct:</span>
                           <span style={{ fontWeight: 600, color: '#15803d' }}><MathRenderer text={q.correctAnswer} /></span>
                         </div>
                       )}

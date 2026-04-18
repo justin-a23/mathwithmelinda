@@ -37,6 +37,7 @@ export default function MathToolbar({ textareaRef, value, onChange }: Props) {
   const [overlineDigits, setOverlineDigits] = useState('')
   const [rootContent, setRootContent] = useState('')
   const [rootDegree, setRootDegree] = useState('')
+  const [rootInsidePower, setRootInsidePower] = useState('')
   const numerRef = useRef<HTMLInputElement>(null)
   const baseRef = useRef<HTMLInputElement>(null)
   const overlineRef = useRef<HTMLInputElement>(null)
@@ -78,12 +79,15 @@ export default function MathToolbar({ textareaRef, value, onChange }: Props) {
   function insertRoot() {
     if (!rootContent.trim()) return
     const deg = rootDegree.trim()
+    const power = rootInsidePower.trim()
+    const inside = power ? `${rootContent}^{${power}}` : rootContent
     const latex = deg && deg !== '2'
-      ? `\\(\\sqrt[${deg}]{${rootContent}}\\)`
-      : `\\(\\sqrt{${rootContent}}\\)`
+      ? `\\(\\sqrt[${deg}]{${inside}}\\)`
+      : `\\(\\sqrt{${inside}}\\)`
     insert(latex)
     setRootContent('')
     setRootDegree('')
+    setRootInsidePower('')
     setShowRootPopup(false)
   }
 
@@ -130,10 +134,11 @@ export default function MathToolbar({ textareaRef, value, onChange }: Props) {
     ? `\\(\\overline{${overlineDigits}}\\)`
     : null
 
+  const rootInside = rootContent + (rootInsidePower.trim() ? `^{${rootInsidePower.trim()}}` : '')
   const rootPreview = rootContent
     ? (rootDegree.trim() && rootDegree.trim() !== '2'
-        ? `\\(\\sqrt[${rootDegree}]{${rootContent}}\\)`
-        : `\\(\\sqrt{${rootContent}}\\)`)
+        ? `\\(\\sqrt[${rootDegree}]{${rootInside}}\\)`
+        : `\\(\\sqrt{${rootInside}}\\)`)
     : null
 
   return (
@@ -252,12 +257,33 @@ export default function MathToolbar({ textareaRef, value, onChange }: Props) {
           {'√'}
         </button>
         {showRootPopup && (
-          <div style={popupStyle}>
+          <div style={{ ...popupStyle, minWidth: '280px' }}>
             <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--gray-dark)', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Insert Root</div>
-            <div style={{ marginBottom: '8px' }}>
-              <label style={{ fontSize: '12px', color: 'var(--gray-dark)', display: 'block', marginBottom: '4px' }}>What's inside the root</label>
-              <input ref={rootContentRef} value={rootContent} onChange={e => setRootContent(e.target.value)} onKeyDown={e => e.key === 'Enter' && insertRoot()} style={popupInputStyle} placeholder="e.g. 8 or n^{3}" />
+
+            {/* Inside: base + optional exponent in two side-by-side fields */}
+            <label style={{ fontSize: '12px', color: 'var(--gray-dark)', display: 'block', marginBottom: '4px' }}>What's inside the root</label>
+            <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginBottom: '6px' }}>
+              <input ref={rootContentRef} value={rootContent} onChange={e => setRootContent(e.target.value)} onKeyDown={e => e.key === 'Enter' && insertRoot()} style={{ ...popupInputStyle, flex: 2 }} placeholder="e.g. 169p or x" />
+              <span style={{ fontSize: '14px', color: 'var(--gray-mid)' }}>^</span>
+              <input value={rootInsidePower} onChange={e => setRootInsidePower(e.target.value)} onKeyDown={e => e.key === 'Enter' && insertRoot()} style={{ ...popupInputStyle, flex: 1 }} placeholder="power" />
             </div>
+            {/* Quick-pick exponent chips */}
+            <div style={{ display: 'flex', gap: '4px', marginBottom: '12px', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '11px', color: 'var(--gray-mid)', alignSelf: 'center', marginRight: '2px' }}>Quick:</span>
+              {['2', '3', '4', '5', '6', '8'].map(p => (
+                <button key={p} type="button" onClick={() => setRootInsidePower(p)}
+                  style={{ ...btnStyle, fontSize: '11px', padding: '2px 8px', minWidth: 'auto', background: rootInsidePower === p ? 'var(--plum-light)' : 'var(--background)', borderColor: rootInsidePower === p ? 'var(--plum)' : 'var(--gray-light)' }}>
+                  ^{p}
+                </button>
+              ))}
+              {rootInsidePower && (
+                <button type="button" onClick={() => setRootInsidePower('')}
+                  style={{ ...btnStyle, fontSize: '11px', padding: '2px 8px', minWidth: 'auto', background: 'var(--background)', color: 'var(--gray-mid)' }}>
+                  clear
+                </button>
+              )}
+            </div>
+
             <div style={{ marginBottom: '6px' }}>
               <label style={{ fontSize: '12px', color: 'var(--gray-dark)', display: 'block', marginBottom: '4px' }}>Root type</label>
               <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
@@ -273,7 +299,7 @@ export default function MathToolbar({ textareaRef, value, onChange }: Props) {
             )}
             <div style={{ display: 'flex', gap: '8px' }}>
               <button onClick={insertRoot} disabled={!rootContent.trim()} style={{ flex: 1, background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '6px', padding: '7px', cursor: 'pointer', fontSize: '13px', fontWeight: 500, fontFamily: 'var(--font-body)', opacity: !rootContent.trim() ? 0.5 : 1 }}>Insert</button>
-              <button onClick={() => { setShowRootPopup(false); setRootContent(''); setRootDegree('') }} style={{ flex: 1, background: 'none', border: '1px solid var(--gray-light)', color: 'var(--gray-dark)', borderRadius: '6px', padding: '7px', cursor: 'pointer', fontSize: '13px', fontFamily: 'var(--font-body)' }}>Cancel</button>
+              <button onClick={() => { setShowRootPopup(false); setRootContent(''); setRootDegree(''); setRootInsidePower('') }} style={{ flex: 1, background: 'none', border: '1px solid var(--gray-light)', color: 'var(--gray-dark)', borderRadius: '6px', padding: '7px', cursor: 'pointer', fontSize: '13px', fontFamily: 'var(--font-body)' }}>Cancel</button>
             </div>
           </div>
         )}

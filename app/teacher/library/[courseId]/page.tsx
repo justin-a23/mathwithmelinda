@@ -1845,9 +1845,26 @@ export default function LessonLibraryPage() {
                                                       <img src={diagramUrls[q.id]} alt="Diagram" style={{ width: '100%', borderRadius: '6px', border: '1px solid var(--gray-light)' }} />
                                                     </div>
                                                   )}
-                                                  <span style={{ fontSize: '11px', fontWeight: 600, padding: '2px 8px', borderRadius: '12px', background: 'var(--background)', color: 'var(--gray-dark)', border: '1px solid var(--gray-light)' }}>
-                                                    {QUESTION_TYPE_LABELS[q.questionType] || q.questionType}
-                                                  </span>
+                                                  <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px' }}>
+                                                    <span style={{ fontSize: '11px', fontWeight: 600, padding: '2px 8px', borderRadius: '12px', background: 'var(--background)', color: 'var(--gray-dark)', border: '1px solid var(--gray-light)' }}>
+                                                      {QUESTION_TYPE_LABELS[q.questionType] || q.questionType}
+                                                    </span>
+                                                    {/* Show entered answer or "no answer" warning for digital question types */}
+                                                    {q.questionType !== 'show_work' && (
+                                                      q.correctAnswer && q.correctAnswer.trim() ? (
+                                                        <span style={{ fontSize: '11px', fontWeight: 600, padding: '2px 8px', borderRadius: '12px', background: '#dcfce7', color: '#15803d', border: '1px solid #86efac', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                                          <span>Answer:</span>
+                                                          <span style={{ display: 'inline-block', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', verticalAlign: 'middle' }}>
+                                                            <MathRenderer text={q.correctAnswer} />
+                                                          </span>
+                                                        </span>
+                                                      ) : (
+                                                        <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '12px', background: '#fef3c7', color: '#b45309', border: '1px solid #fcd34d' }}>
+                                                          ⚠ No answer set
+                                                        </span>
+                                                      )
+                                                    )}
+                                                  </div>
                                                 </div>
                                                 <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
                                                   <button onClick={() => startEditQuestion(q)}
