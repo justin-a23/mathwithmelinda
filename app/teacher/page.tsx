@@ -81,7 +81,7 @@ function GradingBar({ graded, received }: { graded: number; received: number }) 
         <div style={{
           position: 'absolute', left: 0, top: 0, bottom: 0,
           width: ready ? pct + '%' : '0%',
-          background: allDone ? '#22c55e' : 'var(--plum)',
+          background: allDone ? 'var(--accent)' : 'var(--plum)',
           borderRadius: '6px',
           transition: 'width 0.8s cubic-bezier(0.4,0,0.2,1)',
         }} />
@@ -213,6 +213,7 @@ export default function TeacherDashboard() {
   const [newCourse, setNewCourse] = useState({ title: '', description: '', gradeLevel: '' })
   const [saving, setSaving] = useState(false)
   const [weekStats, setWeekStats] = useState<CourseWeekStats[]>([])
+  const [overdueStats, setOverdueStats] = useState<{ courseId: string; ungraded: number }[]>([])
   const [statsLoading, setStatsLoading] = useState(true)
   const [pendingStudents, setPendingStudents] = useState<{ id: string; firstName: string; lastName: string; email: string; gradeLevel: string | null }[]>([])
   const [alerts, setAlerts] = useState<Alert[]>([])
@@ -716,6 +717,23 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
       }
 
       setWeekStats(Object.values(byCourse))
+
+      // ── Count overdue: submissions from before this week that are still ungraded ──
+      const overdueByCourse: Record<string, number> = {}
+      for (const sub of allSubs) {
+        if (sub.isArchived) continue
+        if (!sub.submittedAt) continue
+        if (sub.grade) continue  // already graded, not overdue
+        if (new Date(sub.submittedAt).getTime() >= weekStartMs) continue  // this week, not overdue
+
+        let courseId = ''
+        try { courseId = JSON.parse(sub.content || '{}').courseId || '' } catch { continue }
+        if (!courseId) continue
+        overdueByCourse[courseId] = (overdueByCourse[courseId] || 0) + 1
+      }
+      setOverdueStats(
+        Object.entries(overdueByCourse).map(([courseId, ungraded]) => ({ courseId, ungraded }))
+      )
     } catch (err) {
       console.error('Error fetching week stats:', err)
     } finally {
@@ -741,7 +759,12 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
 
   const monday = getMonday(new Date())
   const weekRangeLabel = formatWeekRange(monday)
-  const activeCourses = courses.filter(c => !c.isArchived)
+  const courseOrder = ['Arithmetic 6', 'Middle School Math', 'Pre-Algebra', 'Algebra 1']
+  const activeCourses = courses.filter(c => !c.isArchived).sort((a, b) => {
+    const ai = courseOrder.indexOf(a.title)
+    const bi = courseOrder.indexOf(b.title)
+    return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi)
+  })
 
   if (checking) return null
 
@@ -783,7 +806,7 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
                     {/* Live stats — refresh every 60s */}
                     {!statsLoading && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '10px', fontSize: '13px', flexWrap: 'wrap' }}>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600, color: totalUngraded === 0 ? '#16a34a' : 'var(--foreground)' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600, color: totalUngraded === 0 ? 'var(--accent)' : 'var(--foreground)' }}>
                           {totalUngraded === 0 ? '✅ All graded' : `📋 ${totalUngraded} to grade`}
                         </span>
                         {pendingCount > 0 && (
@@ -848,10 +871,10 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
                       <span style={{ fontWeight: 600, fontSize: '14px', color: 'var(--foreground)' }}>{m.topic}</span>
                       <span style={{ fontSize: '13px', color: 'var(--gray-mid)', marginLeft: '8px' }}>{timeStr}</span>
                     </div>
-                    {isLive && <span style={{ fontSize: '12px', fontWeight: 700, background: '#dcfce7', color: '#166534', borderRadius: '20px', padding: '2px 10px' }}>🔴 Live</span>}
+                    {isLive && <span style={{ fontSize: '12px', fontWeight: 700, background: 'var(--plum-light)', color: '#166534', borderRadius: '20px', padding: '2px 10px' }}>🔴 Live</span>}
                     {!isLive && minUntil > 0 && minUntil <= 120 && <span style={{ fontSize: '12px', fontWeight: 600, background: '#FEF3C7', color: '#92400E', borderRadius: '20px', padding: '2px 10px' }}>In {minUntil} min</span>}
                     <a href={m.startUrl || m.joinUrl} target="_blank" rel="noopener noreferrer"
-                      style={{ background: isLive ? '#16a34a' : '#0b5cff', color: 'white', borderRadius: '6px', padding: '5px 14px', fontSize: '12px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>
+                      style={{ background: isLive ? 'var(--accent)' : '#0b5cff', color: 'white', borderRadius: '6px', padding: '5px 14px', fontSize: '12px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>
                       {isLive ? 'Join Now' : 'Start'}
                     </a>
                   </div>
@@ -920,6 +943,50 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
                 </div>
               )
             })}
+          </div>
+        )}
+
+        {/* ── OVERDUE (previous weeks, ungraded) ── */}
+        {!statsLoading && overdueStats.length > 0 && (
+          <div style={{ background: 'var(--background)', border: '1px solid var(--accent)', borderRadius: 'var(--radius)', padding: '24px 28px', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+              <h2 style={{ fontSize: '13px', fontWeight: 500, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--accent)', margin: 0 }}>
+                Overdue Grading
+              </h2>
+              <span style={{ fontSize: '13px', color: 'var(--gray-mid)' }}>From previous weeks</span>
+            </div>
+            <div>
+              {activeCourses.map((course, idx) => {
+                const stat = overdueStats.find(s => s.courseId === course.id)
+                if (!stat || stat.ungraded === 0) return null
+
+                return (
+                  <div key={course.id} style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '20px',
+                    paddingTop: '14px',
+                    paddingBottom: '14px',
+                    borderBottom: '1px solid var(--gray-light)',
+                  }}>
+                    <span style={{ width: '160px', flexShrink: 0, fontFamily: 'var(--font-display)', fontSize: '16px', color: 'var(--foreground)', lineHeight: 1.2 }}>
+                      {course.title}
+                    </span>
+                    <div style={{ flex: 1 }} />
+                    <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{
+                        fontSize: '12px', fontWeight: 700,
+                        color: 'var(--accent)',
+                        background: 'rgba(242,201,76,0.15)',
+                        padding: '2px 10px', borderRadius: '20px',
+                      }}>
+                        {stat.ungraded} ungraded
+                      </span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
           </div>
         )}
 
@@ -993,7 +1060,7 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
                           <SubmissionBar submitted={received} late={late} assigned={assigned} />
                           <div style={{ width: '200px', flexShrink: 0, textAlign: 'right', fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
                             <span style={{ color: 'var(--gray-mid)' }}>
-                              <span style={{ fontWeight: 600, color: allSubmitted ? '#16a34a' : 'var(--foreground)' }}>{received}</span>
+                              <span style={{ fontWeight: 600, color: allSubmitted ? 'var(--accent)' : 'var(--foreground)' }}>{received}</span>
                               {' of '}
                               <span style={{ fontWeight: 600, color: 'var(--foreground)' }}>{assigned}</span>
                             </span>
@@ -1002,7 +1069,7 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
                                 ⚠ {late} late
                               </span>
                             ) : allSubmitted ? (
-                              <span style={{ fontSize: '12px', fontWeight: 700, color: '#16a34a', background: '#dcfce7', padding: '2px 8px', borderRadius: '20px' }}>
+                              <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--accent)', background: 'var(--plum-light)', padding: '2px 8px', borderRadius: '20px' }}>
                                 ✓ All in
                               </span>
                             ) : (
@@ -1023,15 +1090,15 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
                             {received > 0 ? (
                               <>
                                 <span style={{ color: 'var(--gray-mid)' }}>
-                                  <span style={{ fontWeight: 600, color: allGraded ? '#16a34a' : 'var(--foreground)' }}>{graded}</span>
+                                  <span style={{ fontWeight: 600, color: allGraded ? 'var(--accent)' : 'var(--foreground)' }}>{graded}</span>
                                   {' of '}
                                   <span style={{ fontWeight: 600, color: 'var(--foreground)' }}>{received}</span>
                                   {' turned in'}
                                 </span>
                                 <span style={{
                                   fontSize: '12px', fontWeight: 700,
-                                  color: allGraded ? '#16a34a' : 'var(--plum)',
-                                  background: allGraded ? '#dcfce7' : 'var(--plum-light)',
+                                  color: allGraded ? 'var(--accent)' : 'var(--plum)',
+                                  background: allGraded ? 'var(--plum-light)' : 'var(--plum-light)',
                                   padding: '2px 8px', borderRadius: '20px',
                                 }}>
                                   {allGraded ? '✓ Done' : gradingPct + '%'}
@@ -1124,8 +1191,8 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
                       {pct !== null && (
                         <span style={{
                           fontSize: '12px', fontWeight: 600, padding: '3px 8px', borderRadius: '20px', flexShrink: 0, marginLeft: '8px',
-                          background: allDone ? '#dcfce7' : 'var(--plum-light)',
-                          color: allDone ? '#16a34a' : 'var(--plum)',
+                          background: allDone ? 'var(--plum-light)' : 'var(--plum-light)',
+                          color: allDone ? 'var(--accent)' : 'var(--plum)',
                         }}>
                           {allDone ? '✓' : pct + '%'}
                         </span>
