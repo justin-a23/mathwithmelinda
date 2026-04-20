@@ -793,6 +793,7 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
 
                 // Live stats from already-loaded data
                 const totalUngraded = weekStats.reduce((sum, s) => sum + Math.max(0, s.received - s.graded), 0)
+                  + overdueStats.reduce((sum, s) => sum + s.ungraded, 0)
                 const pendingCount = pendingStudents.length
                 const urgentAlerts = alerts.filter(a => a.level === 'urgent').length
 
@@ -1046,13 +1047,14 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
                       </span>
                     </div>
 
-                    {assigned === 0 ? (
+                    {assigned === 0 && received === 0 ? (
                       <div style={{ fontSize: '13px', color: 'var(--gray-light)', fontStyle: 'italic', paddingLeft: '4px' }}>
                         Nothing scheduled this week.
                       </div>
                     ) : (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                        {/* Submitted row */}
+                        {/* Submitted row — only show when there are assigned items */}
+                        {assigned > 0 && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                           <span style={{ width: '90px', flexShrink: 0, fontSize: '12px', color: 'var(--gray-dark)', fontWeight: 600, letterSpacing: '0.3px' }}>
                             Submitted
@@ -1079,6 +1081,7 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
                             )}
                           </div>
                         </div>
+                        )}
 
                         {/* Graded row */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
