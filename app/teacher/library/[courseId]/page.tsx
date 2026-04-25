@@ -787,7 +787,11 @@ export default function LessonLibraryPage() {
       return
     }
 
-    // Pre-fetch diagram images as base64 data URLs for embedding in print
+    // Pre-fetch diagram images as base64 for embedding; fall back to the
+    // presigned URL directly when the fetch is blocked (e.g. by S3 CORS in
+    // the new popup window). Without the fallback, diagrams silently
+    // disappear from the printed worksheet even though they show on the
+    // student/digital views.
     const diagramDataUrls: Record<string, string> = {}
     for (const q of displayQuestions) {
       const url = diagramUrls[q.id]
@@ -802,7 +806,9 @@ export default function LessonLibraryPage() {
           reader.readAsDataURL(blob)
         })
         diagramDataUrls[q.id] = dataUrl
-      } catch { /* skip if fetch fails */ }
+      } catch {
+        diagramDataUrls[q.id] = url
+      }
     }
 
     const { default: katex } = await import('katex')
