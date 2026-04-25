@@ -51,6 +51,9 @@ const SAMPLE = `# Lesson 1 — Classification of Numbers
 
 ## Assignment
 
+### H1 — section_header
+**Part I — Classification**
+
 ### Q1 — multiple_choice_multi
 **Classify 301. Select all that apply.**
 - Choices: natural | whole | integer | rational | irrational
@@ -59,6 +62,9 @@ const SAMPLE = `# Lesson 1 — Classification of Numbers
 ### Q2 — short_text
 **Express 5/8 as a decimal.**
 - Answer: 0.625
+
+### H2 — section_header
+**Part II — Number line**
 
 ### Q3 — short_text
 **Plot -3 and 2 on the number line, then compare.**
@@ -258,15 +264,22 @@ export default function ImportLessonPage() {
             style={{ background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '8px', padding: '10px 24px', cursor: parsing ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: 600, opacity: parsing || !markdown.trim() ? 0.5 : 1 }}>
             {parsing ? 'Parsing…' : parsed ? 'Re-parse' : 'Preview'}
           </button>
-          {parsed && parsed.questions.length > 0 && (
-            <button
-              onClick={doImport}
-              disabled={importing || !selectedCourseId}
-              title={!selectedCourseId ? 'Select a course first' : undefined}
-              style={{ background: '#16a34a', color: 'white', border: 'none', borderRadius: '8px', padding: '10px 24px', cursor: importing || !selectedCourseId ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: 700, opacity: importing || !selectedCourseId ? 0.5 : 1 }}>
-              {importing ? 'Importing…' : existingLessonId ? 'Update Lesson' : 'Create Lesson'}
-            </button>
-          )}
+          {parsed && parsed.questions.length > 0 && (() => {
+            const hasErrors = (parsed.errors?.length ?? 0) > 0
+            const blocked = importing || !selectedCourseId || hasErrors
+            const tip = hasErrors
+              ? 'Resolve blocking errors first'
+              : !selectedCourseId ? 'Select a course first' : undefined
+            return (
+              <button
+                onClick={doImport}
+                disabled={blocked}
+                title={tip}
+                style={{ background: '#16a34a', color: 'white', border: 'none', borderRadius: '8px', padding: '10px 24px', cursor: blocked ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: 700, opacity: blocked ? 0.5 : 1 }}>
+                {importing ? 'Importing…' : existingLessonId ? 'Update Lesson' : 'Create Lesson'}
+              </button>
+            )
+          })()}
         </div>
 
         {/* Status messages */}
@@ -293,11 +306,31 @@ export default function ImportLessonPage() {
               </h2>
               <div style={{ fontSize: '13px', color: 'var(--gray-mid)', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                 {parsed.lessonNumberLabel && <span>Lesson #{parsed.lessonNumberLabel}</span>}
-                <span>{parsed.questions.length} question{parsed.questions.length !== 1 ? 's' : ''}</span>
+                {(() => {
+                  const qCount = parsed.questions.filter(q => q.type !== 'section_header').length
+                  const hCount = parsed.questions.filter(q => q.type === 'section_header').length
+                  return (
+                    <>
+                      <span>{qCount} question{qCount !== 1 ? 's' : ''}</span>
+                      {hCount > 0 && <span>{hCount} section{hCount !== 1 ? 's' : ''}</span>}
+                    </>
+                  )
+                })()}
                 <span>{parsed.assignmentType}</span>
                 <span>{parsed.lessonCategory}</span>
               </div>
             </div>
+
+            {parsed.errors && parsed.errors.length > 0 && (
+              <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '8px', padding: '12px 16px', marginBottom: '20px' }}>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: '#991b1b', marginBottom: '6px', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
+                  {parsed.errors.length} blocking error{parsed.errors.length !== 1 ? 's' : ''}
+                </div>
+                <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '13px', color: '#7f1d1d', lineHeight: 1.6 }}>
+                  {parsed.errors.map((e, i) => <li key={i}>{e}</li>)}
+                </ul>
+              </div>
+            )}
 
             {parsed.warnings.length > 0 && (
               <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', padding: '12px 16px', marginBottom: '20px' }}>
@@ -314,7 +347,11 @@ export default function ImportLessonPage() {
               Questions
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {parsed.questions.map(q => <QuestionPreviewCard key={q.order} q={q} />)}
+              {parsed.questions.map(q =>
+                q.type === 'section_header'
+                  ? <SectionHeaderCard key={q.order} q={q} />
+                  : <QuestionPreviewCard key={q.order} q={q} />
+              )}
             </div>
           </div>
         )}
@@ -323,11 +360,29 @@ export default function ImportLessonPage() {
   )
 }
 
+function SectionHeaderCard({ q }: { q: ParsedQuestion }) {
+  const label = q.displayLabel || (q.headerNumber ? `H${q.headerNumber}` : 'Section')
+  return (
+    <div style={{ padding: '14px 18px', border: '1px solid var(--plum)', borderRadius: '8px', background: 'var(--plum-light)' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px', marginBottom: '6px' }}>
+        <span style={{ fontWeight: 700, color: 'var(--plum)', fontSize: '13px' }}>{label}</span>
+        <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '12px', background: 'var(--plum)', color: 'white', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
+          Section
+        </span>
+      </div>
+      <div style={{ fontSize: '14px', color: 'var(--foreground)', fontWeight: 600, lineHeight: 1.5 }}>
+        <MathRenderer text={q.text} />
+      </div>
+    </div>
+  )
+}
+
 function QuestionPreviewCard({ q }: { q: ParsedQuestion }) {
+  const label = q.displayLabel || (q.questionNumber ? `Q${q.questionNumber}` : `Q${q.order}`)
   return (
     <div style={{ padding: '14px 18px', border: '1px solid var(--gray-light)', borderRadius: '8px', background: 'var(--background)' }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px', marginBottom: '8px' }}>
-        <span style={{ fontWeight: 700, color: 'var(--plum)', fontSize: '14px' }}>Q{q.order}</span>
+        <span style={{ fontWeight: 700, color: 'var(--plum)', fontSize: '14px' }}>{label}</span>
         <span style={{ fontSize: '11px', fontWeight: 600, padding: '2px 8px', borderRadius: '12px', background: 'var(--gray-light)', color: 'var(--gray-dark)' }}>
           {q.type}
         </span>

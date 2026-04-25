@@ -856,6 +856,7 @@ function LessonPageInner() {
 
     const { default: katex } = await import('katex')
 
+    const MULTIROW_RE = /\\begin\{(cases|aligned|align|array|gathered|gather|split|matrix|pmatrix|bmatrix|vmatrix|smallmatrix)\*?\}/
     function renderMath(text: string): string {
       const parts = text.split(/(\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\))/g)
       return parts.map(part => {
@@ -863,7 +864,8 @@ function LessonPageInner() {
           return katex.renderToString(part.slice(2, -2), { displayMode: true, throwOnError: false })
         }
         if (part.startsWith('\\(') && part.endsWith('\\)')) {
-          return katex.renderToString(part.slice(2, -2), { displayMode: false, throwOnError: false })
+          const tex = part.slice(2, -2)
+          return katex.renderToString(tex, { displayMode: MULTIROW_RE.test(tex), throwOnError: false })
         }
         return part.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       }).join('')

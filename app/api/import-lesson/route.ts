@@ -90,8 +90,12 @@ export async function POST(request: NextRequest) {
     if (!parsed.title) {
       return NextResponse.json({ parsed, error: 'Cannot import: lesson has no title.' }, { status: 400 })
     }
-    if (parsed.questions.length === 0) {
+    const realQuestions = parsed.questions.filter(q => q.type !== 'section_header')
+    if (realQuestions.length === 0) {
       return NextResponse.json({ parsed, error: 'Cannot import: no questions were parsed.' }, { status: 400 })
+    }
+    if (parsed.errors && parsed.errors.length > 0) {
+      return NextResponse.json({ parsed, error: `Cannot import — ${parsed.errors[0]}` }, { status: 400 })
     }
 
     let lessonId = existingLessonId
