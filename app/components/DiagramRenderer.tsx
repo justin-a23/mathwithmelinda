@@ -49,7 +49,11 @@ type NumberLineSpec = {
 
 type CoordLine = {
   /** e.g. "y = 2x + 1" or "x = 3" or "y = -x" */
-  equation: string
+  equation?: string
+  /** alternative to equation: slope-intercept form */
+  slope?: number
+  intercept?: number
+  label?: string
   color?: string
   /** dashed/dotted for asymptotes or reference */
   style?: 'solid' | 'dashed' | 'dotted'
@@ -216,8 +220,23 @@ function NumberLine({ spec }: { spec: NumberLineSpec }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Coordinate Plane
 
+/** Normalize a CoordLine to an equation string, or return null if not possible */
+function lineEquation(ln: CoordLine): string | null {
+  if (ln.equation) return ln.equation
+  if (ln.slope !== undefined && ln.intercept !== undefined) {
+    const m = ln.slope
+    const b = ln.intercept
+    if (m === 0) return `y=${b}`
+    const bPart = b === 0 ? '' : b > 0 ? `+${b}` : `${b}`
+    return `y=${m}x${bPart}`
+  }
+  if (ln.slope !== undefined) return `y=${ln.slope}x`
+  return null
+}
+
 /** Evaluate a simple linear equation "y = mx + b" or "x = c" at given x */
-function evalLine(eq: string, x: number): number | null {
+function evalLine(eq: string | null | undefined, x: number): number | null {
+  if (!eq) return null
   const trimmed = eq.replace(/\s+/g, '')
   // Vertical line "x=c"
   const vertMatch = trimmed.match(/^x=(-?[\d.]+)$/)
@@ -238,7 +257,8 @@ function evalLine(eq: string, x: number): number | null {
 }
 
 /** Is equation a vertical line? Returns the x-intercept */
-function verticalX(eq: string): number | null {
+function verticalX(eq: string | null | undefined): number | null {
+  if (!eq) return null
   const m = eq.replace(/\s+/g, '').match(/^x=(-?[\d.]+)$/)
   return m ? parseFloat(m[1]) : null
 }
@@ -299,18 +319,29 @@ function CoordPlane({ spec }: { spec: CoordPlaneSpec }) {
       {(spec.lines || []).map((ln, i) => {
         const color = ln.color || DEFAULT_COLOR
         const dash = ln.style === 'dashed' ? '6,4' : ln.style === 'dotted' ? '2,3' : undefined
-        const vx = verticalX(ln.equation)
+        const eq = lineEquation(ln)
+        if (!eq) return null
+        const vx = verticalX(eq)
         if (vx !== null) {
           return (
-            <line key={i} x1={xFor(vx)} y1={pad} x2={xFor(vx)} y2={H - pad} stroke={color} strokeWidth={2} strokeDasharray={dash} />
+            <g key={i}>
+              <line x1={xFor(vx)} y1={pad} x2={xFor(vx)} y2={H - pad} stroke={color} strokeWidth={2} strokeDasharray={dash} />
+              {ln.label && <text x={xFor(vx) + 4} y={pad + 12} fontSize={10} fill={color} fontStyle="italic">{ln.label}</text>}
+            </g>
           )
         }
         // Linear — plot across x range
-        const y1 = evalLine(ln.equation, xMin)
-        const y2 = evalLine(ln.equation, xMax)
+        const y1 = evalLine(eq, xMin)
+        const y2 = evalLine(eq, xMax)
         if (y1 === null || y2 === null) return null
+        // Find a good spot for the label near the right edge but clamped to view
+        const labelX = xFor(xMax) - 4
+        const labelY = yFor(y2) - 6
         return (
-          <line key={i} x1={xFor(xMin)} y1={yFor(y1)} x2={xFor(xMax)} y2={yFor(y2)} stroke={color} strokeWidth={2} strokeDasharray={dash} />
+          <g key={i}>
+            <line x1={xFor(xMin)} y1={yFor(y1)} x2={xFor(xMax)} y2={yFor(y2)} stroke={color} strokeWidth={2} strokeDasharray={dash} />
+            {ln.label && <text x={labelX} y={labelY} fontSize={10} fill={color} textAnchor="end" fontStyle="italic">{ln.label}</text>}
+          </g>
         )
       })}
 
