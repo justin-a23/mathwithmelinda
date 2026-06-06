@@ -5,7 +5,7 @@ import { useRouter, useParams } from 'next/navigation'
 import { useEffect, useState, useRef } from 'react'
 import { generateClient } from 'aws-amplify/api'
 import { getCourse, listAssignmentQuestions } from '../../../../src/graphql/queries'
-import { createAssignmentQuestion, deleteAssignmentQuestion, updateAssignmentQuestion } from '../../../../src/graphql/mutations'
+import { createAssignmentQuestion, deleteAssignmentQuestion, updateAssignmentQuestion, deleteLessonTemplate } from '../../../../src/graphql/mutations'
 import { apiFetch } from '@/app/lib/apiFetch'
 
 // Inline queries include teachingNotes which postdates the generated types
@@ -366,6 +366,23 @@ export default function LessonLibraryPage() {
     setVideoFile(null)
     setWorksheetFile(null)
     setQuestions([])
+  }
+
+  async function handleDeleteLesson(lesson: LessonTemplate) {
+    if (!window.confirm(`Delete "${lesson.title}"? This will also delete all its questions and cannot be undone.`)) return
+    try {
+      // Delete all questions first
+      const qs = await client.graphql({ query: listAssignmentQuestions, variables: { filter: { lessonTemplateQuestionsId: { eq: lesson.id } }, limit: 500 } }) as { data: { listAssignmentQuestions: { items: { id: string }[] } } }
+      const qItems = qs.data.listAssignmentQuestions.items
+      await Promise.all(qItems.map(q => client.graphql({ query: deleteAssignmentQuestion, variables: { input: { id: q.id } } })))
+      // Delete the lesson template
+      await client.graphql({ query: deleteLessonTemplate, variables: { input: { id: lesson.id } } })
+      setLessons(prev => prev.filter(l => l.id !== lesson.id))
+      if (editingId === lesson.id) cancelEdit()
+    } catch (err) {
+      console.error('Delete lesson failed:', err)
+      alert('Failed to delete lesson. Check console for details.')
+    }
   }
 
   async function uploadFile(
@@ -1235,10 +1252,13 @@ export default function LessonLibraryPage() {
                         ? <span style={{ fontSize: '12px', color: '#2e7d32' }}>✓</span>
                         : <span style={{ fontSize: '12px', color: 'var(--gray-mid)' }}>—</span>}
                     </div>
-                    <div style={{ textAlign: 'right' }}>
+                    <div style={{ textAlign: 'right', display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
                       {editingId === lesson.id
                         ? <button onClick={cancelEdit} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px', color: 'var(--gray-mid)' }}>Cancel</button>
-                        : <button onClick={() => startEdit(lesson)} style={{ background: 'none', border: '1px solid var(--gray-light)', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', color: 'var(--gray-dark)', padding: '4px 12px' }}>Edit</button>}
+                        : <>
+                            <button onClick={() => startEdit(lesson)} style={{ background: 'none', border: '1px solid var(--gray-light)', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', color: 'var(--gray-dark)', padding: '4px 12px' }}>Edit</button>
+                            <button onClick={() => handleDeleteLesson(lesson)} style={{ background: 'none', border: '1px solid #e05252', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', color: '#e05252', padding: '4px 12px' }}>Delete</button>
+                          </>}
                     </div>
                   </div>
 
