@@ -831,13 +831,22 @@ export default function LessonLibraryPage() {
     const { default: katex } = await import('katex')
 
     function renderMath(text: string): string {
-      const parts = text.split(/(\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\))/g)
+      // Delimiters mirror the MathRenderer component: \(...\), \[...\], $...$, $$...$$.
+      // $$...$$ must be tried before $...$, and the $-patterns require a non-empty
+      // body and no newlines so a literal "$5 to $10" sentence isn't matched.
+      const parts = text.split(/(\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$\$[^$]+?\$\$|\$[^$\n]+?\$)/g)
       return parts.map(part => {
         if (part.startsWith('\\[') && part.endsWith('\\]')) {
           return katex.renderToString(part.slice(2, -2), { displayMode: true, throwOnError: false })
         }
         if (part.startsWith('\\(') && part.endsWith('\\)')) {
           return katex.renderToString(part.slice(2, -2), { displayMode: false, throwOnError: false })
+        }
+        if (part.startsWith('$$') && part.endsWith('$$') && part.length >= 4) {
+          return katex.renderToString(part.slice(2, -2), { displayMode: true, throwOnError: false })
+        }
+        if (part.startsWith('$') && part.endsWith('$') && part.length >= 2) {
+          return katex.renderToString(part.slice(1, -1), { displayMode: false, throwOnError: false })
         }
         return part.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       }).join('')
@@ -963,13 +972,22 @@ export default function LessonLibraryPage() {
     const { default: katex } = await import('katex')
 
     function renderMath(text: string): string {
-      const parts = text.split(/(\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\))/g)
+      // Delimiters mirror the MathRenderer component: \(...\), \[...\], $...$, $$...$$.
+      // $$...$$ must be tried before $...$, and the $-patterns require a non-empty
+      // body and no newlines so a literal "$5 to $10" sentence isn't matched.
+      const parts = text.split(/(\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$\$[^$]+?\$\$|\$[^$\n]+?\$)/g)
       return parts.map(part => {
         if (part.startsWith('\\[') && part.endsWith('\\]')) {
           return katex.renderToString(part.slice(2, -2), { displayMode: true, throwOnError: false })
         }
         if (part.startsWith('\\(') && part.endsWith('\\)')) {
           return katex.renderToString(part.slice(2, -2), { displayMode: false, throwOnError: false })
+        }
+        if (part.startsWith('$$') && part.endsWith('$$') && part.length >= 4) {
+          return katex.renderToString(part.slice(2, -2), { displayMode: true, throwOnError: false })
+        }
+        if (part.startsWith('$') && part.endsWith('$') && part.length >= 2) {
+          return katex.renderToString(part.slice(1, -1), { displayMode: false, throwOnError: false })
         }
         return part.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       }).join('')

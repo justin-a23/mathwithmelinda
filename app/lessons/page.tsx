@@ -858,13 +858,23 @@ function LessonPageInner() {
 
     const MULTIROW_RE = /\\begin\{(cases|aligned|align|array|gathered|gather|split|matrix|pmatrix|bmatrix|vmatrix|smallmatrix)\*?\}/
     function renderMath(text: string): string {
-      const parts = text.split(/(\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\))/g)
+      // Delimiters mirror the MathRenderer component: \(...\), \[...\], $...$, $$...$$.
+      // $$...$$ must be tried before $...$, and the $-patterns require a non-empty
+      // body and no newlines so a literal "$5 to $10" sentence isn't matched.
+      const parts = text.split(/(\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$\$[^$]+?\$\$|\$[^$\n]+?\$)/g)
       return parts.map(part => {
         if (part.startsWith('\\[') && part.endsWith('\\]')) {
           return katex.renderToString(part.slice(2, -2), { displayMode: true, throwOnError: false })
         }
         if (part.startsWith('\\(') && part.endsWith('\\)')) {
           const tex = part.slice(2, -2)
+          return katex.renderToString(tex, { displayMode: MULTIROW_RE.test(tex), throwOnError: false })
+        }
+        if (part.startsWith('$$') && part.endsWith('$$') && part.length >= 4) {
+          return katex.renderToString(part.slice(2, -2), { displayMode: true, throwOnError: false })
+        }
+        if (part.startsWith('$') && part.endsWith('$') && part.length >= 2) {
+          const tex = part.slice(1, -1)
           return katex.renderToString(tex, { displayMode: MULTIROW_RE.test(tex), throwOnError: false })
         }
         return part.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
