@@ -144,7 +144,9 @@ export async function POST(request: NextRequest) {
         order: q.order,
         questionText: q.text,
         questionType: q.type,
-        choices: q.choices && q.choices.length > 0 ? q.choices.join('|') : null,
+        // Student lesson page splits choices by newline. Match that convention so
+        // multi-choice answers render as separate selectable options.
+        choices: q.choices && q.choices.length > 0 ? q.choices.join('\n') : null,
         correctAnswer: q.correctAnswer || null,
         diagramSpec: q.diagramSpec || null,
         lessonTemplateQuestionsId: lessonId,
