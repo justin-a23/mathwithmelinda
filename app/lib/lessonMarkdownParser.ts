@@ -132,12 +132,19 @@ export function parseLessonMarkdown(raw: string): ParsedLesson {
   const blocks: Block[] = []
   let currentBlock: Block | null = null
 
+  // Match "# Lesson N — Title" or "# Lesson N - Title"
+  // Keep the FULL string "Lesson N — Title" as the title so it displays
+  // correctly everywhere (student dashboard, gradebook, report card, etc.).
+  // The integer N is extracted separately as lessonNumber for sorting.
   for (const ln of lines) {
-    const titleMatch = ln.match(/^#\s+(?:Lesson\s+([\w.]+)\s*[—–-]\s*)?(.+)$/i)
-    if (titleMatch && !title) {
-      lessonNumberLabel = (titleMatch[1] || '').trim()
-      title = titleMatch[2].trim()
-      if (lessonNumberLabel) {
+    const fullMatch = ln.match(/^#\s+(.+)$/)
+    if (fullMatch && !title) {
+      const heading = fullMatch[1].trim()
+      title = heading
+      // Try to pull "Lesson N" from the start of the heading
+      const lessonPrefix = heading.match(/^Lesson\s+([\w.]+)\s*[—–-]/i)
+      if (lessonPrefix) {
+        lessonNumberLabel = lessonPrefix[1].trim()
         const numMatch = lessonNumberLabel.match(/^(\d+)/)
         if (numMatch) lessonNumber = parseInt(numMatch[1], 10)
       }
@@ -157,7 +164,19 @@ export function parseLessonMarkdown(raw: string): ParsedLesson {
       if (lc) { lessonCategory = lc.toLowerCase(); continue }
     }
 
-    if (/^##\s+(Video plan|Teaching notes|Instructions)/i.test(ln)) {
+    // Section transitions (exact ## headings)
+    // Video Plan, Content Mapping, and Teaching Notes are ALL teacher-only
+    // — they go into teachingNotes (visible only in teacher views), NOT
+    // into instructions (which is shown to students on the lesson page).
+    // The only thing matching "Instructions" goes to instructions, for
+    // hand-authored student-facing instructions (rare in imported lessons).
+    if (/^##\s+(Video plan|Content mapping|Copyright trail|Teaching notes|Answer key)/i.test(ln)) {
+      section = 'teaching-notes'
+      currentBlock = null
+      teachingNotesLines.push(ln)
+      continue
+    }
+    if (/^##\s+Instructions\b/i.test(ln)) {
       section = 'instructions'
       instructionsLines.push(ln)
       continue
@@ -165,12 +184,6 @@ export function parseLessonMarkdown(raw: string): ParsedLesson {
     if (/^##\s+Assignment\b/i.test(ln)) {
       section = 'assignment'
       currentBlock = null
-      continue
-    }
-    if (/^##\s+(Answer key|Content mapping|Copyright trail|Teaching notes for Melinda)/i.test(ln)) {
-      section = 'teaching-notes'
-      currentBlock = null
-      teachingNotesLines.push(ln)
       continue
     }
 
