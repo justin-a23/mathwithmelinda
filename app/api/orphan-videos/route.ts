@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { S3Client, ListObjectsV2Command } from '@aws-sdk/client-s3'
 import { requireTeacher } from '@/app/lib/auth'
-import { APPSYNC_ENDPOINT, appsyncHeaders } from '@/app/lib/appsync'
+import { appsyncClient } from '@/app/lib/appsync'
 
 const accessKeyId = process.env.MWM_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID || ''
 const secretAccessKey = process.env.MWM_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY || ''
@@ -19,15 +19,6 @@ const s3 = new S3Client({
   ...(accessKeyId && secretAccessKey ? { credentials: { accessKeyId, secretAccessKey } } : {}),
 })
 
-async function gql(query: string, variables: Record<string, unknown> = {}) {
-  const res = await fetch(APPSYNC_ENDPOINT, {
-    method: 'POST',
-    headers: appsyncHeaders(),
-    body: JSON.stringify({ query, variables }),
-  })
-  return res.json()
-}
-
 // Parse a human-readable label from an S3 key
 // "algebra1/Algebra 1 - Lesson 14 - Some Title.mp4" → "Lesson 14 - Some Title"
 function parseLabel(key: string): string {
@@ -40,6 +31,11 @@ function parseLabel(key: string): string {
 export async function GET(req: NextRequest) {
   const auth = await requireTeacher(req)
   if (auth instanceof NextResponse) return auth
+
+  // Bound to this request's credentials. Under Gen 1 this authenticates with the
+  // API key and the token is ignored; once APPSYNC_AUTH_MODE=userPool it
+  // authenticates as the caller, which is what Gen 2's rules require.
+  const gql = appsyncClient(auth.token)
 
   try {
     const courseTitle = req.nextUrl.searchParams.get('courseTitle') || ''
@@ -64,7 +60,9 @@ export async function GET(req: NextRequest) {
     const usedKeys = new Set<string>()
     let nextToken: string | null = null
     do {
-      const result = await gql(
+      // Annotated because the generic return type would otherwise be inferred
+      // circularly: nextToken is both an input to this call and read back off it.
+      const result: { data?: { listLessonTemplates?: { items: { videoUrl: string | null }[]; nextToken: string | null } } } = await gql(
         `query L($t: String) { listLessonTemplates(limit: 500, nextToken: $t) { items { videoUrl } nextToken } }`,
         { t: nextToken }
       )

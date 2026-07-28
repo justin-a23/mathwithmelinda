@@ -11,6 +11,15 @@ export type AuthUser = {
   userId: string
   groups: string[]
   role: 'teacher' | 'student' | 'parent' | 'unknown'
+  /**
+   * The raw, already-verified access token.
+   *
+   * Kept so server routes can authenticate to AppSync AS THE CALLER rather than
+   * with the shared API key — required under Gen 2, whose per-model rules grant
+   * teacher work to `group('teacher')` and deny the key outright. See
+   * app/lib/appsync.ts.
+   */
+  token: string
 }
 
 export async function verifyAuth(request: NextRequest): Promise<AuthUser | null> {
@@ -24,7 +33,7 @@ export async function verifyAuth(request: NextRequest): Promise<AuthUser | null>
     if (groups.includes('teacher')) role = 'teacher'
     else if (groups.includes('parent')) role = 'parent'
     else if (groups.includes('student')) role = 'student'
-    return { userId: payload.sub, groups, role }
+    return { userId: payload.sub, groups, role, token }
   } catch {
     return null
   }
