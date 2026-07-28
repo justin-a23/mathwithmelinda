@@ -1,0 +1,19 @@
+{
+  "//": "Standard Amplify Gen 2 backend tsconfig. Required by `ampx`: without it, extensionless imports in backend.ts (./auth/resource, ./data/resource) fail to resolve during CDK synth. A Gen 2 project gets this from `ampx` scaffolding; this repo started as Gen 1, so it has to be added by hand.",
+  "compilerOptions": {
+    "target": "es2022",
+    "module": "es2022",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "paths": {
+      "$amplify/*": [
+        "../.amplify/generated/*"
+      ]
+    },
+    "allowImportingTsExtensions": true
+  }
+}

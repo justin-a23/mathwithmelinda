@@ -63,3 +63,8 @@ amplifytools.xcconfig
 #amplify-do-not-edit-end
 "important save"
 .claude/
+
+# Amplify Gen 2 outputs — contains the AppSync API key. This repo is public.
+amplify_outputs.json
+amplify_outputs*.json
+.amplify/

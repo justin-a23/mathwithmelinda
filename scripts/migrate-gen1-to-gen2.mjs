@@ -97,7 +97,16 @@ const listName = m => `list${PLURAL[m] || m + 's'}`
 
 /** Fields Gen 1 generates that Gen 2 either owns itself or no longer has. */
 const DROP_FIELDS = new Set(['createdAt', 'updatedAt', '__typename'])
-const DEAD_FIELDS = new Set(['courseSemestersId', 'semesterWeeklyPlansId'])
+// Gen 1 artifacts Gen 2 does not declare. The first two are relationships that
+// were never populated; the ParentStudentLink pair are implicit hasMany keys
+// that Gen 2 replaces with the explicit parentProfileId/studentProfileId the
+// Gen 1 model actually used. Verified against the deployed Gen 2 create inputs.
+const DEAD_FIELDS = new Set([
+  'courseSemestersId',
+  'semesterWeeklyPlansId',
+  'parentProfileStudentLinksId',
+  'studentProfileParentLinksId',
+])
 /**
  * Profile models that must end up with one row per userId.
  *
