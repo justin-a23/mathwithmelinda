@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { requireTeacher } from '@/app/lib/auth'
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+import { presign } from '@/app/lib/presign'
 
 const accessKeyId = process.env.MWM_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID || ''
 const secretAccessKey = process.env.MWM_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY || ''
@@ -13,7 +13,7 @@ const s3 = new S3Client({
 
 async function getPresignedUrl(key: string): Promise<string> {
   const command = new GetObjectCommand({ Bucket: 'mathwithmelinda-submissions', Key: key })
-  return getSignedUrl(s3, command, { expiresIn: 300 })
+  return presign(s3, command, { expiresIn: 300 })
 }
 
 async function fetchAsBase64Pdf(key: string): Promise<string> {

@@ -1,5 +1,5 @@
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3'
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+import { presign } from '@/app/lib/presign'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth, forbidden } from '@/app/lib/auth'
 
@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
       if (!semesterId) return NextResponse.json({ error: 'Missing semesterId' }, { status: 400 })
       const key = `syllabi/${semesterId}/${Date.now()}.pdf`
       const cmd = new PutObjectCommand({ Bucket: BUCKET, Key: key, ContentType: 'application/pdf' })
-      const uploadUrl = await getSignedUrl(s3, cmd, { expiresIn: 300 })
+      const uploadUrl = await presign(s3, cmd, { expiresIn: 300 })
       return NextResponse.json({ uploadUrl, key })
     }
 
@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
       const key = searchParams.get('key')
       if (!key) return NextResponse.json({ error: 'Missing key' }, { status: 400 })
       const cmd = new GetObjectCommand({ Bucket: BUCKET, Key: key })
-      const url = await getSignedUrl(s3, cmd, { expiresIn: 3600 })
+      const url = await presign(s3, cmd, { expiresIn: 3600 })
       return NextResponse.json({ url })
     }
 

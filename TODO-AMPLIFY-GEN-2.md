@@ -10,11 +10,72 @@
 - New features and long-term support only on Gen 2
 
 ## Scope
-- Rewrite `amplify/backend/api/mathwithmelinda/schema.graphql` as TypeScript Gen 2 schema
-- Update all `client.graphql({...})` calls across the app (~200 touchpoints)
+- ~~Rewrite `schema.graphql` as TypeScript Gen 2 schema~~ — **drafted** at
+  `amplify/data/resource.ts` (2026-07-28), including the `@auth` rules that
+  Gen 1 never had. Not yet deployed or typechecked. See caveats below.
+- Update all `client.graphql({...})` calls across the app
 - Cognito setup migration (auth rules become code-first)
 - Update Amplify CLI to Gen 2 in CI/build
 - Test full data integrity: students, submissions, lessons, grades, messages, report cards
+
+## Measured scope (2026-07-28, not estimated)
+
+| Thing | Count |
+|---|---|
+| `client.graphql(...)` call sites | 251 across 36 files |
+| Modules calling AppSync by raw fetch | 12 |
+| Generated artifacts to delete | 12,348 lines (`src/API.ts`, `src/graphql/*`) |
+| Models | 26 |
+
+Heaviest files: `teacher/students` (22 calls), `teacher/page` (17),
+`teacher/grades` (17), `teacher/semesters` (15), `teacher/library/[courseId]` (14).
+
+## Phase 1 — dependency blocker: RESOLVED (2026-07-28)
+
+`@aws-amplify/backend` and `@aws-amplify/backend-cli` are now installed and the
+tree builds clean. What it took:
+
+The symptom was six routes failing to typecheck on `getSignedUrl(s3, …)` once
+the Gen 2 packages were present. The cause was NOT a version conflict — it's
+that installing them changes npm's hoisting, so `@aws-sdk/client-s3` and
+`@aws-sdk/s3-request-presigner` end up resolving *different copies* of the
+`@smithy/*` type declarations. TypeScript then refuses to unify them:
+
+    types have separate declarations of a private property 'handlers'
+
+That is a nominal mismatch, not a structural one. The runtime object is the
+same `S3Client` the presigner expects.
+
+**npm `overrides` was tried and abandoned.** Deduping the `@smithy/*` family
+took 38 override entries, still left nine packages duplicated, and did not fix
+the error. It also has to be redone on every dependency bump. Do not revisit it.
+
+**The fix** is `app/lib/presign.ts` — a single wrapper around `getSignedUrl`
+holding one documented cast, used by all six routes. No version pinning, no
+overrides. The cast disappears on its own once the app stops depending on the
+Gen 1 AWS SDK surface.
+
+Verified: `tsc` clean with `amplify/` back INSIDE the typecheck (the exclude is
+gone), `next build` succeeds, 73 tests pass, `npx ampx --version` → 1.8.3.
+
+**The ported schema in `amplify/data/resource.ts` now typechecks against the
+real Gen 2 types** — all 26 models and their auth rules. It was written blind
+before the packages could be installed, so this is the first real validation.
+
+## Data-shape landmines (verified against production)
+
+- **Foreign keys.** Gen 1 generated implicit join fields; Gen 2 requires them
+  declared. The names in `resource.ts` were read off the live API and must not
+  be renamed — existing rows store those exact attribute names.
+- **Two dead relationships.** `Semester.courseSemestersId` (0 of 2 rows) and
+  `WeeklyPlan.semesterWeeklyPlansId` (0 of 6) are declared but never populated;
+  the real links are `Semester.courseId` and `WeeklyPlan.courseWeeklyPlansId`.
+- **`ParentStudentLink` has four FK fields** where two would do — explicit
+  `parentProfileId`/`studentProfileId` plus implicit hasMany keys. There are 0
+  rows in production, so pick one pair and move on.
+- **`studentId` is inconsistent**: an email on `Submission`, a Cognito sub on
+  `Enrollment`. This blocks row-level owner auth. Normalize before tightening
+  the rules in `resource.ts`.
 
 ## Resources
 - Migration guide: https://docs.amplify.aws/react/start/migrate-to-gen2/

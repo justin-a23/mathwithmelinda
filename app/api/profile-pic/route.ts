@@ -1,5 +1,5 @@
 import { PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3'
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+import { presign } from '@/app/lib/presign'
 import { NextRequest, NextResponse } from 'next/server'
 import { s3, SUBMISSIONS_BUCKET as BUCKET } from '../../lib/s3'
 import { requireAuth } from '@/app/lib/auth'
@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
     const command = new GetObjectCommand({ Bucket: BUCKET, Key: key })
-    const url = await getSignedUrl(s3, command, { expiresIn: 3600 })
+    const url = await presign(s3, command, { expiresIn: 3600 })
     return NextResponse.json({ url })
   } catch (err: any) {
     console.error('Profile pic GET error:', err)

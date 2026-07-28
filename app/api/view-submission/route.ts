@@ -1,5 +1,5 @@
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+import { presign } from '@/app/lib/presign'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/app/lib/auth'
 import { canReadSubmissionKey } from '@/app/lib/ownership'
@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
       Key: key,
     })
 
-    const signedUrl = await getSignedUrl(s3, command, { expiresIn: 3600 })
+    const signedUrl = await presign(s3, command, { expiresIn: 3600 })
 
     return NextResponse.json({ url: signedUrl })
   } catch (err) {

@@ -1,5 +1,5 @@
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+import { presign } from '@/app/lib/presign'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireTeacher } from '@/app/lib/auth'
 
@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
       ContentType: contentType,
     })
 
-    const signedUrl = await getSignedUrl(s3, command, { expiresIn: 3600 })
+    const signedUrl = await presign(s3, command, { expiresIn: 3600 })
 
     return NextResponse.json({ signedUrl, key })
   } catch (err) {
