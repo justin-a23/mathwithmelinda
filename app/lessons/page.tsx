@@ -628,7 +628,9 @@ function LessonPageInner() {
     try {
       const formData = new FormData()
       formData.append('file', file)
-      formData.append('studentId', user?.signInDetails?.loginId || user?.userId || 'unknown')
+      // studentId is resolved server-side from the caller's profile — sending it
+      // here was unreliable anyway, since signInDetails is only populated on a
+      // fresh sign-in and falls away after a page refresh.
       formData.append('lessonId', planItem?.lesson?.id || itemId || 'unknown')
       const res = await apiFetch('/api/submit', { method: 'POST', body: formData })
       if (!res.ok) {

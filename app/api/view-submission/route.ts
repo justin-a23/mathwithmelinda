@@ -2,6 +2,7 @@ import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/app/lib/auth'
+import { canReadSubmissionKey } from '@/app/lib/ownership'
 
 const accessKeyId = process.env.MWM_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID || ''
 const secretAccessKey = process.env.MWM_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY || ''
@@ -16,6 +17,15 @@ export async function POST(request: NextRequest) {
 
   try {
     const { key } = await request.json()
+
+    if (typeof key !== 'string' || !key) {
+      return NextResponse.json({ error: 'Missing key' }, { status: 400 })
+    }
+
+    // The key is caller-supplied — being signed in is not enough to read it.
+    if (!(await canReadSubmissionKey(auth, key))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
 
     const command = new GetObjectCommand({
       Bucket: 'mathwithmelinda-submissions',

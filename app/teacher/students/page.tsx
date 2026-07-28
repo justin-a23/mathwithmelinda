@@ -419,12 +419,10 @@ export default function StudentsPage() {
             const key = s.profilePictureKey!
             // Base64 data URLs stored directly — use as-is
             if (key.startsWith('data:')) return [s.id, key] as [string, string]
-            // Legacy S3 key — fetch presigned URL
-            const res = await apiFetch('/api/profile-pic', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ action: 'view', key })
-            })
+            // Legacy S3 key — fetch presigned URL.
+            // POST on this route is the multipart upload handler and rejects a
+            // JSON body, so reads must go through GET.
+            const res = await apiFetch('/api/profile-pic?key=' + encodeURIComponent(key))
             const { url } = await res.json()
             return [s.id, url] as [string, string]
           } catch {

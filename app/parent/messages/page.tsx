@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from 'react'
 import { generateClient } from 'aws-amplify/api'
 import { useTheme } from '../../ThemeProvider'
 import { apiFetch } from '@/app/lib/apiFetch'
+import { useRoleGuard } from '../../hooks/useRoleGuard'
 
 const client = generateClient()
 
@@ -58,6 +59,7 @@ function fmtDate(s: string): string {
 }
 
 export default function ParentMessagesPage() {
+  useRoleGuard('parent')
   const { user, signOut } = useAuthenticator()
   const router = useRouter()
   const { theme, toggleTheme } = useTheme()

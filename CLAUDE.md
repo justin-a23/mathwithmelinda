@@ -46,7 +46,8 @@ The project brief's "What's Left to Build" list is partially outdated. Here's th
 
 ### DynamoDB / AppSync
 - **400KB item size limit** — profile pictures MUST be compressed before base64 encoding. Use the `compressImage()` utility (200×200 JPEG at quality 0.75) already in `app/dashboard/page.tsx`
-- **API key is hardcoded** in server-side API routes (e.g. `app/api/delete-student/route.ts`) for AppSync calls — `da2-qgdyi5epjjarbjhwhqq7mrdbsy`
+- **AppSync API key comes from `APPSYNC_API_KEY`** in `.env.local` (gitignored), read via `app/lib/appsync.ts`. Never hardcode it — this repo is public. Server routes use `appsyncHeaders()`; scripts read it from the `.env.local` parser.
+- **The AppSync API has no `@auth` rules and defaults to `API_KEY` auth**, so the key is bundled into the client JS and is effectively public. Rotating it does not make the API private — see `TODO-APPSYNC-AUTH.md`.
 - AppSync endpoint: `https://irzsqprjcjco5kq7w7g72zm7qy.appsync-api.us-east-1.amazonaws.com/graphql`
 - GraphQL schema: `amplify/backend/api/mathwithmelinda/schema.graphql`
 

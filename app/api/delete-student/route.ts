@@ -5,6 +5,7 @@ import {
 } from '@aws-sdk/client-cognito-identity-provider'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireTeacher } from '@/app/lib/auth'
+import { APPSYNC_ENDPOINT, appsyncHeaders } from '@/app/lib/appsync'
 
 function makeCognitoClient() {
   // Amplify Console blocks "AWS_" prefix env vars, so we use MWM_ prefix in production.
@@ -21,9 +22,6 @@ function makeCognitoClient() {
 }
 
 const USER_POOL_ID = process.env.COGNITO_USER_POOL_ID || 'us-east-1_LvIY8oPmV'
-
-const APPSYNC_ENDPOINT = 'https://irzsqprjcjco5kq7w7g72zm7qy.appsync-api.us-east-1.amazonaws.com/graphql'
-const APPSYNC_API_KEY = process.env.APPSYNC_API_KEY || 'da2-qgdyi5epjjarbjhwhqq7mrdbsy'
 
 const deleteStudentProfileMutation = /* GraphQL */`
   mutation DeleteStudentProfile($input: DeleteStudentProfileInput!) {
@@ -76,7 +74,7 @@ const DELETE_MUTATIONS = {
 async function gql(query: string, variables: any) {
   const res = await fetch(APPSYNC_ENDPOINT, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-api-key': APPSYNC_API_KEY },
+    headers: appsyncHeaders(),
     body: JSON.stringify({ query, variables }),
   })
   const json = await res.json()

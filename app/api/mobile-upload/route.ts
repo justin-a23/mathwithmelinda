@@ -4,6 +4,7 @@ import { s3 } from '@/app/lib/s3'
 import { validateToken, incrementUploadCount } from '@/app/lib/uploadToken'
 import { validateFileType, isFileTooLarge, MAX_FILE_SIZE } from '@/app/lib/fileValidation'
 import { checkRateLimit, getClientIp } from '@/app/lib/rateLimit'
+import { sanitizeKeySegment } from '@/app/lib/ownershipRules'
 
 /**
  * Mobile upload endpoint — authenticated by upload token, NOT Cognito.
@@ -82,8 +83,11 @@ export async function POST(request: NextRequest) {
     }
 
     // S3 key: same pattern as /api/submit for consistency
+    // studentId and lessonId come from the validated token, so they're trusted.
+    // filename is the uploader's, and a `../` in it would escape the namespace.
     const { studentId, lessonId } = tokenCheck
-    const key = `submissions/${studentId}/${lessonId}/${Date.now()}-${filename}`
+    const safeFilename = sanitizeKeySegment(filename) || 'upload'
+    const key = `submissions/${studentId}/${lessonId}/${Date.now()}-${safeFilename}`
 
     await s3.send(new PutObjectCommand({
       Bucket: 'mathwithmelinda-submissions',

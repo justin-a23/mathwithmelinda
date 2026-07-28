@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireTeacher } from '@/app/lib/auth'
-
-const APPSYNC_ENDPOINT = 'https://irzsqprjcjco5kq7w7g72zm7qy.appsync-api.us-east-1.amazonaws.com/graphql'
-const APPSYNC_API_KEY = process.env.APPSYNC_API_KEY || 'da2-qgdyi5epjjarbjhwhqq7mrdbsy'
+import { APPSYNC_ENDPOINT, appsyncHeaders } from '@/app/lib/appsync'
 
 async function appsync(query: string, variables?: Record<string, unknown>) {
   const res = await fetch(APPSYNC_ENDPOINT, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-api-key': APPSYNC_API_KEY },
+    headers: appsyncHeaders(),
     body: JSON.stringify({ query, variables }),
   })
   return res.json()
