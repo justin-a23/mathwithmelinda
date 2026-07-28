@@ -11,6 +11,13 @@
  * Expected discrepancies (not failures):
  *   VideoWatch      -70  rows whose studentId resolves to no StudentProfile
  *   TeacherProfile   -5  duplicate rows collapsed to one per userId
+ *
+ * REQUIRES the temporary migration grant to be deployed:
+ *
+ *   AMPLIFY_DATA_MIGRATION=allow-api-key npx ampx sandbox --once --identifier gen2test
+ *
+ * Without it every query returns Unauthorized — which is the Gen 2 rules working
+ * as intended, not a regression. Redeploy without the flag when finished.
  */
 
 import { readFileSync, existsSync } from 'fs'
@@ -66,6 +73,18 @@ const MODELS = [
   'ZoomMeeting', 'Syllabus', 'ReportCardRecord',
 ]
 const EXPECTED_DELTA = { VideoWatch: -70, TeacherProfile: -5 }
+
+// Fail fast with an explanation rather than 26 confusing "UNEXPECTED" rows.
+{
+  const probe = await gql(GEN2, '{ listCourses(limit:1){ items { id } } }')
+  if (probe.errors && /Unauthorized/i.test(JSON.stringify(probe.errors))) {
+    console.error('\nGen 2 denies the API key — which is the rules working, not a failure.')
+    console.error('This script needs the temporary migration grant deployed:\n')
+    console.error('  AMPLIFY_DATA_MIGRATION=allow-api-key npx ampx sandbox --once --identifier gen2test\n')
+    console.error('Redeploy without the flag when finished.')
+    process.exit(2)
+  }
+}
 
 console.log(`\n${'model'.padEnd(22)} ${'gen1'.padStart(6)} ${'gen2'.padStart(6)}  delta`)
 console.log('─'.repeat(50))
