@@ -18,17 +18,41 @@
 - Update Amplify CLI to Gen 2 in CI/build
 - Test full data integrity: students, submissions, lessons, grades, messages, report cards
 
-## Measured scope (2026-07-28, not estimated)
+## Measured scope — REVISED DOWN after compatibility audit
 
-| Thing | Count |
-|---|---|
-| `client.graphql(...)` call sites | 251 across 36 files |
-| Modules calling AppSync by raw fetch | 12 |
-| Generated artifacts to delete | 12,348 lines (`src/API.ts`, `src/graphql/*`) |
-| Models | 26 |
+The original "~200 touchpoints to rewrite" was wrong, and so was my own
+restatement of it as 251. Both counted call sites without asking whether they
+actually need to change. They mostly do not.
 
-Heaviest files: `teacher/students` (22 calls), `teacher/page` (17),
-`teacher/grades` (17), `teacher/semesters` (15), `teacher/library/[courseId]` (14).
+| Thing | Count | Needs rewriting? |
+|---|---|---|
+| `client.graphql(...)` call sites | 250 | **No** — see below |
+| Files with inline GraphQL | 23 | No |
+| Files importing generated ops | 7 | No — regenerate `src/graphql/*` |
+| Generated artifacts | 12,348 lines | Regenerated, not edited |
+| Server routes using the API key | 8 + ownership.ts | **Yes** — must forward JWT |
+| Models | 26 | — |
+
+Audited mechanically on 2026-07-28 against `amplify/data/resource.ts`:
+
+- **47 distinct GraphQL operations** are used across the app. Gen 2 provides
+  every one of them (same `listX`/`getX`/`createX`/`updateX`/`deleteX` names).
+- **Zero field names** referenced by inline queries are missing from the Gen 2
+  schema.
+- **Zero hand-written references** to the fields the port dropped or renamed
+  (`courseSemestersId`, `semesterWeeklyPlansId`, and the two ParentStudentLink
+  keys). Every occurrence is in generated `src/graphql/*`, which is replaced.
+
+Because the port deliberately preserved Gen 1's field and FK names, the raw
+GraphQL surface is compatible. So Phase 3 is not a 251-site rewrite. It is:
+
+1. Regenerate `src/graphql/*` with `ampx generate graphql-client-code`
+2. Swap `amplifyconfiguration.json` → `amplify_outputs.json` in the Amplify init
+3. Forward the caller's JWT in the 8 server routes (the real work — see below)
+4. Fix fallout from the auth-mode change, which is where surprises will live
+
+Estimate drops from ~1 week to ~2 days, with the caveat that step 4 is
+unknowable until a sandbox exists to test against.
 
 ## Phase 1 — dependency blocker: RESOLVED (2026-07-28)
 
