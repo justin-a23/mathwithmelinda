@@ -209,9 +209,12 @@ const schema = a.schema({
       questionText: a.string().required(),
       questionType: a.string().required(),
       choices: a.string(),
-      // Students can read questions but must not read the answer key. Field-level
-      // rules are the correct tool; see the note at the bottom of this file.
-      correctAnswer: a.string(),
+      // The answer key. Students must be able to read the QUESTION but not this.
+      // Confirmed readable by a real student token before this rule existed —
+      // listAssignmentQuestions returned "x = 2" for a live rational-equation
+      // question. Field-level rules override the model's, so this narrows to
+      // teacher-only while the rest of the model stays readable.
+      correctAnswer: a.string().authorization(allow => [allow.group('teacher')]),
       diagramKey: a.string(),
       diagramSpec: a.string(),
       lessonTemplateQuestionsId: a.id(),
@@ -491,7 +494,10 @@ const schema = a.schema({
       topic: a.string().required(),
       zoomMeetingId: a.string(),
       joinUrl: a.string().required(),
-      startUrl: a.string(),
+      // Host credential — whoever holds it can START the meeting as Melinda.
+      // Students and parents need joinUrl; they must never see this one.
+      // Confirmed readable by a student token before this rule existed.
+      startUrl: a.string().authorization(allow => [allow.group('teacher')]),
       startTime: a.string().required(),
       durationMinutes: a.integer().required(),
       inviteeType: a.string().required(),
