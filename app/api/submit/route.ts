@@ -4,6 +4,7 @@ import { requireAuth } from '@/app/lib/auth'
 import { s3 } from '../../lib/s3'
 import { validateFileType, isFileTooLarge, MAX_FILE_SIZE } from '@/app/lib/fileValidation'
 import { checkRateLimit, getClientIp } from '@/app/lib/rateLimit'
+import { resolveStudentEmail } from '@/app/lib/ownership'
 
 export async function POST(request: NextRequest) {
   const auth = await requireAuth(request)
@@ -23,6 +24,20 @@ export async function POST(request: NextRequest) {
 
     if (!file) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
+    }
+
+    // studentId lands in the S3 key, so an unchecked value from the form body
+    // would let a student file work under a classmate's namespace (and `..`
+    // segments would escape it entirely). Teachers may upload on a student's
+    // behalf; everyone else must match their own profile email.
+    if (!studentId || studentId.includes('..') || studentId.includes('/')) {
+      return NextResponse.json({ error: 'Invalid studentId' }, { status: 400 })
+    }
+    if (auth.role !== 'teacher') {
+      const ownEmail = await resolveStudentEmail(auth.userId)
+      if (!ownEmail || ownEmail.toLowerCase() !== studentId.toLowerCase()) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      }
     }
 
     // File size check (before reading full buffer into memory)
