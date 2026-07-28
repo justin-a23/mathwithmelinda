@@ -62,6 +62,41 @@ gone), `next build` succeeds, 73 tests pass, `npx ampx --version` → 1.8.3.
 real Gen 2 types** — all 26 models and their auth rules. It was written blind
 before the packages could be installed, so this is the first real validation.
 
+## Phase 2 — backend definition written; deploy blocked on AWS setup
+
+`amplify/backend.ts` and `amplify/auth/resource.ts` are written and the whole
+definition typechecks. Scope is auth + data only.
+
+Auth uses `referenceAuth`, NOT `defineAuth`: Melinda's teacher account, the
+three groups and every student login already live in `us-east-1_LvIY8oPmV`.
+`defineAuth` would create a fresh pool and force everyone to re-register.
+
+The two S3 buckets are deliberately NOT declared with `defineStorage`. They
+predate Amplify, hold every submission and all 581 videos, and are reached via
+server routes using an IAM user. Handing their lifecycle to CloudFormation
+during a migration is needless risk.
+
+### Two blockers, both AWS-side, neither is code
+
+1. **The account has never been CDK-bootstrapped.** Verified in the console:
+   no `CDKToolkit` stack exists in us-east-1. Gen 2 is CDK underneath and
+   cannot deploy without it. One-time, needs admin.
+
+2. **`amplify-dev` lacks the permissions.** `ampx sandbox` fails on
+   `ssm:GetParameter` for `/cdk-bootstrap/hnb659fds/version`. Same root cause
+   as the AppSync 403 hit earlier — that user is scoped to S3 + Amplify +
+   Cognito. It cannot bootstrap or deploy CDK stacks.
+
+Fix either by running the bootstrap and sandbox under admin credentials, or by
+granting `amplify-dev` a deploy policy. Bootstrap first — the sandbox will not
+work until it exists:
+
+    npx ampx sandbox --once --identifier gen2test
+
+The sandbox creates a NEW AppSync API and NEW DynamoDB tables. It touches
+nothing the running Gen 1 app uses, so it is safe to stand up alongside
+production.
+
 ## Data-shape landmines (verified against production)
 
 - **Foreign keys.** Gen 1 generated implicit join fields; Gen 2 requires them
