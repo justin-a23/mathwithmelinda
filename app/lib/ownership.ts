@@ -1,5 +1,5 @@
 import type { AuthUser } from '@/app/lib/auth'
-import { APPSYNC_ENDPOINT, appsyncHeaders } from '@/app/lib/appsync'
+import { appsyncClient } from '@/app/lib/appsync'
 import { canReadSubmissionKeyGiven, canReadProfileKey } from '@/app/lib/ownershipRules'
 
 /**
@@ -23,28 +23,27 @@ import { canReadSubmissionKeyGiven, canReadProfileKey } from '@/app/lib/ownershi
 
 export { canReadProfileKey }
 
-async function gql<T>(query: string, variables: Record<string, unknown>): Promise<T | null> {
-  try {
-    const res = await fetch(APPSYNC_ENDPOINT, {
-      method: 'POST',
-      headers: appsyncHeaders(),
-      body: JSON.stringify({ query, variables }),
-    })
-    const json = await res.json()
-    if (json.errors) {
-      console.error('ownership lookup failed:', JSON.stringify(json.errors))
+/** Per-request client; `token` is the caller's verified access token. */
+function makeGql(token: string) {
+  const call = appsyncClient(token)
+  return async function gql<T>(query: string, variables: Record<string, unknown>): Promise<T | null> {
+    try {
+      const json: any = await call(query, variables)
+      if (json.errors) {
+        console.error('ownership lookup failed:', JSON.stringify(json.errors))
+        return null
+      }
+      return json.data as T
+    } catch (err) {
+      console.error('ownership lookup threw:', err)
       return null
     }
-    return json.data as T
-  } catch (err) {
-    console.error('ownership lookup threw:', err)
-    return null
   }
 }
 
 /** The signed-in student's own email, or null if they have no profile. */
-export async function resolveStudentEmail(userId: string): Promise<string | null> {
-  const data = await gql<{ listStudentProfiles: { items: { email: string }[] } }>(
+export async function resolveStudentEmail(token: string, userId: string): Promise<string | null> {
+  const data = await makeGql(token)<{ listStudentProfiles: { items: { email: string }[] } }>(
     /* GraphQL */`
       query StudentEmail($userId: String!) {
         listStudentProfiles(filter: { userId: { eq: $userId } }, limit: 1) {
@@ -58,8 +57,8 @@ export async function resolveStudentEmail(userId: string): Promise<string | null
 }
 
 /** Emails of every student a parent is linked to. Empty if none. */
-export async function resolveLinkedStudentEmails(parentId: string): Promise<string[]> {
-  const data = await gql<{ listParentStudents: { items: { studentEmail: string }[] } }>(
+export async function resolveLinkedStudentEmails(token: string, parentId: string): Promise<string[]> {
+  const data = await makeGql(token)<{ listParentStudents: { items: { studentEmail: string }[] } }>(
     /* GraphQL */`
       query LinkedStudents($parentId: String!) {
         listParentStudents(filter: { parentId: { eq: $parentId } }, limit: 50) {
@@ -86,10 +85,10 @@ export async function canReadSubmissionKey(auth: AuthUser, key: string): Promise
 
   let entitled: string[] = []
   if (auth.role === 'student') {
-    const email = await resolveStudentEmail(auth.userId)
+    const email = await resolveStudentEmail(auth.token, auth.userId)
     entitled = email ? [email] : []
   } else if (auth.role === 'parent') {
-    entitled = await resolveLinkedStudentEmails(auth.userId)
+    entitled = await resolveLinkedStudentEmails(auth.token, auth.userId)
   }
 
   return canReadSubmissionKeyGiven(auth, key, entitled)

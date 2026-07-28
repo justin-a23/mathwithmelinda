@@ -5,7 +5,7 @@ import {
 } from '@aws-sdk/client-cognito-identity-provider'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireTeacher } from '@/app/lib/auth'
-import { APPSYNC_ENDPOINT, appsyncHeaders } from '@/app/lib/appsync'
+import { appsyncClient } from '@/app/lib/appsync'
 
 function makeCognitoClient() {
   // Amplify Console blocks "AWS_" prefix env vars, so we use MWM_ prefix in production.
@@ -25,7 +25,7 @@ const USER_POOL_ID = process.env.COGNITO_USER_POOL_ID || 'us-east-1_LvIY8oPmV'
 
 const deleteStudentProfileMutation = /* GraphQL */`
   mutation DeleteStudentProfile($input: DeleteStudentProfileInput!) {
-    deleteStudentProfile(input: $input) { id }
+    deleteStudentProfile(auth.token, input: $input) { id }
   }
 `
 
@@ -71,18 +71,9 @@ const DELETE_MUTATIONS = {
   studentInvite:'mutation DelSI($input: DeleteStudentInviteInput!) { deleteStudentInvite(input: $input) { id } }',
 } as const
 
-async function gql(query: string, variables: any) {
-  const res = await fetch(APPSYNC_ENDPOINT, {
-    method: 'POST',
-    headers: appsyncHeaders(),
-    body: JSON.stringify({ query, variables }),
-  })
-  const json = await res.json()
-  if (json.errors) throw new Error(json.errors[0].message)
-  return json.data
-}
 
-async function deleteStudentProfile(profileId: string) {
+async function deleteStudentProfile(token: string, profileId: string) {
+  const gql = appsyncClient(token)
   return gql(deleteStudentProfileMutation, { input: { id: profileId } })
 }
 
@@ -92,7 +83,8 @@ async function deleteStudentProfile(profileId: string) {
  * Individual failures are logged but don't stop the overall deletion —
  * better to over-clean than leave inconsistent state. Returns counts.
  */
-async function cascadeDeleteStudentData(userId: string, email: string, profileId: string) {
+async function cascadeDeleteStudentData(token: string, userId: string, email: string, profileId: string) {
+  const gql = appsyncClient(token)
   const counts = { submissions: 0, enrollments: 0, messages: 0, parentLinks: 0, reports: 0, invites: 0 }
   const errors: string[] = []
 
@@ -193,7 +185,7 @@ export async function POST(request: NextRequest) {
   // 1) Cascade-delete related data first (best-effort; logs failures but continues)
   if (email) {
     try {
-      const result = await cascadeDeleteStudentData(userId, email, profileId)
+      const result = await cascadeDeleteStudentData(auth.token, userId, email, profileId)
       cascadeCounts = result.counts
       cascadeErrors = result.errors
       if (result.errors.length > 0) {
@@ -227,7 +219,7 @@ export async function POST(request: NextRequest) {
 
   // 3) Delete the StudentProfile itself (last, so we have the id for all the filters above)
   try {
-    await deleteStudentProfile(profileId)
+    await deleteStudentProfile(auth.token, profileId)
   } catch (err: any) {
     console.error('Error deleting student profile from DB:', err)
     return NextResponse.json({ error: err.message || 'Failed to delete student record' }, { status: 500 })

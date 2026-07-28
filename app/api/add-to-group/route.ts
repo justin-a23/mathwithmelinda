@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { CognitoIdentityProviderClient, AdminAddUserToGroupCommand, ListUsersCommand } from '@aws-sdk/client-cognito-identity-provider'
 import { requireAuth } from '@/app/lib/auth'
-import { APPSYNC_ENDPOINT, appsyncHeaders } from '@/app/lib/appsync'
+import { appsyncClient } from '@/app/lib/appsync'
 
 const USER_POOL_ID = process.env.COGNITO_USER_POOL_ID || 'us-east-1_LvIY8oPmV'
 
@@ -23,20 +23,18 @@ function makeCognitoClient() {
  * any logged-in user (e.g. a student) could flip themselves into the parent
  * group via this endpoint.
  */
-async function userHasParentStudentLink(userId: string): Promise<boolean> {
-  const query = /* GraphQL */`
-    query CheckParentLink($parentId: String!) {
-      listParentStudents(filter: { parentId: { eq: $parentId } }, limit: 1) {
-        items { id }
+async function userHasParentStudentLink(token: string, userId: string): Promise<boolean> {
+  const gql = appsyncClient(token)
+  const json: any = await gql(
+    /* GraphQL */`
+      query CheckParentLink($parentId: String!) {
+        listParentStudents(filter: { parentId: { eq: $parentId } }, limit: 1) {
+          items { id }
+        }
       }
-    }
-  `
-  const res = await fetch(APPSYNC_ENDPOINT, {
-    method: 'POST',
-    headers: appsyncHeaders(),
-    body: JSON.stringify({ query, variables: { parentId: userId } }),
-  })
-  const json = await res.json()
+    `,
+    { parentId: userId }
+  )
   return (json?.data?.listParentStudents?.items?.length ?? 0) > 0
 }
 
@@ -63,7 +61,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Verify this user actually has a ParentStudent link — i.e. they've accepted a real invite.
-    const hasLink = await userHasParentStudentLink(auth.userId)
+    const hasLink = await userHasParentStudentLink(auth.token, auth.userId)
     if (!hasLink) {
       return NextResponse.json({ error: 'No parent invite has been accepted for this account' }, { status: 403 })
     }

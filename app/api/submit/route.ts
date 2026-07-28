@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
       }
       ownerId = studentId
     } else {
-      const ownEmail = await resolveStudentEmail(auth.userId)
+      const ownEmail = await resolveStudentEmail(auth.token, auth.userId)
       if (!ownEmail) {
         return NextResponse.json(
           { error: 'No student profile found for this account. Ask your teacher to approve your profile.' },

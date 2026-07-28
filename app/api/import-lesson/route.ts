@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireTeacher } from '@/app/lib/auth'
 import { parseLessonMarkdown, ParsedQuestion } from '@/app/lib/lessonMarkdownParser'
-import { APPSYNC_ENDPOINT, appsyncHeaders } from '@/app/lib/appsync'
+import { appsyncClient } from '@/app/lib/appsync'
 
 const CREATE_LESSON_TEMPLATE = /* GraphQL */`
   mutation CreateLT($input: CreateLessonTemplateInput!) {
@@ -36,16 +36,6 @@ const LIST_LESSON_QUESTIONS = /* GraphQL */`
   }
 `
 
-async function gql(query: string, variables: any) {
-  const res = await fetch(APPSYNC_ENDPOINT, {
-    method: 'POST',
-    headers: appsyncHeaders(),
-    body: JSON.stringify({ query, variables }),
-  })
-  const json = await res.json()
-  if (json.errors) throw new Error(json.errors[0].message)
-  return json.data
-}
 
 /**
  * POST /api/import-lesson
@@ -68,6 +58,7 @@ async function gql(query: string, variables: any) {
 export async function POST(request: NextRequest) {
   const auth = await requireTeacher(request)
   if (auth instanceof NextResponse) return auth
+  const gql = appsyncClient(auth.token)
 
   try {
     const { markdown, courseId, existingLessonId, preview } = await request.json()

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import nodemailer from 'nodemailer'
 import { requireTeacher } from '@/app/lib/auth'
-import { APPSYNC_ENDPOINT, appsyncHeaders } from '@/app/lib/appsync'
+import { appsyncClient } from '@/app/lib/appsync'
 
 function makeTransporter() {
   return nodemailer.createTransport({
@@ -16,15 +16,14 @@ function makeTransporter() {
   })
 }
 
-async function appsync(query: string, variables: Record<string, unknown>) {
-  const res = await fetch(APPSYNC_ENDPOINT, {
-    method: 'POST',
-    headers: appsyncHeaders(),
-    body: JSON.stringify({ query, variables }),
-  })
-  const json = await res.json()
-  if (json.errors) throw new Error(json.errors[0].message)
-  return json.data
+/** Wraps the per-request client to keep this route's throw-on-error behaviour. */
+function makeAppsync(token: string) {
+  const gql = appsyncClient(token)
+  return async function appsync(query: string, variables: Record<string, unknown>) {
+    const json: any = await gql(query, variables)
+    if (json.errors) throw new Error(json.errors[0].message)
+    return json.data
+  }
 }
 
 const listParentStudentsByEmail = `
@@ -54,6 +53,7 @@ const listUsedParentInvitesByStudent = `
 export async function POST(req: NextRequest) {
   const auth = await requireTeacher(req)
   if (auth instanceof NextResponse) return auth
+  const appsync = makeAppsync(auth.token)
 
   try {
     const { studentEmail, subject, html, text } = await req.json()

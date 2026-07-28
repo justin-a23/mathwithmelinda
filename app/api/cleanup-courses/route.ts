@@ -1,15 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireTeacher } from '@/app/lib/auth'
-import { APPSYNC_ENDPOINT, appsyncHeaders } from '@/app/lib/appsync'
-
-async function appsync(query: string, variables?: Record<string, unknown>) {
-  const res = await fetch(APPSYNC_ENDPOINT, {
-    method: 'POST',
-    headers: appsyncHeaders(),
-    body: JSON.stringify({ query, variables }),
-  })
-  return res.json()
-}
+import { appsyncClient } from '@/app/lib/appsync'
 
 /**
  * GET — list all courses with their enrollment/plan counts so you can see which are duplicates
@@ -18,6 +9,7 @@ async function appsync(query: string, variables?: Record<string, unknown>) {
 export async function GET(req: NextRequest) {
   const auth = await requireTeacher(req)
   if (auth instanceof NextResponse) return auth
+  const appsync = appsyncClient(auth.token)
 
   try {
     // Get all courses
@@ -77,6 +69,7 @@ export async function GET(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const auth = await requireTeacher(req)
   if (auth instanceof NextResponse) return auth
+  const appsync = appsyncClient(auth.token)
 
   try {
     const { courseIds } = await req.json()

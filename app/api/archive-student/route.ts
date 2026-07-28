@@ -5,7 +5,7 @@ import {
 } from '@aws-sdk/client-cognito-identity-provider'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireTeacher } from '@/app/lib/auth'
-import { APPSYNC_ENDPOINT, appsyncHeaders } from '@/app/lib/appsync'
+import { appsyncClient } from '@/app/lib/appsync'
 
 function makeCognitoClient() {
   const accessKeyId = process.env.MWM_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID
@@ -31,17 +31,13 @@ const archiveStudentProfileMutation = /* GraphQL */`
   }
 `
 
-async function markProfileArchived(profileId: string) {
-  const res = await fetch(APPSYNC_ENDPOINT, {
-    method: 'POST',
-    headers: appsyncHeaders(),
-    body: JSON.stringify({
-      query: archiveStudentProfileMutation,
-      // Stamp archivedAt so past students can be grouped by year in the transcript view
-      variables: { input: { id: profileId, status: 'archived', archivedAt: new Date().toISOString() } },
-    }),
-  })
-  const json = await res.json()
+async function markProfileArchived(token: string, profileId: string) {
+  const gql = appsyncClient(token)
+  const json: any = await gql(
+    archiveStudentProfileMutation,
+    // Stamp archivedAt so past students can be grouped by year in the transcript view
+    { input: { id: profileId, status: 'archived', archivedAt: new Date().toISOString() } }
+  )
   if (json.errors) throw new Error(json.errors[0].message)
   return json.data
 }
@@ -97,7 +93,7 @@ export async function POST(request: NextRequest) {
 
   // 2. Mark profile as archived in DynamoDB (keep all data intact)
   try {
-    await markProfileArchived(profileId)
+    await markProfileArchived(auth.token, profileId)
   } catch (err: any) {
     console.error('Error archiving student profile:', err)
     return NextResponse.json({ error: err.message || 'Failed to archive student record' }, { status: 500 })

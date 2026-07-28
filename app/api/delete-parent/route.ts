@@ -5,7 +5,7 @@ import {
 } from '@aws-sdk/client-cognito-identity-provider'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireTeacher } from '@/app/lib/auth'
-import { APPSYNC_ENDPOINT, appsyncHeaders } from '@/app/lib/appsync'
+import { appsyncClient } from '@/app/lib/appsync'
 
 function makeCognitoClient() {
   const accessKeyId = process.env.MWM_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID
@@ -21,16 +21,6 @@ function makeCognitoClient() {
 
 const USER_POOL_ID = process.env.COGNITO_USER_POOL_ID || 'us-east-1_LvIY8oPmV'
 
-async function appsync(query: string, variables: Record<string, unknown>) {
-  const res = await fetch(APPSYNC_ENDPOINT, {
-    method: 'POST',
-    headers: appsyncHeaders(),
-    body: JSON.stringify({ query, variables }),
-  })
-  const json = await res.json()
-  if (json.errors) throw new Error(json.errors[0].message)
-  return json.data
-}
 
 const deleteParentProfileMutation = /* GraphQL */`
   mutation DeleteParentProfile($input: DeleteParentProfileInput!) {
@@ -70,6 +60,7 @@ async function findCognitoUsername(cognito: CognitoIdentityProviderClient, sub: 
 export async function POST(request: NextRequest) {
   const auth = await requireTeacher(request)
   if (auth instanceof NextResponse) return auth
+  const appsync = appsyncClient(auth.token)
 
   // userId = Cognito sub (from ParentStudent.parentId or ParentProfile.userId)
   // profileId = ParentProfile.id (may be null if no profile record exists)

@@ -19,10 +19,10 @@
  *    Emails are resolved through StudentProfile. Anything unresolvable is
  *    reported and NOT written — a wrong owner is worse than a missing row.
  *
- *    Knock-on: S3 keys are `submissions/{email}/...`. Those are untouched here.
- *    Either re-key the objects (trivial — there are 17) or teach
- *    app/lib/ownershipRules.ts to map sub→email for legacy keys. Decide before
- *    cutover; the script prints the affected keys.
+ *    S3 keys are NOT affected. They are `submissions/{email}/...`, but nothing
+ *    derives them from studentId — both app/lib/ownership.ts and the submit
+ *    route resolve the email from StudentProfile.email via
+ *    resolveStudentEmail(auth.userId). Checked; there is nothing to reconcile.
  *
  * 2. DROPS TWO DEAD RELATIONSHIPS.
  *    Semester.courseSemestersId and WeeklyPlan.semesterWeeklyPlansId are
