@@ -5,6 +5,7 @@ import { s3 } from '../../lib/s3'
 import { validateFileType, isFileTooLarge, MAX_FILE_SIZE } from '@/app/lib/fileValidation'
 import { checkRateLimit, getClientIp } from '@/app/lib/rateLimit'
 import { resolveStudentEmail } from '@/app/lib/ownership'
+import { sanitizeKeySegment } from '@/app/lib/ownershipRules'
 
 export async function POST(request: NextRequest) {
   const auth = await requireAuth(request)
@@ -26,18 +27,31 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
     }
 
-    // studentId lands in the S3 key, so an unchecked value from the form body
-    // would let a student file work under a classmate's namespace (and `..`
-    // segments would escape it entirely). Teachers may upload on a student's
-    // behalf; everyone else must match their own profile email.
-    if (!studentId || studentId.includes('..') || studentId.includes('/')) {
-      return NextResponse.json({ error: 'Invalid studentId' }, { status: 400 })
-    }
-    if (auth.role !== 'teacher') {
-      const ownEmail = await resolveStudentEmail(auth.userId)
-      if (!ownEmail || ownEmail.toLowerCase() !== studentId.toLowerCase()) {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    // studentId lands in the S3 key and is what the grades views query by, so
+    // it is resolved server-side rather than trusted from the form body. Two
+    // reasons: a student could otherwise file work under a classmate's
+    // namespace (and `..` segments would escape it entirely), and the client
+    // derives it from `signInDetails.loginId`, which Amplify only populates on
+    // a fresh sign-in — after a refresh it silently falls back to the Cognito
+    // sub, or the string 'unknown'.
+    //
+    // Teachers may still upload on a student's behalf, so their value is
+    // honoured after a structural check.
+    let ownerId: string
+    if (auth.role === 'teacher') {
+      if (!studentId || studentId.includes('..') || studentId.includes('/')) {
+        return NextResponse.json({ error: 'Invalid studentId' }, { status: 400 })
       }
+      ownerId = studentId
+    } else {
+      const ownEmail = await resolveStudentEmail(auth.userId)
+      if (!ownEmail) {
+        return NextResponse.json(
+          { error: 'No student profile found for this account. Ask your teacher to approve your profile.' },
+          { status: 403 }
+        )
+      }
+      ownerId = ownEmail
     }
 
     // File size check (before reading full buffer into memory)
@@ -87,7 +101,13 @@ export async function POST(request: NextRequest) {
       filename = file.name
     }
 
-    const key = `submissions/${studentId}/${lessonId}/${Date.now()}-${filename}`
+    // lessonId and filename are both client-controlled and both land in the S3
+    // key, so a `../` in either would write outside the student's namespace —
+    // including over another student's work. Strip anything that isn't a plain
+    // path-safe character rather than trying to detect traversal.
+    const safeLessonId = sanitizeKeySegment(lessonId) || 'unknown-lesson'
+    const safeFilename = sanitizeKeySegment(filename) || 'upload'
+    const key = `submissions/${ownerId}/${safeLessonId}/${Date.now()}-${safeFilename}`
 
     await s3.send(new PutObjectCommand({
       Bucket: 'mathwithmelinda-submissions',
