@@ -78,7 +78,26 @@ export async function POST(request: NextRequest) {
   let cognitoDeleted = false
   let cognitoError = ''
 
-  // 1. Remove Cognito account so they can't log in next year
+  // ORDER MATTERS — do not swap these back.
+  //
+  // Deleting the Cognito account first means any failure in the second step
+  // destroys the recoverable half and keeps the unrecoverable one: the student
+  // can no longer log in, but their profile still reads "active", so they sit
+  // on the teacher's roster as a current student with nothing marking them
+  // archived. That happened in production on 2026-07-28 to both students.
+  //
+  // This way round a failure is benign: profile archived, login still works —
+  // visible, and fixed by simply running the archive again.
+
+  // 1. Record the archive first — the durable, reversible half.
+  try {
+    await markProfileArchived(profileId)
+  } catch (err: any) {
+    console.error('Error archiving student profile:', err)
+    return NextResponse.json({ error: err.message || 'Failed to archive student record' }, { status: 500 })
+  }
+
+  // 2. Then remove the login. Non-fatal: the archive itself already stuck.
   try {
     const cognito = makeCognitoClient()
     const cognitoUsername = await findCognitoUsername(cognito, userId)
@@ -93,14 +112,6 @@ export async function POST(request: NextRequest) {
   } catch (err: any) {
     cognitoError = err?.message || 'Cognito deletion failed'
     console.error('Cognito deletion failed during archive:', cognitoError)
-  }
-
-  // 2. Mark profile as archived in DynamoDB (keep all data intact)
-  try {
-    await markProfileArchived(profileId)
-  } catch (err: any) {
-    console.error('Error archiving student profile:', err)
-    return NextResponse.json({ error: err.message || 'Failed to archive student record' }, { status: 500 })
   }
 
   return NextResponse.json({ success: true, cognitoDeleted, cognitoError: cognitoError || null })
