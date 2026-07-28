@@ -37,14 +37,30 @@ export function isStructurallySafeKey(key: string): boolean {
 }
 
 /**
- * Case-insensitive `submissions/{email}/` prefix match.
+ * Whether `key` sits inside `submissions/{email}/`.
  *
- * The trailing slash matters: without it `submissions/a@b.com` would also match
- * `submissions/a@b.com.attacker.net/...`.
+ * Two deliberate asymmetries:
+ *
+ * - The `submissions/` prefix is matched CASE-SENSITIVELY, because S3 keys are.
+ *   An earlier version lowercased the whole key, which meant `Submissions/…`
+ *   (capital S) also matched — a different S3 path being treated as the same
+ *   namespace. Harmless while nothing writes there, and a hole the moment
+ *   something does.
+ *
+ * - The owner segment is matched case-INsensitively, since Cognito treats
+ *   addresses that way and the same person may sign in as Bob@ or bob@.
+ *
+ * The segment is compared whole rather than by `startsWith`, so
+ * `submissions/a@b.com` cannot match `submissions/a@b.com.attacker.net/…`.
  */
 export function ownsSubmissionPrefix(key: string, email: string): boolean {
   if (!email) return false
-  return key.toLowerCase().startsWith(`submissions/${email.toLowerCase()}/`)
+  const PREFIX = 'submissions/'
+  if (!key.startsWith(PREFIX)) return false
+  const rest = key.slice(PREFIX.length)
+  const slash = rest.indexOf('/')
+  if (slash < 0) return false // no trailing path — not an object inside the namespace
+  return rest.slice(0, slash).toLowerCase() === email.toLowerCase()
 }
 
 /** A user's own avatar key, which is namespaced by Cognito sub rather than email. */

@@ -328,7 +328,7 @@ const schema = a.schema({
       parentName2: a.string(),
       enrolledAt: a.string(),
       archivedAt: a.string(),
-      parentLinks: a.hasMany('ParentStudentLink', 'studentProfileParentLinksId'),
+      parentLinks: a.hasMany('ParentStudentLink', 'studentProfileId'),
     })
     // Self-setup at /profile/setup requires a student to create their own row
     // BEFORE any group is assigned, so this must be authenticated(), not a group.
@@ -355,7 +355,7 @@ const schema = a.schema({
       email: a.string().required(),
       firstName: a.string().required(),
       lastName: a.string().required(),
-      studentLinks: a.hasMany('ParentStudentLink', 'parentProfileStudentLinksId'),
+      studentLinks: a.hasMany('ParentStudentLink', 'parentProfileId'),
     })
     // create must be authenticated(), NOT group('parent'): the accept flow in
     // app/parent/accept/[token] creates this row BEFORE calling
@@ -368,14 +368,15 @@ const schema = a.schema({
 
   ParentStudentLink: a
     .model({
-      // Gen 1 declared explicit parentProfileId/studentProfileId AND generated
-      // implicit hasMany keys. Only the implicit pair can back the hasMany
-      // relations in Gen 2, so those are authoritative here. Verify both sets
-      // agree in the data before cutting over — see the migration checklist.
-      parentProfileStudentLinksId: a.id(),
-      parentProfile: a.belongsTo('ParentProfile', 'parentProfileStudentLinksId'),
-      studentProfileParentLinksId: a.id(),
-      studentProfile: a.belongsTo('StudentProfile', 'studentProfileParentLinksId'),
+      // Gen 1 declared explicit FKs — @belongsTo(fields: ["parentProfileId"]) —
+      // AND separately generated implicit hasMany keys
+      // (parentProfileStudentLinksId etc). The EXPLICIT pair is what the model
+      // actually meant, so it is what Gen 2 uses; the implicit pair was an
+      // artifact. Safe to settle now: the table has zero rows.
+      parentProfileId: a.id().required(),
+      parentProfile: a.belongsTo('ParentProfile', 'parentProfileId'),
+      studentProfileId: a.id().required(),
+      studentProfile: a.belongsTo('StudentProfile', 'studentProfileId'),
     })
     .authorization(allow => [
       allow.group('teacher'),
