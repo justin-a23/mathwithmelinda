@@ -50,6 +50,25 @@ import { type ClientSchema, a, defineData } from '@aws-amplify/backend'
 // approval and backfill the existing users — roles.ts already handles members
 // of that group correctly, so it is a compatible change.
 
+/**
+ * TEMPORARY, MIGRATION ONLY — off unless explicitly switched on.
+ *
+ * The Gen 2 API correctly denies the API key; that is the point of the
+ * migration. But scripts/migrate-gen1-to-gen2.mjs is not a Cognito user, and
+ * this version of @aws-amplify/backend exposes no IAM allow-list, so it has no
+ * way to authenticate for the one-time data copy.
+ *
+ * Setting AMPLIFY_DATA_MIGRATION=allow-api-key at synth time adds publicApiKey
+ * to every model so the copy can run — and nothing else.
+ *
+ * Gated on an env var rather than a hand-edit so the committed default is the
+ * secure one and this cannot reach production by being forgotten. Deploy with
+ * the flag, run the migration, redeploy without it, then confirm the key is
+ * Unauthorized again.
+ */
+const MIGRATION_MODE = process.env.AMPLIFY_DATA_MIGRATION === 'allow-api-key'
+const migrationAccess = (allow: any) => (MIGRATION_MODE ? [allow.publicApiKey()] : [])
+
 /** Teacher-only: administrative records no student or parent should touch. */
 const teacherOnly = (allow: any) => [allow.group('teacher')]
 
@@ -60,6 +79,7 @@ const teacherOnly = (allow: any) => [allow.group('teacher')]
 const teacherWritesEveryoneReads = (allow: any) => [
   allow.group('teacher'),
   allow.authenticated().to(['read']),
+  ...migrationAccess(allow),
 ]
 
 /**
@@ -76,12 +96,14 @@ const teacherWritesEveryoneReads = (allow: any) => [
 const studentScoped = (allow: any) => [
   allow.group('teacher'),
   allow.authenticated().to(['read']),
+  ...migrationAccess(allow),
 ]
 
 /** Records a student creates and maintains for themselves. */
 const studentWritable = (allow: any) => [
   allow.group('teacher'),
   allow.authenticated().to(['create', 'read', 'update']),
+  ...migrationAccess(allow),
 ]
 
 // ─── Schema ──────────────────────────────────────────────────────────────────
@@ -347,6 +369,7 @@ const schema = a.schema({
       allow.group('teacher'),
       // Students and parents see her name and photo in the nav.
       allow.authenticated().to(['read']),
+      ...migrationAccess(allow),
     ]),
 
   ParentProfile: a
@@ -364,6 +387,7 @@ const schema = a.schema({
     .authorization(allow => [
       allow.group('teacher'),
       allow.authenticated().to(['create', 'read', 'update']),
+      ...migrationAccess(allow),
     ]),
 
   ParentStudentLink: a
@@ -381,6 +405,7 @@ const schema = a.schema({
     .authorization(allow => [
       allow.group('teacher'),
       allow.group('parent').to(['read']),
+      ...migrationAccess(allow),
     ]),
 
   // ── Invites ───────────────────────────────────────────────────────────────
@@ -403,7 +428,7 @@ const schema = a.schema({
     // Redeemed before the user has an account, so this cannot require auth.
     // Knowledge of the token is the credential — keep tokens long and random,
     // and prefer redeeming through a server route over exposing list access.
-    .authorization(allow => [allow.group('teacher'), allow.guest().to(['read', 'update'])]),
+    .authorization(allow => [allow.group('teacher'), allow.guest().to(['read', 'update']), ...migrationAccess(allow)]),
 
   ParentInvite: a
     .model({
@@ -415,7 +440,7 @@ const schema = a.schema({
       parentFirstName: a.string(),
       parentLastName: a.string(),
     })
-    .authorization(allow => [allow.group('teacher'), allow.guest().to(['read', 'update'])]),
+    .authorization(allow => [allow.group('teacher'), allow.guest().to(['read', 'update']), ...migrationAccess(allow)]),
 
   ParentStudent: a
     .model({
@@ -429,6 +454,7 @@ const schema = a.schema({
     .authorization(allow => [
       allow.group('teacher'),
       allow.authenticated().to(['create', 'read']),
+      ...migrationAccess(allow),
     ]),
 
   // ── Communication ─────────────────────────────────────────────────────────
