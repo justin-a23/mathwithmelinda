@@ -4,14 +4,28 @@ import { useAuthenticator } from '@aws-amplify/ui-react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState, useRef, Suspense } from 'react'
 import { generateClient } from 'aws-amplify/api'
-import { listCourses, listLessonTemplates, listStudentProfiles } from '../../../src/graphql/queries'
+import { listCourses, listStudentProfiles } from '../../../src/graphql/queries'
 import TeacherNav from '../../components/TeacherNav'
 import { useRoleGuard } from '../../hooks/useRoleGuard'
 
 const client = generateClient()
 
+// Inline so the selection set can include isArchived, which postdates the generated types.
+// Archived templates are filtered out in JS rather than by a server-side filter: existing
+// rows have no isArchived attribute at all, and a DynamoDB `ne` filter drops those.
+const listLessonTemplatesInline = /* GraphQL */`
+  query ListLessonTemplates($filter: ModelLessonTemplateFilterInput, $limit: Int, $nextToken: String) {
+    listLessonTemplates(filter: $filter, limit: $limit, nextToken: $nextToken) {
+      items {
+        id lessonNumber title instructions worksheetUrl videoUrl isArchived
+      }
+      nextToken
+    }
+  }
+`
+
 type Course = { id: string; title: string; gradeLevel: string | null }
-type LessonTemplate = { id: string; lessonNumber: number; title: string; instructions: string | null; worksheetUrl: string | null; videoUrl: string | null }
+type LessonTemplate = { id: string; lessonNumber: number; title: string; instructions: string | null; worksheetUrl: string | null; videoUrl: string | null; isArchived?: boolean | null }
 type StudentProfile = { id: string; userId: string; email: string; firstName: string; lastName: string; courseId: string | null }
 
 type DayPlan = {
@@ -104,14 +118,15 @@ function ScheduleWeekInner() {
         let nextToken: string | null = null
         do {
           const result: any = await client.graphql({
-            query: listLessonTemplates,
+            query: listLessonTemplatesInline,
             variables: { filter: { courseLessonTemplatesId: { eq: selectedCourseId } }, limit: 500, nextToken }
           })
           allItems = [...allItems, ...result.data.listLessonTemplates.items]
           nextToken = result.data.listLessonTemplates.nextToken
         } while (nextToken)
-        allItems.sort((a, b) => a.lessonNumber - b.lessonNumber)
-        setLessonTemplates(allItems)
+        const active = allItems.filter(l => !l.isArchived)
+        active.sort((a, b) => a.lessonNumber - b.lessonNumber)
+        setLessonTemplates(active)
       } catch (err) { console.error(err) }
     }
 

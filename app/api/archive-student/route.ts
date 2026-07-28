@@ -5,6 +5,7 @@ import {
 } from '@aws-sdk/client-cognito-identity-provider'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireTeacher } from '@/app/lib/auth'
+import { APPSYNC_ENDPOINT, appsyncHeaders } from '@/app/lib/appsync'
 
 function makeCognitoClient() {
   const accessKeyId = process.env.MWM_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID
@@ -19,8 +20,6 @@ function makeCognitoClient() {
 }
 
 const USER_POOL_ID = process.env.COGNITO_USER_POOL_ID || 'us-east-1_LvIY8oPmV'
-const APPSYNC_ENDPOINT = 'https://irzsqprjcjco5kq7w7g72zm7qy.appsync-api.us-east-1.amazonaws.com/graphql'
-const APPSYNC_API_KEY = process.env.APPSYNC_API_KEY || 'da2-qgdyi5epjjarbjhwhqq7mrdbsy'
 
 /**
  * Marks a StudentProfile as archived in DynamoDB — does NOT delete it.
@@ -35,7 +34,7 @@ const archiveStudentProfileMutation = /* GraphQL */`
 async function markProfileArchived(profileId: string) {
   const res = await fetch(APPSYNC_ENDPOINT, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-api-key': APPSYNC_API_KEY },
+    headers: appsyncHeaders(),
     body: JSON.stringify({
       query: archiveStudentProfileMutation,
       // Stamp archivedAt so past students can be grouped by year in the transcript view

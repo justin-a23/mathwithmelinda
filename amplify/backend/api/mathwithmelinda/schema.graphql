@@ -156,6 +156,7 @@ type LessonTemplate @model {
   videoUrl: String
   assignmentType: String
   lessonCategory: String
+  isArchived: Boolean
   course: Course @belongsTo
   questions: [AssignmentQuestion] @hasMany
 }

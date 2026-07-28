@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { CognitoIdentityProviderClient, AdminAddUserToGroupCommand, ListUsersCommand } from '@aws-sdk/client-cognito-identity-provider'
 import { requireAuth } from '@/app/lib/auth'
+import { APPSYNC_ENDPOINT, appsyncHeaders } from '@/app/lib/appsync'
 
 const USER_POOL_ID = process.env.COGNITO_USER_POOL_ID || 'us-east-1_LvIY8oPmV'
-const APPSYNC_ENDPOINT = 'https://irzsqprjcjco5kq7w7g72zm7qy.appsync-api.us-east-1.amazonaws.com/graphql'
-const APPSYNC_API_KEY = process.env.APPSYNC_API_KEY || 'da2-qgdyi5epjjarbjhwhqq7mrdbsy'
 
 function makeCognitoClient() {
   const accessKeyId = process.env.MWM_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID
@@ -34,7 +33,7 @@ async function userHasParentStudentLink(userId: string): Promise<boolean> {
   `
   const res = await fetch(APPSYNC_ENDPOINT, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-api-key': APPSYNC_API_KEY },
+    headers: appsyncHeaders(),
     body: JSON.stringify({ query, variables: { parentId: userId } }),
   })
   const json = await res.json()

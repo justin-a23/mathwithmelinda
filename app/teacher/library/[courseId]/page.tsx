@@ -14,7 +14,7 @@ const listLessonTemplatesInline = /* GraphQL */`
     listLessonTemplates(filter: $filter, limit: $limit, nextToken: $nextToken) {
       items {
         id lessonNumber title instructions teachingNotes
-        worksheetUrl videoUrl assignmentType lessonCategory
+        worksheetUrl videoUrl assignmentType lessonCategory isArchived
         courseLessonTemplatesId updatedAt
       }
       nextToken
@@ -25,7 +25,7 @@ const updateLessonTemplateInline = /* GraphQL */`
   mutation UpdateLessonTemplate($input: UpdateLessonTemplateInput!) {
     updateLessonTemplate(input: $input) {
       id lessonNumber title instructions teachingNotes
-      worksheetUrl videoUrl assignmentType lessonCategory updatedAt
+      worksheetUrl videoUrl assignmentType lessonCategory isArchived updatedAt
     }
   }
 `
@@ -63,6 +63,7 @@ type LessonTemplate = {
   videoUrl: string | null
   assignmentType: string | null
   lessonCategory: string | null
+  isArchived: boolean | null
   courseLessonTemplatesId: string | null
   updatedAt: string | null
 }
@@ -121,6 +122,8 @@ export default function LessonLibraryPage() {
   const [lessons, setLessons] = useState<LessonTemplate[]>([])
   const [filter, setFilter] = useState<Filter>('all')
   const [search, setSearch] = useState('')
+  const [showArchived, setShowArchived] = useState(false)
+  const [archivingId, setArchivingId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<EditForm>({ title: '', lessonNumber: '', instructions: '', teachingNotes: '', worksheetUrl: '', videoUrl: '', assignmentType: 'none', lessonCategory: 'lesson' })
@@ -343,6 +346,7 @@ export default function LessonLibraryPage() {
         videoUrl: null,
         assignmentType: 'none',
         lessonCategory: 'lesson',
+        isArchived: false,
         courseLessonTemplatesId: course.id,
         updatedAt: created.updatedAt,
       }
@@ -382,6 +386,29 @@ export default function LessonLibraryPage() {
     } catch (err) {
       console.error('Delete lesson failed:', err)
       alert('Failed to delete lesson. Check console for details.')
+    }
+  }
+
+  /**
+   * Retires a lesson from the pickers without destroying it. Archived templates keep
+   * their questions and stay resolvable by past submissions, gradebook and transcripts —
+   * they just stop appearing in the library, the scheduler and the importer's match list.
+   */
+  async function toggleArchive(lesson: LessonTemplate) {
+    const nextArchived = !lesson.isArchived
+    setArchivingId(lesson.id)
+    try {
+      await client.graphql({
+        query: updateLessonTemplateInline,
+        variables: { input: { id: lesson.id, isArchived: nextArchived } }
+      })
+      setLessons(prev => prev.map(l => l.id === lesson.id ? { ...l, isArchived: nextArchived } : l))
+      if (editingId === lesson.id) cancelEdit()
+    } catch (err) {
+      console.error('Archive toggle failed:', err)
+      alert(`Failed to ${nextArchived ? 'archive' : 'restore'} lesson. Check console for details.`)
+    } finally {
+      setArchivingId(null)
     }
   }
 
@@ -1082,6 +1109,8 @@ export default function LessonLibraryPage() {
 
   const filtered = lessons.filter(l => {
     const today = new Date().toDateString()
+    // Archived lessons stay out of the list unless the teacher opts in
+    if (!!l.isArchived !== showArchived) return false
     const matchesFilter =
       filter === 'all' ||
       (filter === 'missing-video' && !l.videoUrl) ||
@@ -1094,7 +1123,8 @@ export default function LessonLibraryPage() {
     return matchesFilter && matchesSearch
   })
 
-  const missingCount = lessons.filter(l => !l.videoUrl).length
+  const missingCount = lessons.filter(l => !l.isArchived && !l.videoUrl).length
+  const archivedCount = lessons.filter(l => !!l.isArchived).length
 
   const inputStyle: React.CSSProperties = {
     width: '100%', padding: '9px 12px', border: '1px solid var(--gray-light)',
@@ -1200,11 +1230,14 @@ export default function LessonLibraryPage() {
         <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', flexWrap: 'wrap', alignItems: 'center' }}>
           {(['all', 'missing-video', 'has-video', 'recently-updated'] as Filter[]).map(f => {
             const today = new Date().toDateString()
-            const recentCount = lessons.filter(l => !!l.updatedAt && new Date(l.updatedAt).toDateString() === today).length
+            // Counts describe whichever set is on screen — active lessons, or the archive
+            const inView = lessons.filter(l => !!l.isArchived === showArchived)
+            const inViewMissing = inView.filter(l => !l.videoUrl).length
+            const recentCount = inView.filter(l => !!l.updatedAt && new Date(l.updatedAt).toDateString() === today).length
             const label =
-              f === 'all' ? `All (${lessons.length})` :
-              f === 'missing-video' ? `⚠ Missing Video (${missingCount})` :
-              f === 'has-video' ? `Has Video (${lessons.length - missingCount})` :
+              f === 'all' ? `All (${inView.length})` :
+              f === 'missing-video' ? `⚠ Missing Video (${inViewMissing})` :
+              f === 'has-video' ? `Has Video (${inView.length - inViewMissing})` :
               `✎ Updated Today (${recentCount})`
             return (
               <button key={f} onClick={() => setFilter(f)} style={{
@@ -1218,6 +1251,17 @@ export default function LessonLibraryPage() {
               </button>
             )
           })}
+          {archivedCount > 0 && (
+            <button onClick={() => setShowArchived(v => !v)} style={{
+              padding: '8px 18px', borderRadius: '20px', border: '1px dashed', cursor: 'pointer',
+              fontSize: '13px', fontWeight: 500,
+              borderColor: showArchived ? 'var(--plum)' : 'var(--gray-light)',
+              background: showArchived ? 'var(--plum)' : 'var(--white)',
+              color: showArchived ? 'white' : 'var(--gray-mid)'
+            }}>
+              {showArchived ? `← Back to active lessons` : `🗄 Archived (${archivedCount})`}
+            </button>
+          )}
           <input
             type="text"
             placeholder="Search by title or lesson #..."
@@ -1275,6 +1319,7 @@ export default function LessonLibraryPage() {
                         ? <button onClick={cancelEdit} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px', color: 'var(--gray-mid)' }}>Cancel</button>
                         : <>
                             <button onClick={() => startEdit(lesson)} style={{ background: 'none', border: '1px solid var(--gray-light)', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', color: 'var(--gray-dark)', padding: '4px 12px' }}>Edit</button>
+                            <button onClick={() => toggleArchive(lesson)} disabled={archivingId === lesson.id} style={{ background: 'none', border: '1px solid var(--gray-light)', borderRadius: '6px', cursor: archivingId === lesson.id ? 'wait' : 'pointer', fontSize: '13px', color: 'var(--gray-dark)', padding: '4px 12px' }}>{archivingId === lesson.id ? '…' : lesson.isArchived ? 'Restore' : 'Archive'}</button>
                             <button onClick={() => handleDeleteLesson(lesson)} style={{ background: 'none', border: '1px solid #e05252', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', color: '#e05252', padding: '4px 12px' }}>Delete</button>
                           </>}
                     </div>

@@ -28,7 +28,11 @@ const ACCESS_KEY = envVars.AWS_ACCESS_KEY_ID
 const SECRET_KEY = envVars.AWS_SECRET_ACCESS_KEY
 const BUCKET = 'mathwithmelinda-videos'
 const APPSYNC_ENDPOINT = 'https://irzsqprjcjco5kq7w7g72zm7qy.appsync-api.us-east-1.amazonaws.com/graphql'
-const API_KEY = 'da2-qgdyi5epjjarbjhwhqq7mrdbsy'
+const API_KEY = envVars.APPSYNC_API_KEY
+if (!API_KEY) {
+  console.error('APPSYNC_API_KEY missing from .env.local — add it before running this script.')
+  process.exit(1)
+}
 
 const FOLDER_TO_COURSE = {
   'algebra1': 'Algebra 1',

@@ -21,16 +21,18 @@ const LIST_COURSES = /* GraphQL */`
   }
 `
 
+// Archived templates are excluded so the auto-match below can't silently target a
+// retired lesson that happens to share a lesson number with the one being imported.
 const LIST_LESSON_TEMPLATES = /* GraphQL */`
   query ListTemplates($filter: ModelLessonTemplateFilterInput) {
     listLessonTemplates(filter: $filter, limit: 500) {
-      items { id title lessonNumber }
+      items { id title lessonNumber isArchived }
     }
   }
 `
 
 type Course = { id: string; title: string; isArchived: boolean | null }
-type ExistingLesson = { id: string; title: string; lessonNumber: number }
+type ExistingLesson = { id: string; title: string; lessonNumber: number; isArchived: boolean | null }
 
 const SAMPLE = `# Lesson 1 — Classification of Numbers
 
@@ -120,7 +122,7 @@ export default function ImportLessonPage() {
         query: LIST_LESSON_TEMPLATES,
         variables: { filter: { courseLessonTemplatesId: { eq: courseId } } },
       }) as any)
-      const items = res.data.listLessonTemplates.items as ExistingLesson[]
+      const items = (res.data.listLessonTemplates.items as ExistingLesson[]).filter(l => !l.isArchived)
       items.sort((a, b) => (a.lessonNumber || 0) - (b.lessonNumber || 0))
       setExistingLessons(items)
     } catch (err) {
