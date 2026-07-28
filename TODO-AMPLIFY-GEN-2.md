@@ -97,6 +97,64 @@ The sandbox creates a NEW AppSync API and NEW DynamoDB tables. It touches
 nothing the running Gen 1 app uses, so it is safe to stand up alongside
 production.
 
+## Phase 3 — auth-model findings (do these before cutover)
+
+Three problems found by checking the live Cognito pool against the ported
+rules. All three would have broken cutover; none were visible from the code.
+
+### 1. The `student` and `parent` groups are EMPTY — fixed in resource.ts
+
+Verified 2026-07-28 against `us-east-1_LvIY8oPmV`:
+
+    teacher: 1 member (melinda.all@icloud.com)
+    student: 0 members
+    parent:  0 members
+    Hannah and Meredith: no groups at all
+
+A `student` group role exists in the Gen 1 stack but nothing ever put a user in
+it — the app only assigns `parent`, and `teacher` was set by hand. Students are
+identified by the ABSENCE of a group (app/lib/roles.ts).
+
+The first draft of the schema used `allow.group('student')`, which matches
+nobody. Every real student would have been denied lessons, submissions and their
+own profile. Now expressed as `authenticated()`.
+
+To tighten later: assign the `student` group at profile approval and backfill.
+roles.ts already handles members of that group, so it is a compatible change.
+
+### 2. Parent signup would deadlock — fixed in resource.ts
+
+`app/parent/accept/[token]` creates ParentStudent and ParentProfile BEFORE it
+calls `/api/add-to-group`. With `allow.group('parent')` on create, the caller is
+not yet in the group, so the row can never be created and the group is never
+granted. Both models now allow `authenticated()` create.
+
+### 3. Every server route authenticates to AppSync with the API key — NOT FIXED
+
+Eight routes plus app/lib/ownership.ts call AppSync via `appsyncHeaders()`,
+which sends `x-api-key`. They perform teacher-level work: deleteStudentProfile,
+deleteSubmission, deleteParentProfile, createLessonTemplate, listEnrollments and
+more.
+
+Gen 2 grants those operations to `allow.group('teacher')`, not `publicApiKey`.
+**As written, all eight routes fail at cutover.**
+
+The fix is the one worth having anyway: forward the caller's verified Cognito
+JWT to AppSync instead of the API key. Every one of these routes already runs
+`requireTeacher()` or `requireAuth()`, so the token is in hand. Passing it
+through means AppSync enforces the same rules the route does — defence in depth
+— and takes the API key out of the server path entirely.
+
+Deliberately not implemented yet: the Gen 1 API is API_KEY-only, so the token
+path cannot be exercised until Gen 2 is deployed. Writing it blind would be
+worse than writing it against a real endpoint. Shape:
+
+    app/lib/appsync.ts  →  appsyncHeaders(token?: string)
+                           token ? { Authorization: token } : { 'x-api-key': … }
+
+Then thread `auth.token` through each route. Roughly a day, and it should be the
+first thing done once the sandbox exists.
+
 ## Data-shape landmines (verified against production)
 
 - **Foreign keys.** Gen 1 generated implicit join fields; Gen 2 requires them

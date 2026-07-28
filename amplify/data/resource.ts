@@ -24,8 +24,33 @@ import { type ClientSchema, a, defineData } from '@aws-amplify/backend'
  */
 
 // ─── Authorization shorthands ────────────────────────────────────────────────
+//
+// IMPORTANT — why students are `authenticated()` and not `group('student')`:
+//
+// Verified against the live pool (us-east-1_LvIY8oPmV) on 2026-07-28:
+//
+//     group "teacher": 1 member  (melinda.all@icloud.com)
+//     group "student": 0 members
+//     group "parent" : 0 members
+//     Hannah and Meredith: NO GROUPS AT ALL
+//
+// A `student` group role exists in the Gen 1 stack, but nothing has ever put a
+// user in it — the app only ever assigns `parent` (see app/api/add-to-group),
+// and `teacher` was set by hand. Students are identified by the ABSENCE of a
+// group, which is exactly what app/lib/roles.ts encodes.
+//
+// So `allow.group('student')` would match nobody and deny every real student
+// access to lessons, submissions and their own profile. Student-tier access
+// must therefore be expressed as `authenticated()`.
+//
+// The cost is precision: `authenticated()` also matches teachers and parents,
+// so these rules cannot distinguish student from parent. That is acceptable
+// only because there is no row-level scoping yet either (see the gaps note at
+// the bottom). To tighten this, start assigning the `student` group on profile
+// approval and backfill the existing users — roles.ts already handles members
+// of that group correctly, so it is a compatible change.
 
-/** Teacher-only: administrative records students never touch. */
+/** Teacher-only: administrative records no student or parent should touch. */
 const teacherOnly = (allow: any) => [allow.group('teacher')]
 
 /**
@@ -38,21 +63,25 @@ const teacherWritesEveryoneReads = (allow: any) => [
 ]
 
 /**
- * Records tied to an individual student.
+ * Records tied to an individual student, readable by any signed-in user.
  *
- * NOTE: these are group-scoped, not row-scoped. Any signed-in student can
- * currently read any other student's row. That is still a vast improvement on
- * unauthenticated public access, but it is not the end state.
+ * NOT row-scoped: one student can read another's row. That is still far better
+ * than the unauthenticated public access Gen 1 had, but it is not the end state.
  *
- * Row-level scoping (allow.ownerDefinedIn('studentId')) is blocked on a data
- * problem: `studentId` holds an EMAIL on Submission but a Cognito sub on
- * Enrollment. Owner rules compare against the Cognito identity, so they would
- * match one model and silently deny the other. Normalize studentId across
- * models first, then tighten these. Tracked in TODO-APPSYNC-AUTH.md.
+ * Row scoping (`allow.ownerDefinedIn('studentId')`) needs studentId to hold the
+ * Cognito sub consistently. scripts/migrate-gen1-to-gen2.mjs does that
+ * normalization during the copy, so these can be tightened once the migration
+ * has run — that is the point of doing it there.
  */
 const studentScoped = (allow: any) => [
   allow.group('teacher'),
-  allow.groups(['student', 'parent']).to(['read']),
+  allow.authenticated().to(['read']),
+]
+
+/** Records a student creates and maintains for themselves. */
+const studentWritable = (allow: any) => [
+  allow.group('teacher'),
+  allow.authenticated().to(['create', 'read', 'update']),
 ]
 
 // ─── Schema ──────────────────────────────────────────────────────────────────
@@ -238,12 +267,9 @@ const schema = a.schema({
       assignment: a.belongsTo('Assignment', 'assignmentSubmissionsId'),
       messages: a.hasMany('SubmissionMessage', 'submissionMessagesId'),
     })
-    .authorization(allow => [
-      allow.group('teacher'),
-      // Students must be able to turn work in, and read it back.
-      allow.group('student').to(['create', 'read', 'update']),
-      allow.group('parent').to(['read']),
-    ]),
+    // Students must be able to turn work in and read it back; parents to see it.
+    // authenticated() rather than group('student') — see the note at the top.
+    .authorization(studentWritable),
 
   SubmissionMessage: a
     .model({
@@ -254,10 +280,7 @@ const schema = a.schema({
       submissionMessagesId: a.id(),
       submission: a.belongsTo('Submission', 'submissionMessagesId'),
     })
-    .authorization(allow => [
-      allow.group('teacher'),
-      allow.group('student').to(['create', 'read', 'update']),
-    ]),
+    .authorization(studentWritable),
 
   VideoWatch: a
     .model({
@@ -270,11 +293,7 @@ const schema = a.schema({
       completed: a.boolean(),
       lastWatchedAt: a.string(),
     })
-    .authorization(allow => [
-      allow.group('teacher'),
-      allow.group('student').to(['create', 'read', 'update']),
-      allow.group('parent').to(['read']),
-    ]),
+    .authorization(studentWritable),
 
   Enrollment: a
     .model({
@@ -311,12 +330,9 @@ const schema = a.schema({
       archivedAt: a.string(),
       parentLinks: a.hasMany('ParentStudentLink', 'studentProfileParentLinksId'),
     })
-    .authorization(allow => [
-      allow.group('teacher'),
-      // Self-setup at /profile/setup requires a student to create their own row.
-      allow.group('student').to(['create', 'read', 'update']),
-      allow.group('parent').to(['read']),
-    ]),
+    // Self-setup at /profile/setup requires a student to create their own row
+    // BEFORE any group is assigned, so this must be authenticated(), not a group.
+    .authorization(studentWritable),
 
   TeacherProfile: a
     .model({
@@ -341,9 +357,13 @@ const schema = a.schema({
       lastName: a.string().required(),
       studentLinks: a.hasMany('ParentStudentLink', 'parentProfileStudentLinksId'),
     })
+    // create must be authenticated(), NOT group('parent'): the accept flow in
+    // app/parent/accept/[token] creates this row BEFORE calling
+    // /api/add-to-group, so the caller is not yet in the parent group. Requiring
+    // the group here would deadlock every parent signup.
     .authorization(allow => [
       allow.group('teacher'),
-      allow.group('parent').to(['create', 'read', 'update']),
+      allow.authenticated().to(['create', 'read', 'update']),
     ]),
 
   ParentStudentLink: a
@@ -402,9 +422,12 @@ const schema = a.schema({
       studentEmail: a.string().required(),
       studentName: a.string().required(),
     })
+    // Same ordering problem as ParentProfile — the accept flow creates this
+    // link first, and /api/add-to-group then reads it back to decide whether
+    // the caller has earned the parent group. Both must work pre-group.
     .authorization(allow => [
       allow.group('teacher'),
-      allow.group('parent').to(['read']),
+      allow.authenticated().to(['create', 'read']),
     ]),
 
   // ── Communication ─────────────────────────────────────────────────────────
@@ -422,10 +445,7 @@ const schema = a.schema({
       isDeletedByStudent: a.boolean(),
       isTeacherInitiated: a.boolean(),
     })
-    .authorization(allow => [
-      allow.group('teacher'),
-      allow.group('student').to(['create', 'read', 'update']),
-    ]),
+    .authorization(studentWritable),
 
   Announcement: a
     .model({
@@ -456,10 +476,7 @@ const schema = a.schema({
     })
     // startUrl is a host credential — anyone holding it can start the meeting as
     // Melinda. Should become a field-level teacher-only rule; see bottom note.
-    .authorization(allow => [
-      allow.group('teacher'),
-      allow.groups(['student', 'parent']).to(['read']),
-    ]),
+    .authorization(studentScoped),
 
   // ── Reporting ─────────────────────────────────────────────────────────────
 
