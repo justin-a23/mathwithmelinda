@@ -8,6 +8,7 @@ import { generateClient } from 'aws-amplify/api'
 import { getCurrentUser } from 'aws-amplify/auth'
 import { useTheme } from '../ThemeProvider'
 import { apiFetch } from '@/app/lib/apiFetch'
+import { useRoleGuard } from '../hooks/useRoleGuard'
 
 const client = generateClient()
 
@@ -71,6 +72,7 @@ type Submission = {
 }
 
 export default function ParentDashboard() {
+  useRoleGuard('parent')
   const { authStatus, signOut } = useAuthenticator()
   const router = useRouter()
   const { theme, toggleTheme } = useTheme()

@@ -198,12 +198,13 @@ export default function AcceptInvitePage() {
         }
       } catch { /* non-fatal — profile creation failure doesn't block the accept */ }
 
-      // Add user to the 'parent' Cognito group so login routing works
+      // Add user to the 'parent' Cognito group so login routing and the page
+      // guards recognise them.
       try {
         const session = await fetchAuthSession()
         const token = session.tokens?.accessToken?.toString()
         if (token) {
-          await fetch('/api/add-to-group', {
+          const res = await fetch('/api/add-to-group', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -211,8 +212,22 @@ export default function AcceptInvitePage() {
             },
             body: JSON.stringify({ group: 'parent' }),
           })
+          if (res.ok) {
+            // Group membership is baked into the access token at issue time, so
+            // the token in hand still says "no groups". Without this refresh the
+            // parent gets treated as a student until they sign out and back in —
+            // login would route them to /dashboard and the guard on /parent
+            // would bounce them straight back off it.
+            await fetchAuthSession({ forceRefresh: true })
+          } else {
+            console.error('add-to-group failed:', res.status, await res.text().catch(() => ''))
+          }
         }
-      } catch { /* non-fatal — user can still access parent portal via direct URL */ }
+      } catch (err) {
+        // Non-fatal: the link exists, so Melinda can fix group membership by
+        // hand. Logged rather than swallowed so it's diagnosable.
+        console.error('Could not add parent to group:', err)
+      }
 
       await client.graphql({
         query: updateParentInvite,

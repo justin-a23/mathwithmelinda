@@ -5,6 +5,7 @@ import MwmLogo from '../components/MwmLogo'
 import { generateClient } from 'aws-amplify/api'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useState, Suspense } from 'react'
+import { roleFromGroups, homeFor } from '@/app/lib/roles'
 
 const client = generateClient()
 
@@ -21,8 +22,8 @@ async function getRedirectAfterLogin(redirect: string | null): Promise<string> {
   try {
     const session = await fetchAuthSession()
     const groups = (session.tokens?.accessToken?.payload['cognito:groups'] as string[]) ?? []
-    if (groups.includes('teacher')) return '/teacher'
-    if (groups.includes('parent')) return '/parent'
+    const role = roleFromGroups(groups)
+    if (role !== 'student') return homeFor(role)
     // Student — check if profile exists
     try {
       const userId = session.tokens?.accessToken?.payload?.sub as string

@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react'
 import { generateClient } from 'aws-amplify/api'
 import { useTheme } from '../../ThemeProvider'
 import { apiFetch } from '@/app/lib/apiFetch'
+import { useRoleGuard } from '../../hooks/useRoleGuard'
 
 const client = generateClient()
 
@@ -69,6 +70,7 @@ function formatDateRange(start: string, end: string): string {
 }
 
 export default function ParentSyllabusPage() {
+  useRoleGuard('parent')
   const { user, signOut } = useAuthenticator()
   const router = useRouter()
   const { theme, toggleTheme } = useTheme()

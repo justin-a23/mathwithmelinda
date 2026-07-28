@@ -4,12 +4,15 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { fetchAuthSession } from 'aws-amplify/auth'
 
-type Role = 'teacher' | 'student' | 'parent'
+import { type Role, roleFromGroups, homeFor } from '@/app/lib/roles'
 
 /**
  * Redirects users who don't belong to the required role.
- * Teachers (in 'teacher' Cognito group) → required role 'teacher'
- * Students (no group) → required role 'student'
+ *
+ * Note this is a client-side convenience, not a security boundary — it stops
+ * people wandering into the wrong section, but the real enforcement is the
+ * per-route auth in app/lib/auth.ts and the ownership checks in
+ * app/lib/ownership.ts.
  *
  * Returns { checking: true } while auth is being verified.
  * Once resolved, either redirects away or returns { checking: false }.
@@ -39,14 +42,13 @@ export function useRoleGuard(requiredRole: Role): { checking: boolean } {
           return
         }
         const groups = (session.tokens.accessToken.payload['cognito:groups'] as string[]) ?? []
-        const isTeacher = groups.includes('teacher')
+        const actualRole = roleFromGroups(groups)
 
-        if (requiredRole === 'teacher' && !isTeacher) {
-          router.replace('/dashboard')
-          return
-        }
-        if (requiredRole === 'student' && isTeacher) {
-          router.replace('/teacher')
+        // Previously this only asked "teacher or not", which made parents and
+        // students interchangeable — a parent could open the student pages and
+        // vice versa. Compare the resolved role instead.
+        if (actualRole !== requiredRole) {
+          router.replace(homeFor(actualRole))
           return
         }
         if (!cancelled) setChecking(false)
