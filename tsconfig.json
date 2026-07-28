@@ -32,5 +32,6 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules", "scripts"]
+  "// exclude note": "amplify/ holds the Gen 2 schema (amplify/data/resource.ts), which needs @aws-amplify/backend. Installing that package pulls a @smithy/types that conflicts with the S3 presigner and breaks six API routes, so it is NOT a dependency yet. Excluded until the Gen 2 cutover — see TODO-AMPLIFY-GEN-2.md.",
+  "exclude": ["node_modules", "scripts", "amplify"]
 }
