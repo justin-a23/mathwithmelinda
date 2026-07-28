@@ -179,6 +179,83 @@ worse than writing it against a real endpoint. Shape:
 Then thread `auth.token` through each route. Roughly a day, and it should be the
 first thing done once the sandbox exists.
 
+## CUTOVER RUNBOOK (every step below is verified, not planned)
+
+State as of 2026-07-28: sandbox deployed, 997 records migrated and verified,
+all 8 server routes converted, auth rules probed with a real student token.
+
+### 1. Deploy a Gen 2 backend for production
+
+The current stack is a SANDBOX (`--identifier gen2test`). Production needs a
+branch deployment, not a promoted sandbox:
+
+    npx ampx pipeline-deploy --branch main --app-id dg6hiwssnna5c
+
+### 2. Regenerate the client code
+
+    npx ampx generate graphql-client-code --stack <prod-stack> \
+      --format graphql-codegen --statement-target typescript --out src
+
+Verified against the sandbox: **zero exports disappear**. Gen 2 adds 16 that
+Gen 1 never generated (Quarter and ReportCardRecord — which is why the app
+hand-wrote inline queries for them). The 10 operations the app imports all
+survive.
+
+### 3. Swap config and auth mode — ATOMICALLY with step 2
+
+    amplifyconfiguration.json  ->  amplify_outputs.json   (client init)
+    APPSYNC_ENDPOINT           ->  the Gen 2 URL          (server routes)
+    APPSYNC_AUTH_MODE          ->  userPool               (server routes)
+
+These cannot be split. Gen 1 accepts ONLY the API key; Gen 2 effectively only
+the JWT. `app/lib/appsync.ts` reads the endpoint and the mode together for
+exactly this reason, and throws rather than silently falling back.
+
+**The generated client is NOT backward compatible**, so step 2 cannot land
+early. Tested directly: 4 of 5 sampled Gen 2 queries run fine against Gen 1,
+but `listLessonTemplates` fails because it selects `LessonTemplate.isArchived`,
+which Gen 1 never got (that push was blocked, then made moot by migrating).
+
+### 4. Migrate production data
+
+    node scripts/migrate-gen1-to-gen2.mjs           # dry run first, always
+    node scripts/migrate-gen1-to-gen2.mjs --apply
+
+Needs the temporary grant deployed (`AMPLIFY_DATA_MIGRATION=allow-api-key`),
+then a redeploy WITHOUT it. Confirm the key is denied afterward — probing
+`listCourses`, `listStudentProfiles`, `listSubmissions` and `createCourse`
+should all return Unauthorized.
+
+### 5. Verify
+
+    node scripts/verify-gen2-migration.mjs
+
+Counts, relationship resolution through Gen 2's own resolvers, and studentId
+normalization. Expected deltas: VideoWatch -70, TeacherProfile -5.
+
+### 6. Walk the app
+
+The step most likely to surface surprises and the one that cannot be
+automated: sign in as teacher and as student, exercise grading, library,
+scheduling, submission upload, messaging. Auth-mode fallout lives here.
+
+### 7. Decommission
+
+Only after a full school week on Gen 2. Delete the Gen 1 API last — it is the
+rollback.
+
+## Post-cutover, not blocking
+
+- **Row-level auth.** `allow.ownerDefinedIn('studentId')` is unblocked now that
+  normalization is verified. Today's rules are group-level: any signed-in
+  student can read another's submissions.
+- **Field-level rules** for `AssignmentQuestion.correctAnswer` (answer key) and
+  `ZoomMeeting.startUrl` (host credential).
+- **verify-gen2-migration.mjs should use a Cognito token** rather than needing
+  the API-key grant, so verification never requires loosening the API.
+- **Scope `amplify-dev` back down.** It holds AdministratorAccess from the CDK
+  bootstrap and no longer needs it.
+
 ## Data-shape landmines (verified against production)
 
 - **Foreign keys.** Gen 1 generated implicit join fields; Gen 2 requires them
