@@ -578,9 +578,13 @@ export const data = defineData({
  *    can read any other student's submissions and profile. Both prerequisites
  *    are now met — studentId holds a Cognito sub everywhere, and the client
  *    derives it only via app/lib/identity.ts — so this is ready to apply on
- *    Submission, Message, VideoWatch, ReportCardRecord and Enrollment. See the
- *    studentScoped note above for the exact rule, including why
- *    `.identityClaim('sub')` is required rather than optional.
+ *    Submission, Message, VideoWatch and Enrollment. See the studentScoped note
+ *    above for the exact rule, including why `.identityClaim('sub')` is
+ *    required rather than optional.
+ *
+ *    NOT ReportCardRecord: its studentId holds a StudentProfile row id, not a
+ *    sub, so an owner rule there would match nobody. It is teacher-written and
+ *    student-read, so it needs a different mechanism entirely.
  *    Blocked only on testing with a real student account. Close before
  *    students arrive 2026-08-28.
  *

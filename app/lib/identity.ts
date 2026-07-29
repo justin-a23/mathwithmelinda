@@ -3,10 +3,18 @@
  *
  * ─── Read this before changing anything here ────────────────────────────────
  *
- * Every row keyed to a student — Submission, Message, VideoWatch,
- * ReportCardRecord, Enrollment — stores the Cognito **sub** in `studentId`.
- * Verified against production on 2026-07-28: 63 of 63 rows hold a sub, none
- * hold an email.
+ * Submission, Message, VideoWatch and Enrollment store the Cognito **sub** in
+ * `studentId`. Verified against production on 2026-07-28: 63 of 63 rows hold a
+ * sub, none hold an email.
+ *
+ * ReportCardRecord is the EXCEPTION. Its `studentId` holds the StudentProfile
+ * row id, not a sub — see app/teacher/report-card/page.tsx, which reads the
+ * same value back as `listStudentProfiles(filter: { id: { eq: studentId } })`,
+ * and app/api/delete-student/route.ts, which deletes by profile id. It is
+ * written only by the teacher, never by a student, so nothing here applies to
+ * it. Do not "fix" it to match the others without also migrating the rows, and
+ * do not give it an owner rule keyed on studentId — no student's sub will ever
+ * match.
  *
  * That was not always true. Gen 1 stored an email on Submission and a sub on
  * Enrollment, and scripts/migrate-gen1-to-gen2.mjs normalized everything to the
