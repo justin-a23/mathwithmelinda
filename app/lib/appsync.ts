@@ -6,9 +6,17 @@
  * at call time rather than silently authenticate as some stale baked-in key.
  */
 
-export const APPSYNC_ENDPOINT =
-  process.env.APPSYNC_ENDPOINT ||
-  'https://irzsqprjcjco5kq7w7g72zm7qy.appsync-api.us-east-1.amazonaws.com/graphql'
+import outputs from '@/amplify_outputs.json'
+
+/**
+ * The endpoint comes from the generated Gen 2 outputs, not from an environment
+ * variable, so the client and the server routes cannot drift onto different
+ * backends. APPSYNC_ENDPOINT still overrides for local experiments.
+ *
+ * The build's backend phase writes amplify_outputs.json before the frontend
+ * compiles, so this resolves to whichever backend the branch just deployed.
+ */
+export const APPSYNC_ENDPOINT = process.env.APPSYNC_ENDPOINT || outputs.data.url
 
 export function getAppSyncApiKey(): string {
   const key = process.env.APPSYNC_API_KEY
