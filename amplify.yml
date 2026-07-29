@@ -8,7 +8,13 @@ backend:
         # which both the client (app/AmplifyProvider.tsx) and the server routes
         # (app/lib/appsync.ts) read — so they cannot drift onto different
         # backends. Must run before the frontend phase.
-        - npm ci --cache .npm --prefer-offline
+        # Same install strategy the frontend phase uses, and for the same
+        # reason: the committed lockfile is generated on macOS and won't resolve
+        # linux-x64 native binaries. `npm ci` additionally requires the lockfile
+        # to be in sync with package.json, which this repo does not maintain —
+        # that combination is what failed build #285.
+        - rm -rf node_modules package-lock.json
+        - npm install --cache .npm
         - npx ampx pipeline-deploy --branch $AWS_BRANCH --app-id $AWS_APP_ID
 frontend:
   phases:
