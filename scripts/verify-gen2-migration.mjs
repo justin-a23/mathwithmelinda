@@ -38,12 +38,18 @@ const GEN1 = {
 const outPath = join(ROOT, 'amplify_outputs.json')
 if (!existsSync(outPath)) { console.error('amplify_outputs.json not found'); process.exit(1) }
 const o = JSON.parse(readFileSync(outPath, 'utf8'))
-const GEN2 = { endpoint: o.data.url, apiKey: o.data.api_key }
+// Prefer a teacher token: Gen 2 denies the API key by design, so verification
+// should not require temporarily loosening the API it is verifying.
+const GEN2 = process.env.GEN2_TEACHER_TOKEN
+  ? { endpoint: o.data.url, token: process.env.GEN2_TEACHER_TOKEN }
+  : { endpoint: o.data.url, apiKey: o.data.api_key }
 
 async function gql(t, query) {
   const res = await fetch(t.endpoint, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-api-key': t.apiKey },
+    headers: t.token
+      ? { 'Content-Type': 'application/json', Authorization: t.token }
+      : { 'Content-Type': 'application/json', 'x-api-key': t.apiKey },
     body: JSON.stringify({ query }),
   })
   return res.json()
