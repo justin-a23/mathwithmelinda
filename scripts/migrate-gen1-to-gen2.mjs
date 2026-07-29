@@ -65,12 +65,19 @@ function loadGen2() {
   const p = join(ROOT, 'amplify_outputs.json')
   if (!existsSync(p)) return null
   const o = JSON.parse(readFileSync(p, 'utf8'))
-  return { endpoint: o.data?.url, apiKey: o.data?.api_key }
+  // A teacher's Cognito token is preferred over the API key: Gen 2 denies the
+  // key by design, and granting it temporarily costs two extra deploys. Pass
+  // one via GEN2_TEACHER_TOKEN and the copy runs with no schema change at all.
+  const token = process.env.GEN2_TEACHER_TOKEN
+  return token
+    ? { endpoint: o.data?.url, token }
+    : { endpoint: o.data?.url, apiKey: o.data?.api_key }
 }
 
 async function gql(target, query, variables = {}) {
   const headers = { 'Content-Type': 'application/json' }
-  if (target.apiKey) headers['x-api-key'] = target.apiKey
+  if (target.token) headers['Authorization'] = target.token
+  else if (target.apiKey) headers['x-api-key'] = target.apiKey
   const res = await fetch(target.endpoint, {
     method: 'POST', headers, body: JSON.stringify({ query, variables }),
   })
