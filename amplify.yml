@@ -16,6 +16,23 @@ frontend:
         - npm install --cache .npm
     build:
       commands:
+        # Amplify Console environment variables are available to the BUILD, but
+        # NOT to the Next.js SSR compute that serves /api routes. Without this,
+        # every server route reading process.env at request time sees undefined.
+        #
+        # This was not theoretical: on 2026-07-28 archive-student deleted two
+        # students' Cognito accounts and then threw "APPSYNC_API_KEY is not set"
+        # before recording the archive, leaving them unable to log in while
+        # still listed as active. SES, Zoom and Anthropic-backed routes have the
+        # same dependency and would fail the same way.
+        #
+        # Writing them into .env.production makes them available at runtime.
+        # None are NEXT_PUBLIC_-prefixed, so they stay server-side and are not
+        # exposed to the browser bundle.
+        - >-
+          env | grep -E
+          '^(APPSYNC_API_KEY|APPSYNC_ENDPOINT|APPSYNC_AUTH_MODE|COGNITO_USER_POOL_ID|COGNITO_CLIENT_ID|ANTHROPIC_API_KEY|SES_SMTP_USERNAME|SES_SMTP_PASSWORD|SES_FROM_EMAIL|ZOOM_ACCOUNT_ID|ZOOM_CLIENT_ID|ZOOM_CLIENT_SECRET|MWM_ACCESS_KEY_ID|MWM_SECRET_ACCESS_KEY|NEXT_PUBLIC_BASE_URL)='
+          >> .env.production || echo 'no matching env vars found'
         - npm run build
   artifacts:
     baseDirectory: .next
