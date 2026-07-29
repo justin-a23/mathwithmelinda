@@ -30,7 +30,19 @@ eq('no group is a student', roleFromGroups([]), 'student')
 eq('undefined is a student', roleFromGroups(undefined), 'student')
 eq('null is a student', roleFromGroups(null), 'student')
 eq('explicit student group still a student', roleFromGroups(['student']), 'student')
-eq('unrecognised group is a student', roleFromGroups(['admin']), 'student')
+// Was ['admin'] until admin became a real group. The assertion still matters —
+// an unknown group must grant nothing — so it needs a name that stays unknown.
+eq('unrecognised group is a student', roleFromGroups(['superuser']), 'student')
+
+// 'admin' is the IT/support group and is deliberately teacher-equivalent, so
+// that every requireTeacher() route and useRoleGuard('teacher') page keeps
+// working untouched. If these fail, an admin is locked out of the teacher app.
+console.log('\nroleFromGroups — admin is teacher-equivalent')
+eq('admin group', roleFromGroups(['admin']), 'teacher')
+eq('admin alongside teacher', roleFromGroups(['admin', 'teacher']), 'teacher')
+eq('admin beats parent', roleFromGroups(['parent', 'admin']), 'teacher')
+eq('admin beats an absent group', roleFromGroups(['admin', 'student']), 'teacher')
+eq('admin lands on the teacher home', homeFor(roleFromGroups(['admin'])), '/teacher')
 
 console.log('\nroleFromGroups — precedence when multiple groups')
 eq('teacher beats parent', roleFromGroups(['parent', 'teacher']), 'teacher')

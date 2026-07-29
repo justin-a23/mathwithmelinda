@@ -29,8 +29,12 @@ export async function verifyAuth(request: NextRequest): Promise<AuthUser | null>
   try {
     const payload = await verifier.verify(token)
     const groups: string[] = (payload['cognito:groups'] as string[]) || []
+    // 'admin' (IT/support) is teacher-equivalent by design — see app/lib/roles.ts
+    // for why it maps onto the existing role rather than becoming a fourth one.
+    // `groups` is returned unchanged, so a route that genuinely needs to tell
+    // them apart can still check it.
     let role: AuthUser['role'] = 'unknown'
-    if (groups.includes('teacher')) role = 'teacher'
+    if (groups.includes('teacher') || groups.includes('admin')) role = 'teacher'
     else if (groups.includes('parent')) role = 'parent'
     else if (groups.includes('student')) role = 'student'
     return { userId: payload.sub, groups, role, token }

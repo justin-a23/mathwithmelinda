@@ -13,7 +13,7 @@ Building a custom LMS (Learning Management System) for Melinda, a homeschool mat
 ## Tech Stack
 - **Frontend:** Next.js 16 (app router, TypeScript)
 - **Hosting:** AWS Amplify (app ID: dg6hiwssnna5c, branch: main)
-- **Auth:** AWS Cognito (via Amplify Gen 1 CLI) — 3 groups: teacher, student, parent
+- **Auth:** AWS Cognito — 4 groups: teacher, admin (IT/support, teacher-equivalent), student, parent
 - **Database:** AWS DynamoDB via AppSync GraphQL (Amplify Gen 1)
 - **Video hosting:** AWS S3 bucket: mathwithmelinda-videos + CloudFront (dgmfzo1xk5r4e.cloudfront.net)
 - **Submissions:** AWS S3 bucket: mathwithmelinda-submissions

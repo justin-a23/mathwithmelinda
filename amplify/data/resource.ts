@@ -20,7 +20,8 @@ import { type ClientSchema, a, defineData } from '@aws-amplify/backend'
  *    carried over from that. Every model below declares explicit rules.
  *    See TODO-APPSYNC-AUTH.md for the full write-up.
  *
- * Cognito groups: teacher, student, parent.
+ * Cognito groups: teacher, admin, student, parent. 'admin' is IT/support and is
+ * teacher-equivalent — see STAFF below and app/lib/roles.ts.
  */
 
 // ─── Authorization shorthands ────────────────────────────────────────────────
@@ -69,15 +70,27 @@ import { type ClientSchema, a, defineData } from '@aws-amplify/backend'
 const MIGRATION_MODE = process.env.AMPLIFY_DATA_MIGRATION === 'allow-api-key'
 const migrationAccess = (allow: any) => (MIGRATION_MODE ? [allow.publicApiKey()] : [])
 
-/** Teacher-only: administrative records no student or parent should touch. */
-const teacherOnly = (allow: any) => [allow.group('teacher')]
+/**
+ * The groups that hold teacher-level access.
+ *
+ * 'admin' is the IT/support group — teacher-equivalent on purpose, so Justin can
+ * see and fix exactly what Melinda sees. It is a separate group rather than a
+ * second member of 'teacher' so it can be revoked on its own and so the token
+ * still says which one you are. app/lib/roles.ts maps both onto the same Role.
+ *
+ * Named STAFF rather than TEACHERS because it is no longer only her.
+ */
+const STAFF = ['teacher', 'admin']
+
+/** Staff-only: administrative records no student or parent should touch. */
+const teacherOnly = (allow: any) => [allow.groups(STAFF)]
 
 /**
  * Course material: teacher authors it, any signed-in user may read it.
  * Reading a lesson is not sensitive; writing one is.
  */
 const teacherWritesEveryoneReads = (allow: any) => [
-  allow.group('teacher'),
+  allow.groups(STAFF),
   allow.authenticated().to(['read']),
   ...migrationAccess(allow),
 ]
@@ -107,14 +120,14 @@ const teacherWritesEveryoneReads = (allow: any) => [
  * client paths; there is currently no student in the pool to test with.
  */
 const studentScoped = (allow: any) => [
-  allow.group('teacher'),
+  allow.groups(STAFF),
   allow.authenticated().to(['read']),
   ...migrationAccess(allow),
 ]
 
 /** Records a student creates and maintains for themselves. */
 const studentWritable = (allow: any) => [
-  allow.group('teacher'),
+  allow.groups(STAFF),
   allow.authenticated().to(['create', 'read', 'update']),
   ...migrationAccess(allow),
 ]
@@ -227,7 +240,7 @@ const schema = a.schema({
       // listAssignmentQuestions returned "x = 2" for a live rational-equation
       // question. Field-level rules override the model's, so this narrows to
       // teacher-only while the rest of the model stays readable.
-      correctAnswer: a.string().authorization(allow => [allow.group('teacher')]),
+      correctAnswer: a.string().authorization(allow => [allow.groups(STAFF)]),
       diagramKey: a.string(),
       diagramSpec: a.string(),
       lessonTemplateQuestionsId: a.id(),
@@ -384,7 +397,7 @@ const schema = a.schema({
       teachingVoice: a.string(),
     })
     .authorization(allow => [
-      allow.group('teacher'),
+      allow.groups(STAFF),
       // Students and parents see her name and photo in the nav.
       allow.authenticated().to(['read']),
       ...migrationAccess(allow),
@@ -403,7 +416,7 @@ const schema = a.schema({
     // /api/add-to-group, so the caller is not yet in the parent group. Requiring
     // the group here would deadlock every parent signup.
     .authorization(allow => [
-      allow.group('teacher'),
+      allow.groups(STAFF),
       allow.authenticated().to(['create', 'read', 'update']),
       ...migrationAccess(allow),
     ]),
@@ -421,7 +434,7 @@ const schema = a.schema({
       studentProfile: a.belongsTo('StudentProfile', 'studentProfileId'),
     })
     .authorization(allow => [
-      allow.group('teacher'),
+      allow.groups(STAFF),
       allow.group('parent').to(['read']),
       ...migrationAccess(allow),
     ]),
@@ -446,7 +459,7 @@ const schema = a.schema({
     // Redeemed before the user has an account, so this cannot require auth.
     // Knowledge of the token is the credential — keep tokens long and random,
     // and prefer redeeming through a server route over exposing list access.
-    .authorization(allow => [allow.group('teacher'), allow.guest().to(['read', 'update']), ...migrationAccess(allow)]),
+    .authorization(allow => [allow.groups(STAFF), allow.guest().to(['read', 'update']), ...migrationAccess(allow)]),
 
   ParentInvite: a
     .model({
@@ -458,7 +471,7 @@ const schema = a.schema({
       parentFirstName: a.string(),
       parentLastName: a.string(),
     })
-    .authorization(allow => [allow.group('teacher'), allow.guest().to(['read', 'update']), ...migrationAccess(allow)]),
+    .authorization(allow => [allow.groups(STAFF), allow.guest().to(['read', 'update']), ...migrationAccess(allow)]),
 
   ParentStudent: a
     .model({
@@ -470,7 +483,7 @@ const schema = a.schema({
     // link first, and /api/add-to-group then reads it back to decide whether
     // the caller has earned the parent group. Both must work pre-group.
     .authorization(allow => [
-      allow.group('teacher'),
+      allow.groups(STAFF),
       allow.authenticated().to(['create', 'read']),
       ...migrationAccess(allow),
     ]),
@@ -512,7 +525,7 @@ const schema = a.schema({
       // Host credential — whoever holds it can START the meeting as Melinda.
       // Students and parents need joinUrl; they must never see this one.
       // Confirmed readable by a student token before this rule existed.
-      startUrl: a.string().authorization(allow => [allow.group('teacher')]),
+      startUrl: a.string().authorization(allow => [allow.groups(STAFF)]),
       startTime: a.string().required(),
       durationMinutes: a.integer().required(),
       inviteeType: a.string().required(),

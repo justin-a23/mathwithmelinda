@@ -53,7 +53,9 @@ The project brief's "What's Left to Build" list is partially outdated. Here's th
 
 ### Cognito
 - User pool ID: `us-east-1_LvIY8oPmV`
-- 3 groups: `teacher`, `student`, `parent`
+- 4 groups: `teacher`, `admin`, `student`, `parent`
+- **`admin` is teacher-equivalent** — the IT/support role. `roleFromGroups()` maps it to the `teacher` Role so every `requireTeacher()` route and `useRoleGuard('teacher')` page works unchanged; the schema grants both via the `STAFF` list in `amplify/data/resource.ts`. Members keep their own `TeacherProfile`, so actions are attributed to them, not Melinda.
+- Groups are NOT managed by Amplify (`referenceAuth`) — create them in Cognito directly
 - **`AdminDeleteUser` requires actual `Username`, NOT the sub UUID** — must call `ListUsersCommand` with `Filter: 'sub = "..."'` first to get the real Username, then delete
 - **`signOut()` from `useAuthenticator` is not truly async** — never do `await signOut(); router.replace(...)`. Just call `signOut()` and let a `useEffect` guard (`if (user === null) router.replace('/login')`) handle the redirect
 
