@@ -10,6 +10,7 @@ import MathInput from '../components/MathInput'
 import StudentNav from '../components/StudentNav'
 import SubmissionMethodPicker from '../components/SubmissionMethodPicker'
 import { apiFetch } from '@/app/lib/apiFetch'
+import { studentKey } from '@/app/lib/identity'
 import { useRoleGuard } from '@/app/hooks/useRoleGuard'
 
 const CLOUDFRONT_URL = 'https://dgmfzo1xk5r4e.cloudfront.net'
@@ -372,7 +373,7 @@ function LessonPageInner() {
 
   // Check for existing / returned submission when lesson loads
   useEffect(() => {
-    const studentId = user?.signInDetails?.loginId || user?.userId || user?.username || ''
+    const studentId = studentKey(user)
     const lessonId = planItem?.lesson?.id
     if (!studentId || !lessonId) return
 
@@ -473,7 +474,7 @@ function LessonPageInner() {
       if (now - lastSaveTimeRef.current < 10_000) return
       const p = planItemRef.current
       const u = userRef.current
-      const studentId = u?.signInDetails?.loginId || u?.userId || u?.username || ''
+      const studentId = studentKey(u)
       const lessonId = p?.lesson?.id
       if (!studentId || !lessonId) return
       lastSaveTimeRef.current = now
@@ -517,7 +518,7 @@ function LessonPageInner() {
 
   // Load any existing watch record on mount (resume support)
   useEffect(() => {
-    const studentId = user?.signInDetails?.loginId || user?.userId || user?.username || ''
+    const studentId = studentKey(user)
     const lessonId = planItem?.lesson?.id
     if (!studentId || !lessonId) return
     ;(client.graphql({
@@ -543,7 +544,7 @@ function LessonPageInner() {
     const now = Date.now()
     if (!force && now - lastSaveTimeRef.current < 10_000) return
     lastSaveTimeRef.current = now
-    const studentId = user?.signInDetails?.loginId || user?.userId || user?.username || ''
+    const studentId = studentKey(user)
     const lessonId = planItem?.lesson?.id
     if (!studentId || !lessonId) return
     const duration = isFinite(video.duration) ? video.duration : 0
@@ -692,6 +693,17 @@ function LessonPageInner() {
   async function doSubmit() {
     setShowSubmitConfirm(false)
     setError('')
+
+    // A submission with no owner is worse than a failed one: it is invisible to
+    // the student's own grades view and, once the owner rules land, unreadable
+    // by anyone but the teacher. The previous fallback here wrote the literal
+    // string 'unknown', which is exactly that row. Refuse instead.
+    const ownerId = studentKey(user)
+    if (!ownerId) {
+      setError('Your session has expired. Please refresh the page and sign in again.')
+      return
+    }
+
     setSubmitting(true)
     try {
       // Compute due datetime so teacher can flag late submissions.
@@ -771,7 +783,7 @@ function LessonPageInner() {
           query: createSubmission,
           variables: {
             input: {
-              studentId: user?.signInDetails?.loginId || user?.userId || 'unknown',
+              studentId: ownerId,
               content: JSON.stringify(contentObject),
               submittedAt: new Date().toISOString(),
             }

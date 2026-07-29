@@ -8,6 +8,7 @@ import { generateClient } from 'aws-amplify/api'
 import StudentNav from '../../components/StudentNav'
 import MathRenderer from '../../components/MathRenderer'
 import { apiFetch } from '@/app/lib/apiFetch'
+import { studentKey } from '@/app/lib/identity'
 
 const listStudentSubmissions = /* GraphQL */`
   query ListStudentSubmissions($studentId: String!) {
@@ -101,7 +102,7 @@ export default function StudentSubmissions() {
   const [fetchedIds, setFetchedIds] = useState<Set<string>>(new Set())
 
   useEffect(() => {
-    const studentId = user?.signInDetails?.loginId || user?.userId
+    const studentId = studentKey(user)
     if (!studentId) return
 
     async function loadSubmissions() {

@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, Suspense } from 'react'
 import { generateClient } from 'aws-amplify/api'
 import StudentNav from '../../components/StudentNav'
 import { apiFetch } from '@/app/lib/apiFetch'
+import { studentKey } from '@/app/lib/identity'
 import { useRoleGuard } from '@/app/hooks/useRoleGuard'
 
 const client = generateClient()
@@ -75,7 +76,7 @@ function StudentMessagesPageInner() {
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  const studentId = user?.signInDetails?.loginId || user?.userId || ''
+  const studentId = studentKey(user)
 
   useEffect(() => {
     if (!studentId) return

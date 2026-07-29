@@ -6,6 +6,7 @@ import { useAuthenticator } from '@aws-amplify/ui-react'
 import { generateClient } from 'aws-amplify/api'
 import ThemeToggle from './ThemeToggle'
 import { MwmMark } from './MwmLogo'
+import { studentKey } from '@/app/lib/identity'
 
 const client = generateClient()
 
@@ -47,9 +48,7 @@ export default function StudentNav({ unreadCount: propUnread }: Props = {}) {
 
   async function fetchUnread() {
     try {
-      const loginId = user?.signInDetails?.loginId || ''
-      const userId = user?.userId || user?.username || ''
-      const studentId = loginId || userId
+      const studentId = studentKey(user)
       if (!studentId) return
       const result = await (client.graphql({
         query: LIST_MY_MESSAGES,

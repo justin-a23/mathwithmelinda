@@ -12,6 +12,22 @@ import { useRoleGuard } from '../hooks/useRoleGuard'
 
 const client = generateClient()
 
+/**
+ * ParentStudent links a parent to a child by EMAIL, but Submission.studentId
+ * holds the child's Cognito sub. This bridges the two.
+ *
+ * Resolving at query time rather than storing the sub on ParentStudent is
+ * deliberate: the link is created from an invite before the child necessarily
+ * has an account, so an email is the only identifier available at that point.
+ */
+const getStudentSubByEmail = /* GraphQL */`
+  query GetStudentSubByEmail($email: String!) {
+    listStudentProfiles(filter: { email: { eq: $email } }, limit: 1) {
+      items { userId }
+    }
+  }
+`
+
 const listParentStudents = /* GraphQL */`
   query ListParentStudents($filter: ModelParentStudentFilterInput) {
     listParentStudents(filter: $filter, limit: 20) {
@@ -120,9 +136,20 @@ export default function ParentDashboard() {
     setSelectedSubmission(null)
     setImageUrls([])
     try {
+      const profileRes = await client.graphql({
+        query: getStudentSubByEmail,
+        variables: { email: studentEmail }
+      }) as any
+      const studentSub = profileRes.data.listStudentProfiles.items[0]?.userId
+      if (!studentSub) {
+        // Linked child has no profile — invited but never signed up, or archived.
+        setSubmissions([])
+        return
+      }
+
       const result = await client.graphql({
         query: listSubmissionsByStudent,
-        variables: { filter: { studentId: { eq: studentEmail } } }
+        variables: { filter: { studentId: { eq: studentSub } } }
       }) as any
       const items = (result.data as { listSubmissions: { items: Submission[] } }).listSubmissions.items
       const sorted = items.sort((a, b) => {

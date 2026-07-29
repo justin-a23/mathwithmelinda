@@ -88,10 +88,23 @@ const teacherWritesEveryoneReads = (allow: any) => [
  * NOT row-scoped: one student can read another's row. That is still far better
  * than the unauthenticated public access Gen 1 had, but it is not the end state.
  *
- * Row scoping (`allow.ownerDefinedIn('studentId')`) needs studentId to hold the
- * Cognito sub consistently. scripts/migrate-gen1-to-gen2.mjs does that
- * normalization during the copy, so these can be tightened once the migration
- * has run — that is the point of doing it there.
+ * Row scoping is now UNBLOCKED but not yet applied. Both halves are done:
+ * the migration normalized studentId to the Cognito sub (verified against
+ * production 2026-07-28 — 63 of 63 rows), and the client derives it from one
+ * place, app/lib/identity.ts.
+ *
+ * When tightening, the rule must be:
+ *
+ *     allow.ownerDefinedIn('studentId').identityClaim('sub')
+ *
+ * NOT the bare `ownerDefinedIn('studentId')`. Its default identity is
+ * `sub::username`, which matches neither the stored value nor the ACCESS token
+ * the server routes forward — access tokens carry `sub` but no
+ * `cognito:username` claim (app/lib/auth.ts pins tokenUse: 'access', while the
+ * browser client sends an ID token). `sub` is the only claim present in both.
+ *
+ * Do not apply this until a real student account has exercised the converted
+ * client paths; there is currently no student in the pool to test with.
  */
 const studentScoped = (allow: any) => [
   allow.group('teacher'),
@@ -274,7 +287,9 @@ const schema = a.schema({
 
   Submission: a
     .model({
-      // Holds an EMAIL, not a Cognito sub. See studentScoped above.
+      // Holds the student's Cognito sub. Gen 1 stored an email here; the
+      // migration normalized it, and app/lib/identity.ts is now the only place
+      // the client derives it. See studentScoped above.
       studentId: a.string().required(),
       content: a.string(),
       answers: a.string(),
@@ -322,7 +337,7 @@ const schema = a.schema({
 
   Enrollment: a
     .model({
-      // Holds a Cognito sub — unlike Submission.studentId, which holds an email.
+      // Holds a Cognito sub, as every studentId does now.
       studentId: a.string().required(),
       planType: a.string(),
       courseEnrollmentsId: a.id(),
@@ -559,11 +574,15 @@ export const data = defineData({
 /**
  * ─── Known gaps, deliberately left for follow-up ────────────────────────────
  *
- * 1. ROW-LEVEL SCOPING. Rules here are group-level: any signed-in student can
- *    read any other student's submissions and profile. Fixing this needs
- *    allow.ownerDefinedIn('studentId'), which needs studentId to consistently
- *    hold the Cognito identity. Today it holds an email on Submission and a sub
- *    on Enrollment. Normalize first.
+ * 1. ROW-LEVEL SCOPING. Rules here are still group-level: any signed-in student
+ *    can read any other student's submissions and profile. Both prerequisites
+ *    are now met — studentId holds a Cognito sub everywhere, and the client
+ *    derives it only via app/lib/identity.ts — so this is ready to apply on
+ *    Submission, Message, VideoWatch, ReportCardRecord and Enrollment. See the
+ *    studentScoped note above for the exact rule, including why
+ *    `.identityClaim('sub')` is required rather than optional.
+ *    Blocked only on testing with a real student account. Close before
+ *    students arrive 2026-08-28.
  *
  * 2. FIELD-LEVEL RULES. Two fields leak to readers who should not see them:
  *      - AssignmentQuestion.correctAnswer (the answer key)

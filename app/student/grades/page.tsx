@@ -3,6 +3,7 @@
 import { useAuthenticator } from '@aws-amplify/ui-react'
 import { useRouter } from 'next/navigation'
 import StudentNav from '../../components/StudentNav'
+import { studentKey } from '@/app/lib/identity'
 import { useRoleGuard } from '@/app/hooks/useRoleGuard'
 import { useEffect, useState } from 'react'
 import { generateClient } from 'aws-amplify/api'
@@ -276,23 +277,16 @@ export default function StudentGradesPage() {
       }
       cols.sort((a, b) => a.order - b.order)
 
-      // 5. Load student's submissions
-      const studentId = profile.email || user?.signInDetails?.loginId || user?.userId || ''
+      // 5. Load student's submissions.
+      // The email-then-userId double query this used to do was working around
+      // the two identity conventions Gen 1 mixed. studentId is a Cognito sub
+      // everywhere now, so one query is both correct and cheaper.
+      const studentId = studentKey(user)
       const subsRes = await (client.graphql({
         query: LIST_MY_SUBMISSIONS,
         variables: { studentId },
       }) as any)
-      const allSubs = subsRes.data.listSubmissions.items
-
-      // Also try userId as fallback if email produced nothing
-      let subs = allSubs.filter((s: any) => !s.isArchived)
-      if (subs.length === 0 && user?.userId && user.userId !== studentId) {
-        const subsRes2 = await (client.graphql({
-          query: LIST_MY_SUBMISSIONS,
-          variables: { studentId: user.userId },
-        }) as any)
-        subs = subsRes2.data.listSubmissions.items.filter((s: any) => !s.isArchived)
-      }
+      const subs = subsRes.data.listSubmissions.items.filter((s: any) => !s.isArchived)
 
       // 6. Match submissions to lessons
       const lessonIdSet = new Set(cols.map(c => c.lessonId))

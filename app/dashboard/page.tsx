@@ -329,7 +329,7 @@ export default function Dashboard() {
         }
 
         // 2. Fetch plans + submissions in parallel, now that we have courseId
-        const studentId = loginId || userId
+        const studentId = userId
         const [plansResult, subsResult] = await Promise.all([
           client.graphql({ query: listWeeklyPlansWithItems, variables: {} }) as any,
           client.graphql({ query: listMySubmissionsQuery, variables: { studentId } }) as any,
@@ -426,7 +426,7 @@ export default function Dashboard() {
         setReturnedSubmissions(returned)
 
         // Load this student's messages
-        const msgStudentId = loginId || userId
+        const msgStudentId = userId
         try {
           const msgRes = await (client.graphql({
             query: LIST_MESSAGES_FOR_STUDENT,
@@ -591,9 +591,7 @@ export default function Dashboard() {
     setAskSending(true)
     try {
       const currentUser = await getCurrentUser()
-      const userId = currentUser.userId
-      const loginId = currentUser.signInDetails?.loginId || ''
-      const studentId = loginId || userId
+      const studentId = currentUser.userId
       await (client.graphql({
         query: CREATE_MESSAGE,
         variables: {
