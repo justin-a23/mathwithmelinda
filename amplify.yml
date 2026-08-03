@@ -8,22 +8,29 @@ backend:
         # which both the client (app/AmplifyProvider.tsx) and the server routes
         # (app/lib/appsync.ts) read — so they cannot drift onto different
         # backends. Must run before the frontend phase.
-        # Same install strategy the frontend phase uses, and for the same
-        # reason: the committed lockfile is generated on macOS and won't resolve
-        # linux-x64 native binaries. `npm ci` additionally requires the lockfile
-        # to be in sync with package.json, which this repo does not maintain —
-        # that combination is what failed build #285.
-        - rm -rf node_modules package-lock.json
+        # Same install strategy the frontend phase uses — see the preBuild
+        # comment there for why the lockfile must be kept.
+        - rm -rf node_modules
         - npm install --cache .npm
         - npx ampx pipeline-deploy --branch $AWS_BRANCH --app-id $AWS_APP_ID
 frontend:
   phases:
     preBuild:
       commands:
-        # npm ci/install with macOS lockfile won't resolve linux native binaries
-        # See https://github.com/npm/cli/issues/4828
-        # Delete lockfile + node_modules so npm resolves fresh for linux-x64
-        - rm -rf node_modules package-lock.json
+        # KEEP the lockfile. Deleting it made every deploy re-resolve the whole
+        # tree against whatever was newest on npm — 1,049 packages drifted
+        # between the last good build (#292, Jul 29) and #293, and one of them
+        # (CSS pipeline: postcss 8.5.8→8.5.25, jiti, enhanced-resolve, …)
+        # crashes Turbopack's postcss loader subprocess on linux, failing
+        # builds #293-#295 on commits that touched no CSS at all.
+        #
+        # The original reason for deleting it — a macOS-generated lockfile
+        # missing linux-x64 native binaries (npm/cli#4828) — is why this is
+        # `npm install` and NOT `npm ci`: install honors every locked version
+        # but also repairs missing platform-specific optional deps at install
+        # time (e.g. @tailwindcss/oxide-linux-x64-gnu), whereas ci refuses.
+        # node_modules is still removed so the cached darwin tree can't leak in.
+        - rm -rf node_modules
         - npm install --cache .npm
     build:
       commands:
