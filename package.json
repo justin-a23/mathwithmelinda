@@ -46,6 +46,9 @@
     "typescript": "^5"
   },
   "optionalDependencies": {
+    "@napi-rs/canvas-linux-x64-gnu": "0.1.97",
+    "@tailwindcss/oxide-linux-x64-gnu": "4.2.2",
+    "@unrs/resolver-binding-linux-x64-gnu": "1.11.1",
     "lightningcss-linux-x64-gnu": "1.32.0"
   }
 }
