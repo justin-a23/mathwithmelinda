@@ -1,15 +1,12 @@
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
+import { PutObjectCommand } from '@aws-sdk/client-s3'
 import { presign } from '@/app/lib/presign'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireTeacher } from '@/app/lib/auth'
-
-const s3 = new S3Client({
-  region: 'us-east-1',
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
-  }
-})
+// The shared client resolves MWM_* credentials first — Amplify blocks AWS_-prefixed
+// env vars, so a client built from AWS_ACCESS_KEY_ID alone has no usable identity
+// in production and every presigned URL it signs is rejected. This route was the
+// last one still doing that; localhost hid it because .env.local defines AWS_*.
+import { s3, VIDEOS_BUCKET } from '@/app/lib/s3'
 
 export async function POST(request: NextRequest) {
   const auth = await requireTeacher(request)
@@ -21,7 +18,7 @@ export async function POST(request: NextRequest) {
     const key = `${course}/${filename}`
     
     const command = new PutObjectCommand({
-      Bucket: 'mathwithmelinda-videos',
+      Bucket: VIDEOS_BUCKET,
       Key: key,
       ContentType: contentType,
     })

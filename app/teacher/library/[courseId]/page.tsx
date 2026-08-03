@@ -408,8 +408,10 @@ export default function LessonLibraryPage() {
       xhr.upload.onprogress = (e) => {
         if (e.lengthComputable) setUpload({ uploading: true, progress: Math.round((e.loaded / e.total) * 100), error: '' })
       }
-      xhr.onload = () => xhr.status === 200 ? resolve() : reject(new Error('Upload failed'))
-      xhr.onerror = () => reject(new Error('Upload failed'))
+      // Carry the status: a 403 here means the presigned URL was rejected by S3
+      // (bad signing credentials), which needs a different fix than a network drop.
+      xhr.onload = () => xhr.status === 200 ? resolve() : reject(new Error(`Upload failed (S3 returned ${xhr.status})`))
+      xhr.onerror = () => reject(new Error('Upload failed (network error)'))
       xhr.send(file)
     })
 
@@ -426,8 +428,8 @@ export default function LessonLibraryPage() {
       setEditForm(f => ({ ...f, videoUrl: key }))
       setIsDirty(true)
       setVideoFile(null)
-    } catch (err) {
-      setVideoUpload({ uploading: false, progress: 0, error: 'Upload failed. Please try again.' })
+    } catch (err: any) {
+      setVideoUpload({ uploading: false, progress: 0, error: err?.message || 'Upload failed. Please try again.' })
     }
   }
 
