@@ -16,14 +16,12 @@ function makeTransporter() {
   })
 }
 
-/** Wraps the per-request client to keep this route's throw-on-error behaviour. */
+/**
+ * Throw-on-error and the `data` unwrap now live in appsyncClient itself, so this
+ * is a plain alias kept for the call sites below.
+ */
 function makeAppsync(token: string) {
-  const gql = appsyncClient(token)
-  return async function appsync(query: string, variables: Record<string, unknown>) {
-    const json: any = await gql(query, variables)
-    if (json.errors) throw new Error(json.errors[0].message)
-    return json.data
-  }
+  return appsyncClient(token)
 }
 
 const listParentStudentsByEmail = `

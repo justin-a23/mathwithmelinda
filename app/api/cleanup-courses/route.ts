@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
         }
       }
     `)
-    const courses = coursesRes.data?.listCourses?.items || []
+    const courses = coursesRes?.listCourses?.items || []
 
     // Identify duplicates: same title, pick the one with fewer linked records as the duplicate
     const byTitle: Record<string, any[]> = {}

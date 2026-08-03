@@ -27,15 +27,13 @@ export { canReadProfileKey }
 function makeGql(token: string) {
   const call = appsyncClient(token)
   return async function gql<T>(query: string, variables: Record<string, unknown>): Promise<T | null> {
+    // A failed lookup must return null, not throw: callers treat null as "cannot
+    // establish ownership" and deny access, so swallowing here fails closed.
+    // appsyncClient raises AppSync-level errors, which this catch covers too.
     try {
-      const json: any = await call(query, variables)
-      if (json.errors) {
-        console.error('ownership lookup failed:', JSON.stringify(json.errors))
-        return null
-      }
-      return json.data as T
+      return (await call(query, variables)) as T
     } catch (err) {
-      console.error('ownership lookup threw:', err)
+      console.error('ownership lookup failed:', err)
       return null
     }
   }

@@ -33,13 +33,12 @@ const archiveStudentProfileMutation = /* GraphQL */`
 
 async function markProfileArchived(token: string, profileId: string) {
   const gql = appsyncClient(token)
-  const json: any = await gql(
+  // gql throws on AppSync errors and returns `data` directly.
+  return gql(
     archiveStudentProfileMutation,
     // Stamp archivedAt so past students can be grouped by year in the transcript view
     { input: { id: profileId, status: 'archived', archivedAt: new Date().toISOString() } }
   )
-  if (json.errors) throw new Error(json.errors[0].message)
-  return json.data
 }
 
 async function findCognitoUsername(cognito: CognitoIdentityProviderClient, sub: string): Promise<string | null> {

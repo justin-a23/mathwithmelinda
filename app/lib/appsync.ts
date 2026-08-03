@@ -93,6 +93,22 @@ export function appsyncClient(accessToken?: string) {
       headers,
       body: JSON.stringify({ query, variables }),
     })
-    return res.json() as Promise<T>
+    const json: any = await res.json()
+
+    // Throw rather than hand back the envelope. AppSync answers a rejected
+    // operation with HTTP 200 and a populated `errors` array, so a caller that
+    // only checks `res.ok` sees success and reads `undefined` off the missing
+    // payload — the failure then surfaces as a TypeError at some later property
+    // access, with AppSync's actual message never printed. Throwing here puts
+    // the real reason in the caller's catch.
+    if (json?.errors?.length) {
+      throw new Error(json.errors.map((e: any) => e?.message || 'unknown error').join('; '))
+    }
+
+    // Return `data` itself, not the envelope. Unwrapping in one place is what
+    // keeps `gql(...)` callers from each having to remember the `.data` hop —
+    // forgetting it reads `undefined` on success, which is silent for anything
+    // guarded by `?.` and fatal for anything that isn't.
+    return json?.data as T
   }
 }

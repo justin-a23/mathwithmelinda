@@ -35,7 +35,7 @@ async function userHasParentStudentLink(token: string, userId: string): Promise<
     `,
     { parentId: userId }
   )
-  return (json?.data?.listParentStudents?.items?.length ?? 0) > 0
+  return (json?.listParentStudents?.items?.length ?? 0) > 0
 }
 
 /**

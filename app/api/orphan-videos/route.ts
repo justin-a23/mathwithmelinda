@@ -62,11 +62,11 @@ export async function GET(req: NextRequest) {
     do {
       // Annotated because the generic return type would otherwise be inferred
       // circularly: nextToken is both an input to this call and read back off it.
-      const result: { data?: { listLessonTemplates?: { items: { videoUrl: string | null }[]; nextToken: string | null } } } = await gql(
+      const result: { listLessonTemplates?: { items: { videoUrl: string | null }[]; nextToken: string | null } } = await gql(
         `query L($t: String) { listLessonTemplates(limit: 500, nextToken: $t) { items { videoUrl } nextToken } }`,
         { t: nextToken }
       )
-      const page = result.data?.listLessonTemplates
+      const page = result?.listLessonTemplates
       for (const t of page?.items ?? []) {
         if (t.videoUrl) usedKeys.add(t.videoUrl)
       }

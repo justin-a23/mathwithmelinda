@@ -38,6 +38,21 @@ const LIST_LESSON_QUESTIONS = /* GraphQL */`
 
 
 /**
+ * Pull one operation's payload off a gql result, failing loudly when it is absent.
+ *
+ * appsyncClient already throws on AppSync errors and returns `data`, so a missing
+ * payload here means the operation resolved to null — worth catching explicitly
+ * rather than letting the next property access throw a bare TypeError.
+ */
+function unwrap<T>(res: any, op: string): T {
+  const payload = res?.[op]
+  if (payload === undefined || payload === null) {
+    throw new Error(`${op} returned no data`)
+  }
+  return payload as T
+}
+
+/**
  * POST /api/import-lesson
  *
  * Body:
@@ -102,7 +117,7 @@ export async function POST(request: NextRequest) {
         courseLessonTemplatesId: courseId,
       }
       const res = await gql(CREATE_LESSON_TEMPLATE, { input })
-      lessonId = res.createLessonTemplate.id as string
+      lessonId = unwrap<{ id: string }>(res, 'createLessonTemplate').id
     } else {
       // Update the existing LessonTemplate + wipe its questions so we can recreate them
       const input: any = {
@@ -114,11 +129,13 @@ export async function POST(request: NextRequest) {
         assignmentType: parsed.assignmentType || 'both',
         lessonCategory: parsed.lessonCategory || 'lesson',
       }
-      await gql(UPDATE_LESSON_TEMPLATE, { input })
+      unwrap(await gql(UPDATE_LESSON_TEMPLATE, { input }), 'updateLessonTemplate')
       // Delete existing questions
       try {
         const existing = await gql(LIST_LESSON_QUESTIONS, { id: lessonId })
-        const items = existing?.getLessonTemplate?.questions?.items ?? []
+        const items = unwrap<{ questions?: { items?: { id: string }[] } }>(
+          existing, 'getLessonTemplate'
+        ).questions?.items ?? []
         await Promise.all(items.map((q: any) =>
           gql(DELETE_QUESTION, { input: { id: q.id } }).catch(() => null)
         ))
@@ -141,7 +158,7 @@ export async function POST(request: NextRequest) {
         lessonTemplateQuestionsId: lessonId,
       }
       try {
-        await gql(CREATE_QUESTION, { input: qInput })
+        unwrap(await gql(CREATE_QUESTION, { input: qInput }), 'createAssignmentQuestion')
         questionsCreated++
       } catch (err: any) {
         console.error(`Failed to create Q${q.order}:`, err?.message || err)
