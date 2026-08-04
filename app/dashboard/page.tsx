@@ -385,10 +385,15 @@ export default function Dashboard() {
             // Only show plans for the student's enrolled course
             if (studentCourseId && p.course?.id !== studentCourseId) return false
             // Year-closure cutoff: the active semester's start floors the window
-            // (compare the week's END so a week straddling the start still shows)
+            // (compare the week's END so a week straddling the start still shows).
+            // The current calendar week is exempt: the floor exists to bury a
+            // closed year's leftovers, and a plan the teacher deliberately
+            // scheduled for THIS week (pre-season testing, an early start)
+            // should never be invisible.
             if (semesterFloorMs !== null) {
               const weekEnd = new Date(d); weekEnd.setDate(d.getDate() + 7)
-              if (weekEnd.getTime() < semesterFloorMs) return false
+              const isCurrentWeek = now >= d && now < weekEnd
+              if (!isCurrentWeek && weekEnd.getTime() < semesterFloorMs) return false
             }
             // Enrollment date cutoff
             if (enrolledAtMs !== null) {
