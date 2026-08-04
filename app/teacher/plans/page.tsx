@@ -59,6 +59,17 @@ const LIST_WEEKLY_PLANS = /* GraphQL */ `
   }
 `
 
+// Plans carry no semester/year link, so the active semester's start date is
+// the only signal that a school year has been closed out. Same floor the
+// student dashboard uses — a closed year's plans are hidden by default here.
+const LIST_ACTIVE_SEMESTERS = /* GraphQL */ `
+  query ListActiveSemesters {
+    listSemesters(filter: { isActive: { eq: true } }, limit: 50) {
+      items { id courseId startDate }
+    }
+  }
+`
+
 const UPDATE_PLAN_ITEM = /* GraphQL */ `
   mutation UpdateWeeklyPlanItem($input: UpdateWeeklyPlanItemInput!) {
     updateWeeklyPlanItem(input: $input) { id isPublished }
@@ -160,6 +171,10 @@ export default function ManagePlansPage() {
   const [studentEmailMap, setStudentEmailMap] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [selectedCourseId, setSelectedCourseId] = useState('all')
+  // courseId → active semester start (ms). Plans from before this are a closed
+  // year's leftovers, hidden unless the teacher asks for them.
+  const [floorByCourse, setFloorByCourse] = useState<Record<string, number>>({})
+  const [showPreviousYears, setShowPreviousYears] = useState(false)
   const [expandedPlanIds, setExpandedPlanIds] = useState<Set<string>>(new Set())
   const [confirmRemoveItemId, setConfirmRemoveItemId] = useState<string | null>(null)
   const [confirmDeletePlanId, setConfirmDeletePlanId] = useState<string | null>(null)
@@ -173,10 +188,21 @@ export default function ManagePlansPage() {
     async function fetchAll() {
       setLoading(true)
       try {
-        const [plansResult, studentsResult] = await Promise.all([
+        const [plansResult, studentsResult, semestersResult] = await Promise.all([
           (client.graphql({ query: LIST_WEEKLY_PLANS }) as any),
           (client.graphql({ query: LIST_STUDENT_PROFILES }) as any),
+          (client.graphql({ query: LIST_ACTIVE_SEMESTERS }) as any).catch(() => null),
         ])
+
+        // Earliest active-semester start per course = that course's year floor
+        const floors: Record<string, number> = {}
+        for (const s of semestersResult?.data?.listSemesters?.items ?? []) {
+          if (!s.courseId || !s.startDate) continue
+          const t = new Date(s.startDate + 'T00:00:00').getTime()
+          if (isNaN(t)) continue
+          floors[s.courseId] = floors[s.courseId] === undefined ? t : Math.min(floors[s.courseId], t)
+        }
+        setFloorByCourse(floors)
         const items: WeeklyPlan[] = plansResult.data.listWeeklyPlans.items
         items.sort((a, b) => b.weekStartDate.localeCompare(a.weekStartDate))
         setPlans(items)
@@ -208,9 +234,28 @@ export default function ManagePlansPage() {
     ).values()
   )
 
-  const filteredPlans = selectedCourseId === 'all'
+  // A plan belongs to a previous (closed) year when its week ended before the
+  // active semester began for its course. The current calendar week is exempt,
+  // same as the student dashboard — a plan deliberately scheduled for this
+  // week must stay manageable even before the semester starts.
+  function isPreviousYearPlan(p: WeeklyPlan): boolean {
+    const floor = p.course?.id !== undefined ? floorByCourse[p.course.id] : undefined
+    if (floor === undefined) return false
+    const start = new Date(p.weekStartDate + 'T00:00:00')
+    if (isNaN(start.getTime())) return false
+    const weekEnd = new Date(start); weekEnd.setDate(start.getDate() + 7)
+    const now = new Date()
+    const isCurrentWeek = now >= start && now < weekEnd
+    return !isCurrentWeek && weekEnd.getTime() < floor
+  }
+
+  const courseFilteredPlans = selectedCourseId === 'all'
     ? plans
     : plans.filter(p => p.course?.id === selectedCourseId)
+  const previousYearCount = courseFilteredPlans.filter(isPreviousYearPlan).length
+  const filteredPlans = showPreviousYears
+    ? courseFilteredPlans
+    : courseFilteredPlans.filter(p => !isPreviousYearPlan(p))
 
   function toggleExpand(planId: string) {
     setExpandedPlanIds(prev => {
@@ -394,6 +439,17 @@ export default function ManagePlansPage() {
               <option key={c.id} value={c.id}>{c.title}</option>
             ))}
           </select>
+          {previousYearCount > 0 && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px', fontSize: '13px', color: 'var(--gray-mid)', cursor: 'pointer', width: 'fit-content' }}>
+              <input
+                type="checkbox"
+                checked={showPreviousYears}
+                onChange={e => setShowPreviousYears(e.target.checked)}
+                style={{ cursor: 'pointer' }}
+              />
+              Show previous years ({previousYearCount} hidden plan{previousYearCount !== 1 ? 's' : ''})
+            </label>
+          )}
         </div>
 
         {/* Content */}
