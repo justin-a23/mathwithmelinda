@@ -35,6 +35,18 @@ const UPDATE_MESSAGE = /* GraphQL */ `
   }
 `
 
+// The student's display name comes from their profile, not from prior
+// messages: bootstrapping it off old messages meant a student's FIRST message
+// ever was written with studentName null, and the teacher's thread list fell
+// back to showing the raw Cognito sub.
+const GET_MY_PROFILE = /* GraphQL */ `
+  query GetMyProfile($userId: String!) {
+    listStudentProfiles(filter: { userId: { eq: $userId } }, limit: 1) {
+      items { id firstName lastName preferredName }
+    }
+  }
+`
+
 type Message = {
   id: string
   studentId: string
@@ -81,6 +93,7 @@ function StudentMessagesPageInner() {
   useEffect(() => {
     if (!studentId) return
     fetchMessages()
+    fetchProfileName()
     localStorage.setItem('mwm:messagesLastVisited', Date.now().toString())
 
     // Poll every 30 seconds for new replies
@@ -103,6 +116,22 @@ function StudentMessagesPageInner() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
+  async function fetchProfileName() {
+    try {
+      const result: any = await client.graphql({
+        query: GET_MY_PROFILE,
+        variables: { userId: studentId },
+      })
+      const p = result.data?.listStudentProfiles?.items?.[0]
+      if (p) {
+        const name = p.preferredName || `${p.firstName || ''} ${p.lastName || ''}`.trim()
+        if (name) setProfileName(name)
+      }
+    } catch (err) {
+      console.error('Error fetching profile name:', err)
+    }
+  }
+
   async function fetchMessages() {
     setLoading(true)
     try {
@@ -114,9 +143,10 @@ function StudentMessagesPageInner() {
         .filter((m: Message) => !m.isDeletedByStudent)
       items.sort((a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime())
       setMessages(items)
-      // Also pull name from profile if available
+      // Fallback name from prior messages — never overwrite the
+      // profile-derived name if fetchProfileName already resolved
       const name = items.find(m => m.studentName)?.studentName || ''
-      if (name) setProfileName(name)
+      if (name) setProfileName(prev => prev || name)
     } catch (err) {
       console.error('Error fetching messages:', err)
     } finally {

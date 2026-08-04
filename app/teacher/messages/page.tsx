@@ -113,11 +113,15 @@ function fmtDate(iso: string) {
     ' at ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
 }
 
-function groupByStudent(messages: Message[]): StudentGroup[] {
+function groupByStudent(messages: Message[], nameById: Record<string, string> = {}): StudentGroup[] {
   const groups: StudentGroup[] = []
   const seen = new Map<string, StudentGroup>()
   for (const msg of messages) {
-    const name = msg.studentName || msg.studentId
+    // Message.studentId holds the Cognito sub. Prefer the message's own
+    // studentName, then the profile lookup — old messages were written with a
+    // null name (the student page used to bootstrap it from prior messages),
+    // and without the lookup those threads showed the raw sub as the name.
+    const name = msg.studentName || nameById[msg.studentId] || msg.studentId
     if (!seen.has(msg.studentId)) {
       const group: StudentGroup = { studentId: msg.studentId, studentName: name, messages: [] }
       seen.set(msg.studentId, group)
@@ -500,8 +504,9 @@ export default function TeacherMessagesPage() {
 
   const activeMessages = messages.filter(m => !m.isArchivedByTeacher)
   const archivedMessages = messages.filter(m => m.isArchivedByTeacher)
-  const activeGroups = groupByStudent(activeMessages)
-  const archivedGroups = groupByStudent(archivedMessages)
+  const studentNameById = Object.fromEntries(students.map(s => [s.userId, s.name]))
+  const activeGroups = groupByStudent(activeMessages, studentNameById)
+  const archivedGroups = groupByStudent(archivedMessages, studentNameById)
   const currentGroups = tab === 'active' ? activeGroups : archivedGroups
   const totalUnread = activeMessages.filter(m => !m.isRead).length
 
