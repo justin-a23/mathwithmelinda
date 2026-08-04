@@ -125,6 +125,18 @@ const studentScoped = (allow: any) => [
   ...migrationAccess(allow),
 ]
 
+/**
+ * studentScoped plus create: for rows the invite-redemption flow must write
+ * while the new user is authenticated but not yet in any group.
+ * profile/setup creates the student's Enrollment when their invite carries a
+ * semesterId — read-only rules there would strand invited students unenrolled.
+ */
+const studentScopedSelfEnrolling = (allow: any) => [
+  allow.groups(STAFF),
+  allow.authenticated().to(['read', 'create']),
+  ...migrationAccess(allow),
+]
+
 /** Records a student creates and maintains for themselves. */
 const studentWritable = (allow: any) => [
   allow.groups(STAFF),
@@ -358,7 +370,7 @@ const schema = a.schema({
       semesterEnrollmentsId: a.id(),
       semester: a.belongsTo('Semester', 'semesterEnrollmentsId'),
     })
-    .authorization(studentScoped),
+    .authorization(studentScopedSelfEnrolling),
 
   // ── People ────────────────────────────────────────────────────────────────
 
@@ -459,7 +471,24 @@ const schema = a.schema({
     // Redeemed before the user has an account, so this cannot require auth.
     // Knowledge of the token is the credential — keep tokens long and random,
     // and prefer redeeming through a server route over exposing list access.
-    .authorization(allow => [allow.groups(STAFF), allow.guest().to(['read', 'update']), ...migrationAccess(allow)]),
+    //
+    // Three grants cover the redemption sequence, and guest() alone is NOT
+    // enough: guest maps to the identity pool's unauthenticated role, and the
+    // referenced pool has unauthenticated identities disabled — so that rule is
+    // unreachable in production (both invite pages died Unauthorized until
+    // apiKey/authenticated were added; observed 2026-08-03, Melinda's first
+    // end-to-end test).
+    //   - publicApiKey READ: the signed-out invite page showing "you're invited"
+    //     before signup. Read-only on purpose — Gen 1 allowed public update.
+    //   - authenticated read/UPDATE: the just-signed-up user (in no group yet)
+    //     marking their invite used from profile/setup.
+    .authorization(allow => [
+      allow.groups(STAFF),
+      allow.guest().to(['read', 'update']),
+      allow.publicApiKey().to(['read']),
+      allow.authenticated().to(['read', 'update']),
+      ...migrationAccess(allow),
+    ]),
 
   ParentInvite: a
     .model({
@@ -471,7 +500,15 @@ const schema = a.schema({
       parentFirstName: a.string(),
       parentLastName: a.string(),
     })
-    .authorization(allow => [allow.groups(STAFF), allow.guest().to(['read', 'update']), ...migrationAccess(allow)]),
+    // Same redemption sequence and same dead-guest problem as StudentInvite
+    // above — see that model's comment for why all three grants are needed.
+    .authorization(allow => [
+      allow.groups(STAFF),
+      allow.guest().to(['read', 'update']),
+      allow.publicApiKey().to(['read']),
+      allow.authenticated().to(['read', 'update']),
+      ...migrationAccess(allow),
+    ]),
 
   ParentStudent: a
     .model({
