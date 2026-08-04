@@ -99,6 +99,18 @@ type ReturnedSubmission = {
   itemId: string
 }
 
+// Plans carry no semester/year link (semesterWeeklyPlansId is null in every
+// row), so the active semester's start date is the only signal that a school
+// year has been closed out. Fetched per-course to put a floor under the
+// dashboard's plan window.
+const listActiveSemestersQuery = /* GraphQL */`
+  query ListActiveSemesters($courseId: ID!) {
+    listSemesters(filter: { courseId: { eq: $courseId }, isActive: { eq: true } }, limit: 20) {
+      items { id startDate endDate }
+    }
+  }
+`
+
 const listMySubmissionsQuery = /* GraphQL */`
   query ListMySubmissions($studentId: String!) {
     listSubmissions(filter: { studentId: { eq: $studentId } }, limit: 500) {
@@ -330,10 +342,25 @@ export default function Dashboard() {
 
         // 2. Fetch plans + submissions in parallel, now that we have courseId
         const studentId = userId
-        const [plansResult, subsResult] = await Promise.all([
+        const [plansResult, subsResult, semestersResult] = await Promise.all([
           client.graphql({ query: listWeeklyPlansWithItems, variables: {} }) as any,
           client.graphql({ query: listMySubmissionsQuery, variables: { studentId } }) as any,
+          studentCourseId
+            ? (client.graphql({ query: listActiveSemestersQuery, variables: { courseId: studentCourseId } }) as any).catch(() => null)
+            : Promise.resolve(null),
         ])
+
+        // Year-closure floor: hide plans from before the active semester began.
+        // Closing a year (deactivating its semesters, activating the new one)
+        // must trump everything else — without this, last year's unsubmitted
+        // plans follow the course into the new year and greet every student as
+        // "overdue". No active semester for the course → no floor, so a
+        // bookkeeping gap degrades to the enrolledAt behavior below rather
+        // than blanking the dashboard.
+        const activeSemesterStarts: number[] = (semestersResult?.data?.listSemesters?.items ?? [])
+          .map((s: { startDate: string }) => new Date(s.startDate + 'T00:00:00').getTime())
+          .filter((t: number) => !isNaN(t))
+        const semesterFloorMs = activeSemesterStarts.length ? Math.min(...activeSemesterStarts) : null
 
         // Filter plans: must match enrolled course AND be within date window
         const allPlans = plansResult.data.listWeeklyPlans.items as WeeklyPlan[]
@@ -357,6 +384,12 @@ export default function Dashboard() {
             if (d > futureLimit) return false
             // Only show plans for the student's enrolled course
             if (studentCourseId && p.course?.id !== studentCourseId) return false
+            // Year-closure cutoff: the active semester's start floors the window
+            // (compare the week's END so a week straddling the start still shows)
+            if (semesterFloorMs !== null) {
+              const weekEnd = new Date(d); weekEnd.setDate(d.getDate() + 7)
+              if (weekEnd.getTime() < semesterFloorMs) return false
+            }
             // Enrollment date cutoff
             if (enrolledAtMs !== null) {
               const weekEnd = new Date(d); weekEnd.setDate(d.getDate() + 7)
