@@ -223,6 +223,11 @@ function ProfileSetupInner() {
             courseId: selectedCourseId || null,
             planType: invite?.planType || null,
             status: isInvited ? 'active' : 'pending',
+            // Stamp enrollment time like the teacher-approval path does
+            // (teacher/students). The dashboard treats a null enrolledAt as a
+            // legacy profile and shows ALL past weeks — a student invited this
+            // year would open their dashboard to last year's plans as overdue.
+            enrolledAt: new Date().toISOString(),
           }
         }
       }) as any
