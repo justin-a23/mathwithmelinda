@@ -23,6 +23,27 @@ async function fetchAsBase64Pdf(key: string): Promise<string> {
   return Buffer.from(buffer).toString('base64')
 }
 
+/**
+ * The comment is shown to students as plain text, never rendered. The prompt
+ * forbids LaTeX, but the question data the model reads is full of it, so slips
+ * happen — translate the common constructs to teacher-on-paper notation.
+ */
+function stripLatex(s: string): string {
+  const superscripts: Record<string, string> = { '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹' }
+  return s
+    .replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/g, '$1/$2')
+    .replace(/\\sqrt\{([^{}]+)\}/g, '√$1')
+    .replace(/\\sqrt\s*/g, '√')
+    .replace(/\\cdot/g, '×')
+    .replace(/\\times/g, '×')
+    .replace(/\\left|\\right/g, '')
+    .replace(/\^\{?(\d)\}?/g, (_, d) => superscripts[d] || `^${d}`)
+    .replace(/\\\(|\\\)|\\\[|\\\]/g, '')
+    // Dollar delimiters around math — drop the delimiters, keep the content
+    .replace(/\$([^$]+)\$/g, '$1')
+    .replace(/\$/g, '')
+}
+
 export async function POST(req: NextRequest) {
   const auth = await requireTeacher(req)
   if (auth instanceof NextResponse) return auth
@@ -173,6 +194,21 @@ EXAMPLE OF BAD FEEDBACK (DO NOT WRITE LIKE THIS):
 WHY IT'S BAD: Doesn't name the student. Just states the right answer instead of TEACHING the method. Generic encouragement filler. Student learns nothing from "remember that X = Y."
 
 ═══════════════════════════════════════════════════════════════
+MATH NOTATION IN THE COMMENT — PLAIN TEXT ONLY
+═══════════════════════════════════════════════════════════════
+The comment is displayed as PLAIN TEXT. It is never rendered as LaTeX or
+markdown. The question data you receive is full of LaTeX ("$9^2 - (3+1)^3$",
+"\\frac{3}{4}", "\\sqrt{16}") — do NOT copy that notation into the comment.
+Translate it:
+- NEVER use dollar signs, backslash commands, \\( \\), or markdown in the comment.
+- Exponents: use unicode superscripts (9², x³, p⁸) or words ("nine squared").
+- Roots: use the √ symbol (√16) or words ("the square root of 16").
+- Fractions: plain slash form (3/4) or words ("three fourths").
+- Multiplication: × or words — never \\cdot or *.
+A student (and Melinda) reading "$9^2$" as literal text finds it confusing —
+write the way a teacher writes on paper.
+
+═══════════════════════════════════════════════════════════════
 GRADING RULES
 ═══════════════════════════════════════════════════════════════
 1. Grade on a 0–100 scale. Every non-header question has equal weight (including teacher-confirmed ones).
@@ -252,7 +288,7 @@ Only include questions you are grading in questionResults (not teacher-confirmed
 
     return NextResponse.json({
       grade: parsed.grade || '',
-      comment: parsed.comment || '',
+      comment: stripLatex(parsed.comment || ''),
       questionResults: parsed.questionResults || [],
     })
   } catch (err: any) {
