@@ -534,7 +534,7 @@ export default function LessonLibraryPage() {
             questionText: newQuestion.questionText.trim() || '(see image)',
             questionType: newQuestion.questionType,
             choices: (newQuestion.questionType === 'multiple_choice' || newQuestion.questionType === 'multiple_choice_multi') && newQuestion.choices.trim() ? newQuestion.choices.trim() : null,
-            correctAnswer: (newQuestion.questionType === 'number' || newQuestion.questionType === 'multiple_choice' || newQuestion.questionType === 'multiple_choice_multi') && newQuestion.correctAnswer.trim() ? newQuestion.correctAnswer.trim() : null,
+            correctAnswer: newQuestion.questionType !== 'section_header' && newQuestion.correctAnswer.trim() ? newQuestion.correctAnswer.trim() : null,
             order: questions.length + 1,
             lessonTemplateQuestionsId: lessonId,
             diagramKey,
@@ -689,7 +689,7 @@ export default function LessonLibraryPage() {
         questionText: editingQuestionForm.questionText.trim() || '(see image)',
         questionType: editingQuestionForm.questionType,
         choices: (editingQuestionForm.questionType === 'multiple_choice' || editingQuestionForm.questionType === 'multiple_choice_multi') && editingQuestionForm.choices.trim() ? editingQuestionForm.choices.trim() : null,
-        correctAnswer: (editingQuestionForm.questionType === 'number' || editingQuestionForm.questionType === 'multiple_choice' || editingQuestionForm.questionType === 'multiple_choice_multi') && editingQuestionForm.correctAnswer.trim() ? editingQuestionForm.correctAnswer.trim() : null,
+        correctAnswer: editingQuestionForm.questionType !== 'section_header' && editingQuestionForm.correctAnswer.trim() ? editingQuestionForm.correctAnswer.trim() : null,
       }
       if (newDiagramKey !== undefined) {
         input.diagramKey = newDiagramKey
@@ -1780,7 +1780,7 @@ export default function LessonLibraryPage() {
                                                       </p>
                                                     </div>
                                                   )}
-                                                  {(editingQuestionForm.questionType === 'number' || editingQuestionForm.questionType === 'short_text' || editingQuestionForm.questionType === 'multiple_choice') && (
+                                                  {(editingQuestionForm.questionType === 'number' || editingQuestionForm.questionType === 'short_text' || editingQuestionForm.questionType === 'multiple_choice' || editingQuestionForm.questionType === 'show_work') && (
                                                     <div style={{ marginBottom: '10px' }}>
                                                       <label style={labelStyle}>Correct answer (optional — for auto-grading)</label>
                                                       <MathToolbar
@@ -1895,6 +1895,16 @@ export default function LessonLibraryPage() {
                                                     <span style={{ fontSize: '11px', fontWeight: 600, padding: '2px 8px', borderRadius: '12px', background: 'var(--background)', color: 'var(--gray-dark)', border: '1px solid var(--gray-light)' }}>
                                                       {QUESTION_TYPE_LABELS[q.questionType] || q.questionType}
                                                     </span>
+                                                    {/* Show-work answers are optional grading aids: chip when present, no warning when absent.
+                                                        (The importer moves "(Final answer: …)" suffixes here, so imported show-work questions carry one.) */}
+                                                    {q.questionType === 'show_work' && q.correctAnswer && q.correctAnswer.trim() && (
+                                                      <span style={{ fontSize: '11px', fontWeight: 600, padding: '2px 8px', borderRadius: '12px', background: '#dcfce7', color: '#15803d', border: '1px solid #86efac', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                                        <span>Answer:</span>
+                                                        <span style={{ display: 'inline-block', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', verticalAlign: 'middle' }}>
+                                                          <MathRenderer text={q.correctAnswer} />
+                                                        </span>
+                                                      </span>
+                                                    )}
                                                     {/* Show entered answer or "no answer" warning for digital question types */}
                                                     {q.questionType !== 'show_work' && (
                                                       q.correctAnswer && q.correctAnswer.trim() ? (
