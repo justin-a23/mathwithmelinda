@@ -18,7 +18,7 @@ export async function PATCH(
       datePaid?: string | null
       amount?: number
       notes?: string
-      status?: 'active' | 'waived'
+      status?: 'active' | 'waived' | 'excluded'
     } = {}
 
     if ('datePaid' in body) updates.datePaid = body.datePaid

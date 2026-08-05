@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireTeacher } from '@/app/lib/auth'
-import { getSchedule, listPaymentsForSchedule, addStudentToSchedule, deleteSchedule, withdrawStudent } from '@/app/lib/payments'
+import { getSchedule, listPaymentsForSchedule, addStudentToSchedule, deleteSchedule, withdrawStudent, removeStudentPayments, applyCourseRates, setBoardStatus } from '@/app/lib/payments'
 
 /** GET — list all payments for a schedule */
 export async function GET(
@@ -43,6 +43,30 @@ export async function POST(
       if (!schedule) return NextResponse.json({ error: 'Schedule not found' }, { status: 404 })
       const result = await withdrawStudent(scheduleId, body.studentId, schedule.cancellationDeadline)
       return NextResponse.json({ success: true, ...result })
+    }
+
+    // Roster sync removal: delete every row a student has (only safe when
+    // nothing is paid — the client checks, this is the mechanism)
+    if (body.action === 'remove') {
+      if (!body.studentId) return NextResponse.json({ error: 'studentId required' }, { status: 400 })
+      const removed = await removeStudentPayments(scheduleId, body.studentId)
+      return NextResponse.json({ success: true, removed })
+    }
+
+    // Per-class rate overrides — persists on the schedule and reprices unpaid rows
+    if (body.action === 'setRates') {
+      if (!body.courseRates || typeof body.courseRates !== 'object') {
+        return NextResponse.json({ error: 'courseRates required' }, { status: 400 })
+      }
+      await applyCourseRates(scheduleId, body.courseRates)
+      return NextResponse.json({ success: true })
+    }
+
+    // Board-member toggle — flips discount flag and reprices unpaid rows
+    if (body.action === 'setBoard') {
+      if (!body.studentId) return NextResponse.json({ error: 'studentId required' }, { status: 400 })
+      await setBoardStatus(scheduleId, body.studentId, !!body.isDiscounted)
+      return NextResponse.json({ success: true })
     }
 
     // Default: add student

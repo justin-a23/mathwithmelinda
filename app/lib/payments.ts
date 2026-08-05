@@ -45,16 +45,34 @@ const ddb = DynamoDBDocumentClient.from(makeDynamoClient())
 
 // ─── TYPES ──────────────────────────────────────────────────────
 
+export type CourseRate = { monthlyRate: number; depositAmount: number }  // cents
+
 export type PaymentSchedule = {
   scheduleId: string
-  academicYear: string            // e.g. "2025-2026"
-  monthlyRate: number             // cents
-  depositAmount: number           // cents
+  academicYear: string            // e.g. "2025-2026" — matches AcademicYear.year
+  monthlyRate: number             // cents (base rate)
+  depositAmount: number           // cents (base deposit)
   discountedRate: number          // cents (board member monthly)
   discountedDeposit: number       // cents (board member deposit)
-  months: string[]                // e.g. ["Aug","Oct","Nov","Dec","Jan","Feb","Mar","Apr"]
+  // Per-class overrides keyed by course TITLE (payment rows only carry the
+  // course name, so the title is the join key throughout).
+  courseRates?: Record<string, CourseRate>
+  months: string[]                // e.g. ["Aug","Sep","Oct","Nov","Dec","Jan","Feb","Mar","Apr"]
   cancellationDeadline: string    // ISO date, e.g. "2025-09-15"
   createdAt: string
+}
+
+/**
+ * The rate a student owes: board members always pay the board rate;
+ * otherwise the class override if one exists, else the base rate.
+ */
+export function ratesFor(schedule: PaymentSchedule, courseName: string, isDiscounted: boolean): CourseRate {
+  if (isDiscounted) return { monthlyRate: schedule.discountedRate, depositAmount: schedule.discountedDeposit }
+  const override = schedule.courseRates?.[courseName]
+  return {
+    monthlyRate: override?.monthlyRate ?? schedule.monthlyRate,
+    depositAmount: override?.depositAmount ?? schedule.depositAmount,
+  }
 }
 
 export type Payment = {
@@ -71,7 +89,9 @@ export type Payment = {
   datePaid: string | null         // ISO date or null
   notes: string
   isDiscounted: boolean
-  status: 'active' | 'waived'    // waived = withdrawn before deadline
+  // waived = withdrawn before deadline; excluded = teacher removed this one
+  // bill for this student (red ✕ in the grid). Neither counts toward totals.
+  status: 'active' | 'waived' | 'excluded'
   createdAt: string
 }
 
@@ -149,8 +169,7 @@ export async function addStudentToSchedule(
     isDiscounted: boolean
   }
 ): Promise<Payment[]> {
-  const depositAmount = student.isDiscounted ? schedule.discountedDeposit : schedule.depositAmount
-  const monthlyAmount = student.isDiscounted ? schedule.discountedRate : schedule.monthlyRate
+  const { monthlyRate: monthlyAmount, depositAmount } = ratesFor(schedule, student.courseName, student.isDiscounted)
   const now = new Date().toISOString()
 
   const payments: Payment[] = []
@@ -205,11 +224,62 @@ export async function addStudentToSchedule(
   return payments
 }
 
+/** Delete every payment row a student has in a schedule (roster sync removal). */
+export async function removeStudentPayments(scheduleId: string, studentId: string): Promise<number> {
+  const payments = await listPaymentsForSchedule(scheduleId)
+  const mine = payments.filter(p => p.studentId === studentId)
+  for (const p of mine) {
+    await deletePayment(p.paymentId)
+  }
+  return mine.length
+}
+
+/**
+ * Persist per-class rate overrides and sweep them onto existing UNPAID active
+ * rows, so a rate change is reflected in what's still owed without touching
+ * money already collected (or waived/excluded rows).
+ */
+export async function applyCourseRates(scheduleId: string, courseRates: Record<string, CourseRate>): Promise<void> {
+  await updateSchedule(scheduleId, { courseRates })
+  const schedule = await getSchedule(scheduleId)
+  if (!schedule) return
+  const payments = await listPaymentsForSchedule(scheduleId)
+  for (const p of payments) {
+    if (p.datePaid || p.status !== 'active') continue
+    const { monthlyRate, depositAmount } = ratesFor(schedule, p.courseName, p.isDiscounted)
+    const expected = p.type === 'deposit' ? depositAmount : monthlyRate
+    if (p.amount !== expected) {
+      await updatePayment(p.paymentId, { amount: expected })
+    }
+  }
+}
+
+/** Flip a student's board-member status and reprice their unpaid rows. */
+export async function setBoardStatus(scheduleId: string, studentId: string, isDiscounted: boolean): Promise<void> {
+  const schedule = await getSchedule(scheduleId)
+  if (!schedule) return
+  const payments = await listPaymentsForSchedule(scheduleId)
+  for (const p of payments) {
+    if (p.studentId !== studentId) continue
+    const updates: Record<string, unknown> = { isDiscounted }
+    if (!p.datePaid && p.status === 'active') {
+      const { monthlyRate, depositAmount } = ratesFor(schedule, p.courseName, isDiscounted)
+      updates.amount = p.type === 'deposit' ? depositAmount : monthlyRate
+    }
+    await ddb.send(new UpdateCommand({
+      TableName: PAYMENTS_TABLE,
+      Key: { paymentId: p.paymentId },
+      UpdateExpression: 'SET isDiscounted = :d' + ('amount' in updates ? ', amount = :a' : ''),
+      ExpressionAttributeValues: { ':d': isDiscounted, ...('amount' in updates ? { ':a': updates.amount } : {}) },
+    }))
+  }
+}
+
 export async function updatePayment(paymentId: string, updates: {
   datePaid?: string | null
   amount?: number
   notes?: string
-  status?: 'active' | 'waived'
+  status?: 'active' | 'waived' | 'excluded'
 }): Promise<void> {
   const entries = Object.entries(updates).filter(([, v]) => v !== undefined)
   if (entries.length === 0) return
