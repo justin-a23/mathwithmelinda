@@ -241,6 +241,48 @@ function LessonPageInner() {
   // Derived early so useEffects below can reference it without TS "used before declaration" error
   const lesson = planItem?.lesson
   const course = planItem?.weeklyPlan?.course
+
+  // ── Draft autosave ────────────────────────────────────────────────────────
+  // In-progress answers/notes survive a refresh or accidental navigation.
+  // localStorage only (device-local); keyed by student + plan item so drafts
+  // never leak between siblings sharing a computer. Cleared on submit.
+  const draftStudentId = studentKey(user)
+  const draftKey = draftStudentId && itemId ? `mwm:draft:${draftStudentId}:${itemId}` : null
+  const draftHydratedRef = useRef(false)
+
+  function clearDraft() {
+    if (!draftKey) return
+    try { localStorage.removeItem(draftKey) } catch { /* ignore */ }
+  }
+
+  // Restore once identity and item are known. The draft wins over
+  // submission-restored content — it is the newer local edit — and the
+  // returned-submission restore below merges UNDER live state for the same
+  // reason, so either load order converges on the draft.
+  useEffect(() => {
+    if (!draftKey || draftHydratedRef.current) return
+    try {
+      const raw = localStorage.getItem(draftKey)
+      if (raw) {
+        const draft = JSON.parse(raw)
+        if (draft.answers && typeof draft.answers === 'object') {
+          setAnswers(prev => ({ ...prev, ...draft.answers }))
+        }
+        if (typeof draft.notes === 'string' && draft.notes) {
+          setNotes(prev => prev || draft.notes)
+        }
+      }
+    } catch { /* corrupt draft — start clean */ }
+    draftHydratedRef.current = true
+  }, [draftKey])
+
+  // Persist on every change. Payloads are tiny, so no debounce; the hydrated
+  // guard stops the initial empty state from clobbering a stored draft.
+  useEffect(() => {
+    if (!draftKey || !draftHydratedRef.current) return
+    if (Object.keys(answers).length === 0 && !notes) return
+    try { localStorage.setItem(draftKey, JSON.stringify({ answers, notes })) } catch { /* storage blocked/full */ }
+  }, [draftKey, answers, notes])
   const videoSrc = lesson?.videoUrl
     ? lesson.videoUrl.startsWith('http') ? lesson.videoUrl : `${CLOUDFRONT_URL}/${lesson.videoUrl}`
     : null
@@ -402,8 +444,10 @@ function LessonPageInner() {
           setSubmitted(false)
           try {
             const c = JSON.parse(existing.content || '{}')
-            if (c.answers) setAnswers(c.answers)
-            if (c.notes) setNotes(c.notes)
+            // Merge UNDER live state: an unsent draft (or in-progress typing)
+            // is newer than the returned submission's stored answers.
+            if (c.answers) setAnswers(prev => ({ ...c.answers, ...prev }))
+            if (c.notes) setNotes(prev => prev || c.notes)
             if (c.files?.length) {
               setFiles(c.files.map((key: string) => ({
                 uid: `restored-${key}`,
@@ -765,6 +809,7 @@ function LessonPageInner() {
             setError('This submission has already been graded. It cannot be changed.')
             setSubmitted(true)
             setIsReturned(false)
+            clearDraft() // the work is locked; a lingering draft is dead weight
             return
           }
         } catch { /* if the fetch fails, fall through and let the mutation be attempted */ }
@@ -784,6 +829,7 @@ function LessonPageInner() {
         }) as any)
         setSubmitted(true)
         setIsReturned(false)
+        clearDraft()
       } else {
         const { createSubmission } = await import('../../src/graphql/mutations')
         await (client.graphql({
@@ -797,6 +843,7 @@ function LessonPageInner() {
           }
         }) as any)
         setSubmitted(true)
+        clearDraft()
       }
     } catch (err: any) {
       console.error('Submission error:', JSON.stringify(err, null, 2), err?.errors || err?.message || err)
