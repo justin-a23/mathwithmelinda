@@ -399,6 +399,21 @@ export default function PaymentsPage() {
     }
   }
 
+  // Waived rows (left over from the old withdraw flow) were dead ends — the
+  // cell wasn't clickable and nothing could set them back to active.
+  async function handleRestoreWaived() {
+    if (!editingPayment) return
+    setSaving(true)
+    try {
+      await patchPayment(editingPayment, { status: 'active' }, { status: 'active' })
+      setEditingPayment(null)
+    } catch (err) {
+      console.error('Error restoring waived payment:', err)
+    } finally {
+      setSaving(false)
+    }
+  }
+
   async function handleQuickPay(payment: Payment) {
     const today = new Date().toISOString().split('T')[0]
     try {
@@ -421,20 +436,6 @@ export default function PaymentsPage() {
       await loadPayments(selectedScheduleId)
     } catch (err) {
       console.error('Error toggling board status:', err)
-    }
-  }
-
-  async function handleWithdraw(studentId: string) {
-    if (!selectedScheduleId || !window.confirm('Withdraw this student from payments? Unpaid months may be waived depending on the cancellation deadline.')) return
-    try {
-      await apiFetch(`/api/payments/${selectedScheduleId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'withdraw', studentId }),
-      })
-      await loadPayments(selectedScheduleId)
-    } catch (err) {
-      console.error('Error withdrawing student:', err)
     }
   }
 
@@ -661,7 +662,6 @@ export default function PaymentsPage() {
                       {columns.map(col => (
                         <th key={col} style={{ ...thStyle, minWidth: '90px', textAlign: 'center' }}>{col}</th>
                       ))}
-                      <th style={{ ...thStyle, minWidth: '60px' }}></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -669,7 +669,7 @@ export default function PaymentsPage() {
                       <FragmentGroup key={group.courseName || 'none'}>
                         {/* Class header row */}
                         <tr>
-                          <td colSpan={columns.length + 3} style={{ padding: '10px 12px', background: 'var(--plum-light)', borderBottom: '1px solid var(--plum-mid)' }}>
+                          <td colSpan={columns.length + 2} style={{ padding: '10px 12px', background: 'var(--plum-light)', borderBottom: '1px solid var(--plum-mid)' }}>
                             <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--plum)', textTransform: 'uppercase', letterSpacing: '1px' }}>
                               {group.courseName || 'No class assigned'}
                             </span>
@@ -708,7 +708,9 @@ export default function PaymentsPage() {
                               const p = sp.find(x => x.month === col)
                               if (!p) return <td key={col} style={{ ...tdStyle, textAlign: 'center', color: 'var(--gray-light)' }}>—</td>
                               if (p.status === 'waived') return (
-                                <td key={col} style={{ ...tdStyle, textAlign: 'center' }}>
+                                <td key={col} style={{ ...tdStyle, textAlign: 'center', cursor: 'pointer' }}
+                                  onClick={() => openEditPayment(p)}
+                                  title="Waived — click to restore or edit">
                                   <span style={{ color: 'var(--gray-mid)', fontSize: '11px', fontStyle: 'italic' }}>waived</span>
                                 </td>
                               )
@@ -740,13 +742,6 @@ export default function PaymentsPage() {
                                 </td>
                               )
                             })}
-                            <td style={tdStyle}>
-                              <button onClick={() => handleWithdraw(studentId)}
-                                style={{ background: 'none', border: 'none', color: 'var(--gray-mid)', cursor: 'pointer', fontSize: '11px', padding: '2px 6px' }}
-                                title="Withdraw student (waives unpaid months before the deadline)">
-                                ✕
-                              </button>
-                            </td>
                           </tr>
                         ))}
                       </FragmentGroup>
@@ -763,7 +758,6 @@ export default function PaymentsPage() {
                           </td>
                         )
                       })}
-                      <td style={tdStyle}></td>
                     </tr>
                   </tbody>
                 </table>
@@ -877,6 +871,7 @@ export default function PaymentsPage() {
               <p style={{ color: 'var(--gray-mid)', fontSize: '13px', margin: '0 0 16px' }}>
                 Expected: {centsToStr(editingPayment.amount)}{editingPayment.isDiscounted ? ' (board rate)' : ''}
                 {editingPayment.status === 'excluded' ? ' · currently excluded from this bill' : ''}
+                {editingPayment.status === 'waived' ? ' · currently waived' : ''}
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px' }}>
                 {editingPayment.type !== 'deposit' && (
@@ -900,6 +895,12 @@ export default function PaymentsPage() {
                     <button onClick={handleMarkUnpaid} disabled={saving}
                       style={{ background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA', padding: '8px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px' }}>
                       Mark Unpaid
+                    </button>
+                  )}
+                  {editingPayment.status === 'waived' && (
+                    <button onClick={handleRestoreWaived} disabled={saving}
+                      style={{ background: '#F0FDF4', color: '#166534', border: '1px solid #BBF7D0', padding: '8px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px' }}>
+                      Restore (un-waive)
                     </button>
                   )}
                   <button onClick={handleToggleExcluded} disabled={saving}
