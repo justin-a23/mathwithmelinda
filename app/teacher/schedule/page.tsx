@@ -119,7 +119,12 @@ function ScheduleWeekInner() {
       try {
         const result = await client.graphql({
           query: listStudentProfiles,
-          variables: { filter: { courseId: { eq: selectedCourseId }, status: { ne: 'removed' } }, limit: 200 }
+          // Only active students are assignable. `ne: 'removed'` let archived
+          // (past-year) and declined profiles through — they keep their
+          // courseId, so they showed up here as if work could be assigned to
+          // them. Verified 2026-08-04: every profile row has an explicit
+          // status, so requiring 'active' drops no legacy rows.
+          variables: { filter: { courseId: { eq: selectedCourseId }, status: { eq: 'active' } }, limit: 200 }
         }) as any
         const items = result.data.listStudentProfiles.items as StudentProfile[]
         setStudents(items)
