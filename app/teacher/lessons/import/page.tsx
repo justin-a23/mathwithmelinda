@@ -186,7 +186,15 @@ export default function ImportLessonPage() {
             ? `Updated "${data.parsed.title}" — ${data.questionsCreated} questions recreated.`
             : `Created "${data.parsed.title}" with ${data.questionsCreated} questions.`
         )
-        setParsed(data.parsed)
+        // Reset for the next lesson: clear the pasted markdown, preview, and
+        // update-target so the page is ready for a fresh paste — only the
+        // success banner (and the course selection) stays. Also refresh the
+        // existing-lessons list so the lesson that was just created is
+        // matchable if it's immediately re-imported.
+        setMarkdown('')
+        setParsed(null)
+        setExistingLessonId('')
+        if (selectedCourseId) loadExistingLessons(selectedCourseId)
       }
     } catch (err: any) {
       setError(err?.message || 'Import failed')
