@@ -42,7 +42,7 @@ const deleteParentStudentLinkMutation = /* GraphQL */`
 
 const listParentStudentLinksByProfileQuery = /* GraphQL */`
   query ListParentStudentLinks($filter: ModelParentStudentLinkFilterInput) {
-    listParentStudentLinks(filter: $filter, limit: 50) {
+    listParentStudentLinks(filter: $filter, limit: 1000) {
       items { id }
     }
   }

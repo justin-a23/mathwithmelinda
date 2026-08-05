@@ -41,17 +41,23 @@ function makeGql(token: string) {
 
 /** The signed-in student's own email, or null if they have no profile. */
 export async function resolveStudentEmail(token: string, userId: string): Promise<string | null> {
+  // NOTE on limits: AppSync list resolvers apply `limit` to the underlying
+  // table scan BEFORE the filter runs. `limit: 1` here scanned one arbitrary
+  // row, filtered it against this userId, and returned empty for nearly every
+  // student — which cascaded into /api/submit 403s ("no student profile") and
+  // blank /api/view-submission previews. Keep limits comfortably above the
+  // table's row count.
   const data = await makeGql(token)<{ listStudentProfiles: { items: { email: string }[] } }>(
     /* GraphQL */`
       query StudentEmail($userId: String!) {
-        listStudentProfiles(filter: { userId: { eq: $userId } }, limit: 1) {
+        listStudentProfiles(filter: { userId: { eq: $userId } }, limit: 1000) {
           items { email }
         }
       }
     `,
     { userId }
   )
-  return data?.listStudentProfiles.items[0]?.email ?? null
+  return data?.listStudentProfiles?.items?.[0]?.email ?? null
 }
 
 /** Emails of every student a parent is linked to. Empty if none. */
@@ -59,7 +65,7 @@ export async function resolveLinkedStudentEmails(token: string, parentId: string
   const data = await makeGql(token)<{ listParentStudents: { items: { studentEmail: string }[] } }>(
     /* GraphQL */`
       query LinkedStudents($parentId: String!) {
-        listParentStudents(filter: { parentId: { eq: $parentId } }, limit: 50) {
+        listParentStudents(filter: { parentId: { eq: $parentId } }, limit: 1000) {
           items { studentEmail }
         }
       }
@@ -84,7 +90,10 @@ export async function canReadSubmissionKey(auth: AuthUser, key: string): Promise
   let entitled: string[] = []
   if (auth.role === 'student') {
     const email = await resolveStudentEmail(auth.token, auth.userId)
-    entitled = email ? [email] : []
+    // Both identifiers: /api/submit namespaces keys by email, while QR/phone
+    // uploads historically namespaced by the Cognito sub. Entitling both lets
+    // a student read all of their own work regardless of which path wrote it.
+    entitled = email ? [email, auth.userId] : [auth.userId]
   } else if (auth.role === 'parent') {
     entitled = await resolveLinkedStudentEmails(auth.token, auth.userId)
   }

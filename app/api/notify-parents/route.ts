@@ -26,7 +26,7 @@ function makeAppsync(token: string) {
 
 const listParentStudentsByEmail = `
   query ListParentStudents($filter: ModelParentStudentFilterInput) {
-    listParentStudents(filter: $filter, limit: 10) {
+    listParentStudents(filter: $filter, limit: 1000) {
       items { id parentId studentEmail }
     }
   }
@@ -34,7 +34,7 @@ const listParentStudentsByEmail = `
 
 const listParentProfilesByUserId = `
   query ListParentProfiles($filter: ModelParentProfileFilterInput) {
-    listParentProfiles(filter: $filter, limit: 10) {
+    listParentProfiles(filter: $filter, limit: 1000) {
       items { id userId email firstName lastName }
     }
   }
@@ -42,7 +42,7 @@ const listParentProfilesByUserId = `
 
 const listUsedParentInvitesByStudent = `
   query ListParentInvites($filter: ModelParentInviteFilterInput) {
-    listParentInvites(filter: $filter, limit: 10) {
+    listParentInvites(filter: $filter, limit: 1000) {
       items { id studentEmail used parentEmail parentFirstName parentLastName }
     }
   }

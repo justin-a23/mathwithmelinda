@@ -114,7 +114,20 @@ function ProfileSetupInner() {
 
   useEffect(() => {
     getCurrentUser()
-      .then(u => {
+      .then(async u => {
+        // Staff must not create student profiles — a teacher/admin who lands
+        // here (e.g. while testing) would mint a StudentProfile row that then
+        // shows up in the roster's request lists, where the Delete button
+        // removes the Cognito account: for an admin, their real login.
+        try {
+          const { fetchAuthSession } = await import('aws-amplify/auth')
+          const session = await fetchAuthSession()
+          const groups = (session.tokens?.accessToken?.payload?.['cognito:groups'] as string[] | undefined) ?? []
+          if (groups.includes('teacher') || groups.includes('admin')) {
+            router.replace('/teacher')
+            return
+          }
+        } catch { /* group check is best-effort; students proceed */ }
         setCurrentUser(u as CurrentUser)
         checkExistingProfile(u as CurrentUser)
         fetchCourses()

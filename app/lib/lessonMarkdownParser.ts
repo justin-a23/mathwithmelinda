@@ -287,7 +287,21 @@ export function parseLessonMarkdown(raw: string): ParsedLesson {
     const choices = choicesRaw ? choicesRaw.split(/\s*\|\s*/).map(c => c.trim()).filter(Boolean) : undefined
 
     const answerLine = block.body.find(ln => /^\s*[-*]\s+Answer:/i.test(ln))
-    const correctAnswer = answerLine ? extractField(answerLine, 'Answer') || undefined : undefined
+    let correctAnswer = answerLine ? extractField(answerLine, 'Answer') || undefined : undefined
+
+    // Lesson-creator drafts habitually end show_work questions with
+    // "(Final answer: 27)" as a grading aid — but questionText is shown to
+    // students on screen AND on the printed worksheet, so the answer key was
+    // being handed out with the question. Move it into correctAnswer, which
+    // is a teacher-only field.
+    if (kind === 'question' && text) {
+      const fa = text.match(/^(.*?)[\s]*\(Final answer:\s*(.+?)\)\s*$/i)
+      if (fa) {
+        text = fa[1].trim()
+        if (!correctAnswer) correctAnswer = fa[2].trim()
+        warnings.push(`Q${declaredNum}: "(Final answer: …)" moved out of the student-visible question text into the answer key.`)
+      }
+    }
 
     let diagramSpec: string | undefined
     const diagramInlineLine = block.body.find(ln => /^\s*[-*]\s+Diagram:\s*\{/.test(ln))

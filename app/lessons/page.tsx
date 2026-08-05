@@ -1295,10 +1295,13 @@ function LessonPageInner() {
                                       </div>
                                     )}
                                     {q.questionType === 'show_work' && (
-                                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'var(--plum-light)', border: '1px solid var(--plum-mid)', borderRadius: '6px', padding: '5px 10px', marginTop: '4px' }}>
+                                      <button
+                                        onClick={printShowWorkSheet}
+                                        title="Opens the printable worksheet with every show-work problem"
+                                        style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'var(--plum-light)', border: '1px solid var(--plum-mid)', borderRadius: '6px', padding: '5px 10px', marginTop: '4px', cursor: 'pointer', fontFamily: 'var(--font-body)' }}>
                                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--plum)" strokeWidth="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
-                                        <span style={{ fontSize: '12px', color: 'var(--plum)', fontWeight: 500 }}>Show work on printed sheet</span>
-                                      </div>
+                                        <span style={{ fontSize: '12px', color: 'var(--plum)', fontWeight: 500 }}>Show work on printed sheet — Print</span>
+                                      </button>
                                     )}
                                   </div>
                                 )

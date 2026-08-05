@@ -10,6 +10,18 @@ import { apiFetch } from '@/app/lib/apiFetch'
 
 const client = generateClient()
 
+// Staff accounts (Melinda, Justin-as-admin) can end up with a StudentProfile
+// row from early testing of the signup flow. They must never appear in the
+// student lists — the declined-request Delete button removes the Cognito
+// account, which for an admin would destroy their real login.
+const listStaffProfilesQuery = /* GraphQL */`
+  query ListTeacherProfiles {
+    listTeacherProfiles(limit: 100) {
+      items { userId }
+    }
+  }
+`
+
 const listStudentProfilesQuery = /* GraphQL */`
   query ListStudentProfiles {
     listStudentProfiles(limit: 500) {
@@ -408,7 +420,13 @@ export default function StudentsPage() {
 
   async function fetchStudents() {
     const result = await client.graphql({ query: listStudentProfilesQuery }) as any
-    const items = result.data.listStudentProfiles.items as Student[]
+    let items = result.data.listStudentProfiles.items as Student[]
+    // Drop rows belonging to staff (see listStaffProfilesQuery comment)
+    try {
+      const staffRes = await client.graphql({ query: listStaffProfilesQuery }) as any
+      const staffIds = new Set((staffRes.data.listTeacherProfiles.items as { userId: string }[]).map(t => t.userId))
+      items = items.filter(s => !staffIds.has(s.userId))
+    } catch { /* if the staff lookup fails, show everything rather than hide students */ }
     setStudents(items)
     // Load profile pic URLs for students that have one
     const withPics = items.filter(s => s.profilePictureKey)

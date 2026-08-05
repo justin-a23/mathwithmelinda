@@ -28,7 +28,7 @@ async function userHasParentStudentLink(token: string, userId: string): Promise<
   const json: any = await gql(
     /* GraphQL */`
       query CheckParentLink($parentId: String!) {
-        listParentStudents(filter: { parentId: { eq: $parentId } }, limit: 1) {
+        listParentStudents(filter: { parentId: { eq: $parentId } }, limit: 1000) {
           items { id }
         }
       }
