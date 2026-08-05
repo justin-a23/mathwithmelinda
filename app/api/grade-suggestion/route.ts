@@ -62,6 +62,7 @@ export async function POST(req: NextRequest) {
       answers,        // { [questionId]: string } — student's digital answers
       teachingNotes,  // Abeka/curriculum method notes from the lesson template
       lockedResults,  // { [questionId]: boolean } — teacher's manual overrides to preserve
+      recentComments, // string[] — this student's most recent graded comments, for variety
     } = await req.json()
 
     const locked: Record<string, boolean> = lockedResults || {}
@@ -168,7 +169,7 @@ HOW TO WRITE THE COMMENT — THIS IS THE MOST IMPORTANT PART
 The comment is what the student reads. It must sound like a real teacher who actually taught the lesson — not generic AI praise.
 
 STRUCTURE (in this order):
-1. Greet the student by first name and praise something specific they got right${firstName ? ` ("Great job, ${firstName}!" or "Nice work, ${firstName}!")` : ''}.
+1. Greet the student by first name and praise something specific they got right. Vary how you open — a greeting is not a formula. Sometimes lead with the specific thing they did well, sometimes with the name, sometimes with an observation about their progress.
 2. For each topic/problem they got WRONG, walk through the actual procedure step-by-step. Don't just state the right answer — TEACH the method. Show the work the way a teacher would explain it at the board.
 3. End with brief encouragement.
 
@@ -207,6 +208,13 @@ Translate it:
 - Multiplication: × or words — never \\cdot or *.
 A student (and Melinda) reading "$9^2$" as literal text finds it confusing —
 write the way a teacher writes on paper.
+
+═══════════════════════════════════════════════════════════════
+DO NOT REPEAT YOURSELF — RECENT COMMENTS TO THIS STUDENT
+═══════════════════════════════════════════════════════════════
+${Array.isArray(recentComments) && recentComments.length > 0 ? `This student has already received the comments below (most recent first). A student who gets twenty nearly identical notes stops reading them. Write THIS comment with a different opening, different praise phrasing, and a different closing than any of these. Same warm teacher, fresh words.
+
+${recentComments.map((c: string, i: number) => `--- previous comment ${i + 1} ---\n${c}`).join('\n')}` : 'No prior comments available for this student — write naturally.'}
 
 ═══════════════════════════════════════════════════════════════
 GRADING RULES

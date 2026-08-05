@@ -636,6 +636,14 @@ function GradingPageInner() {
       const lessonTitle = getSubmissionTitle(selectedSubmission)
       const digitalAnswers: Record<string, string> = parsed.answers || {}
       const isRegrade = Object.keys(questionResults).length > 0
+      // The student's most recent graded comments — the model is told to vary
+      // its voice against these so one student doesn't get twenty near-identical
+      // "Great job, John!" openers across a semester.
+      const recentComments = submissions
+        .filter(s2 => s2.studentId === selectedSubmission.studentId && s2.id !== selectedSubmission.id && s2.teacherComment)
+        .sort((a, b) => (b.submittedAt || '').localeCompare(a.submittedAt || ''))
+        .slice(0, 4)
+        .map(s2 => (s2.teacherComment || '').slice(0, 400))
       const res = await apiFetch('/api/grade-suggestion', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -649,6 +657,7 @@ function GradingPageInner() {
           teachingNotes: lessonTeachingNotes,
           // On re-grade, pass Melinda's manual overrides so AI respects them
           lockedResults: isRegrade ? manualOverrides : {},
+          recentComments,
         }),
       })
       const data = await res.json()
