@@ -148,6 +148,18 @@ function formatDueTime(dueTime: string | null): string {
   } catch { return dueTime }
 }
 
+/** "Tue 8/4, 5:00 PM" when dueTime embeds a date, else just the time. */
+function formatDueLabel(dueTime: string | null): string {
+  const time = formatDueTime(dueTime)
+  if (dueTime && dueTime.includes('T') && dueTime.length > 10) {
+    const dd = new Date(dueTime.split('T')[0] + 'T00:00:00')
+    if (!isNaN(dd.getTime())) {
+      return `${dd.toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' })}, ${time}`
+    }
+  }
+  return time
+}
+
 function getStudentLabel(assignedStudentIds: string | null, studentMap: Record<string, string>): string {
   if (!assignedStudentIds) return 'All students'
   try {
@@ -294,7 +306,11 @@ export default function ManagePlansPage() {
           const lessonTitle = item.lesson?.title || 'a lesson'
           const courseTitle = plan.course?.title || ''
           const weekDate = new Date(plan.weekStartDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric' })
-          const dayLabel = item.dayOfWeek ? `Due: ${item.dayOfWeek}${item.dueTime ? ` by ${formatDueTime(item.dueTime)}` : ''}` : ''
+          // Use dueTime's embedded date — item.dayOfWeek is the day the lesson
+          // belongs to, and Monday's lesson is typically due Tuesday.
+          const dayLabel = item.dueTime
+            ? `Due: ${formatDueLabel(item.dueTime)}`
+            : item.dayOfWeek ? `Due: ${item.dayOfWeek}` : ''
 
           let studentIds: string[] = []
           if (plan.assignedStudentIds) {
@@ -563,9 +579,10 @@ export default function ManagePlansPage() {
                                 {item.lesson?.title || 'Untitled'}
                               </span>
 
-                              {/* Due time */}
+                              {/* Due date + time (from dueTime's embedded date — the
+                                  bold day on the left is the lesson's day, not the deadline) */}
                               <span style={{ fontSize: '13px', color: 'var(--gray-mid)', whiteSpace: 'nowrap', minWidth: '80px', textAlign: 'right' }}>
-                                {formatDueTime(item.dueTime)}
+                                {formatDueLabel(item.dueTime)}
                               </span>
 
                               {/* Publish toggle */}

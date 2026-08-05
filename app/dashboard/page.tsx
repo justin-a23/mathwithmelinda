@@ -1063,10 +1063,19 @@ export default function Dashboard() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   {visibleItems.map((item) => {
                     let dueLabel = '5:00 PM'
+                    // The due DAY comes from dueTime's embedded date, not from
+                    // item.dayOfWeek — that's the day the lesson belongs to.
+                    // Monday's lesson is typically due Tuesday; labeling it
+                    // "Due Monday" showed a day earlier than the real deadline.
+                    let dueDayLabel = item.dayOfWeek
                     if (item.dueTime) {
                       const t = item.dueTime.includes('T') ? item.dueTime.split('T')[1] : item.dueTime
                       const d = new Date('2000-01-01T' + t)
                       if (!isNaN(d.getTime())) dueLabel = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+                      if (item.dueTime.includes('T') && item.dueTime.length > 10) {
+                        const dd = new Date(item.dueTime.split('T')[0] + 'T00:00:00')
+                        if (!isNaN(dd.getTime())) dueDayLabel = dd.toLocaleDateString('en-US', { weekday: 'long', month: 'numeric', day: 'numeric' })
+                      }
                     }
 
                     const dueStatus = getDueStatus(plan.weekStartDate, item.dayOfWeek, item.dueTime)
@@ -1104,7 +1113,7 @@ export default function Dashboard() {
                           </div>
                           <div style={{ textAlign: 'right', flexShrink: 0 }}>
                             <div style={{ fontSize: '12px', color: isOverdue ? '#b91c1c' : 'var(--gray-mid)', marginBottom: '8px' }}>
-                              Due {item.dayOfWeek} by {dueLabel}
+                              Due {dueDayLabel} by {dueLabel}
                             </div>
                             <span style={{ background: isOverdue ? '#b91c1c' : 'var(--plum)', color: 'white', fontSize: '12px', padding: '4px 12px', borderRadius: '20px' }}>
                               {isOverdue ? 'Open Late →' : 'Watch →'}
