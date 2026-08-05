@@ -46,6 +46,7 @@ export async function POST(request: NextRequest) {
     } else {
       const ownEmail = await resolveStudentEmail(auth.token, auth.userId)
       if (!ownEmail) {
+        console.error(`submit rejected: no StudentProfile resolved for sub ${auth.userId}`)
         return NextResponse.json(
           { error: 'No student profile found for this account. Ask your teacher to approve your profile.' },
           { status: 403 }
@@ -68,6 +69,7 @@ export async function POST(request: NextRequest) {
     // Server-side file type validation via magic bytes
     const typeCheck = validateFileType(buffer)
     if (!typeCheck.valid) {
+      console.error(`submit rejected: bad file type "${typeCheck.detectedType}" (client said "${file.type}", name "${file.name}", ${file.size} bytes)`)
       return NextResponse.json(
         { error: `Unsupported file type (${typeCheck.detectedType}). Please upload a JPEG, PNG, HEIC, WebP, or PDF file.` },
         { status: 400 }

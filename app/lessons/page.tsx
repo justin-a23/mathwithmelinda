@@ -67,7 +67,6 @@ const getLessonTemplateQuery = /* GraphQL */`
           questionText
           questionType
           choices
-          correctAnswer
           diagramKey
           diagramSpec
         }
@@ -130,7 +129,11 @@ type AssignmentQuestion = {
   questionText: string
   questionType: string
   choices: string | null
-  correctAnswer: string | null
+  // correctAnswer is deliberately NOT selected here: the field is
+  // teacher-only (see AssignmentQuestion in amplify/data/resource.ts), and
+  // selecting it as a student makes AppSync error the whole query — which
+  // this page's catch used to swallow, leaving the student with a bare
+  // upload box instead of their questions.
   diagramKey: string | null
   diagramSpec: string | null
 }
@@ -153,6 +156,7 @@ type UploadedFile = {
   progress: number
   previewUrl?: string   // object URL for in-browser thumbnail (standard images only)
   warning?: string      // quality warning (landscape, low-res, etc.)
+  errorMessage?: string // server's reason when status === 'error'
 }
 
 // Extract page index from order field: order = pageIndex * 1000 + sequence
@@ -640,9 +644,12 @@ function LessonPageInner() {
       }
       const { key } = await res.json()
       setFiles(prev => prev.map(f => f.uid === uid ? { ...f, key, status: 'done', progress: 100 } : f))
-    } catch (err) {
+    } catch (err: any) {
       console.error(err)
-      setFiles(prev => prev.map(f => f.uid === uid ? { ...f, status: 'error' } : f))
+      // Keep the server's reason on the card — "Upload failed" alone gives the
+      // student (and whoever is debugging) nothing to act on.
+      const message = err?.message && err.message !== 'Failed to fetch' ? err.message : undefined
+      setFiles(prev => prev.map(f => f.uid === uid ? { ...f, status: 'error', errorMessage: message } : f))
     }
   }
 
@@ -1311,14 +1318,27 @@ function LessonPageInner() {
                         onUploadFile={uploadFile}
                         onAddQrFiles={(keys) => {
                           keys.forEach(key => {
+                            const uid = `qr-${Date.now()}-${Math.random().toString(36).slice(2)}`
                             const name = key.split('/').pop() || 'phone-upload.jpg'
                             setFiles(prev => [...prev, {
-                              uid: `qr-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+                              uid,
                               name: `📱 ${name}`,
                               key,
                               status: 'done',
                               progress: 100,
                             }])
+                            // Phone uploads land in S3 directly, so there's no local
+                            // blob to preview — fetch a presigned view URL instead.
+                            apiFetch('/api/view-submission', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ key }),
+                            })
+                              .then(r => r.ok ? r.json() : null)
+                              .then(d => {
+                                if (d?.url) setFiles(prev => prev.map(f => f.uid === uid ? { ...f, previewUrl: d.url } : f))
+                              })
+                              .catch(() => { /* preview is best-effort */ })
                           })
                         }}
                         hasShowWork={hasShowWork}
@@ -1347,7 +1367,7 @@ function LessonPageInner() {
                                     {f.status === 'uploading' && <span style={{ color: 'var(--gray-mid)' }}>Uploading…</span>}
                                     {f.status === 'done' && !f.warning && <span style={{ color: '#16a34a', fontWeight: 600 }}>✓ Ready</span>}
                                     {f.status === 'done' && f.warning && <span style={{ color: '#92400e', fontWeight: 600 }}>✓ Uploaded</span>}
-                                    {f.status === 'error' && <span style={{ color: '#dc2626', fontWeight: 600 }}>Upload failed — try again</span>}
+                                    {f.status === 'error' && <span style={{ color: '#dc2626', fontWeight: 600 }}>{f.errorMessage || 'Upload failed — try again'}</span>}
                                   </div>
                                 </div>
                                 {/* Remove */}
