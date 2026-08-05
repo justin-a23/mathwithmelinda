@@ -95,7 +95,26 @@ export async function canReadSubmissionKey(auth: AuthUser, key: string): Promise
     // a student read all of their own work regardless of which path wrote it.
     entitled = email ? [email, auth.userId] : [auth.userId]
   } else if (auth.role === 'parent') {
-    entitled = await resolveLinkedStudentEmails(auth.token, auth.userId)
+    const emails = await resolveLinkedStudentEmails(auth.token, auth.userId)
+    entitled = [...emails]
+    // Children's subs too: QR/phone uploads made before tokens minted with the
+    // email namespaced their S3 keys by the Cognito sub, and a parent viewing
+    // that work would otherwise 403 on keys their own child wrote.
+    if (emails.length > 0) {
+      const data = await makeGql(auth.token)<{ listStudentProfiles: { items: { userId: string }[] } }>(
+        /* GraphQL */`
+          query ChildSubs($filter: ModelStudentProfileFilterInput) {
+            listStudentProfiles(filter: $filter, limit: 1000) {
+              items { userId }
+            }
+          }
+        `,
+        { filter: { or: emails.map(e => ({ email: { eq: e } })) } }
+      )
+      for (const p of data?.listStudentProfiles?.items ?? []) {
+        if (p.userId) entitled.push(p.userId)
+      }
+    }
   }
 
   return canReadSubmissionKeyGiven(auth, key, entitled)

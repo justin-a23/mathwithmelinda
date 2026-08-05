@@ -23,7 +23,17 @@ const client = generateClient()
 const getStudentSubByEmail = /* GraphQL */`
   query GetStudentSubByEmail($email: String!) {
     listStudentProfiles(filter: { email: { eq: $email } }, limit: 1000) {
-      items { userId }
+      items { userId courseId }
+    }
+  }
+`
+
+// Grade-letter thresholds live on the Semester (Melinda configures them per
+// course). One small scan; falls back to the standard 90/80/70/60 scale.
+const listSemestersForScale = /* GraphQL */`
+  query ListSemestersForScale {
+    listSemesters(limit: 200) {
+      items { id courseId isActive gradeA gradeB gradeC gradeD }
     }
   }
 `
@@ -94,6 +104,7 @@ export default function ParentDashboard() {
   const { theme, toggleTheme } = useTheme()
   const [children, setChildren] = useState<Child[]>([])
   const [selectedChild, setSelectedChild] = useState<Child | null>(null)
+  const [gradeScale, setGradeScale] = useState({ a: 90, b: 80, c: 70, d: 60 })
   const [submissions, setSubmissions] = useState<Submission[]>([])
   const [loadingChildren, setLoadingChildren] = useState(true)
   const [loadingSubmissions, setLoadingSubmissions] = useState(false)
@@ -140,7 +151,17 @@ export default function ParentDashboard() {
         query: getStudentSubByEmail,
         variables: { email: studentEmail }
       }) as any
-      const studentSub = profileRes.data.listStudentProfiles.items[0]?.userId
+      const childProfile = profileRes.data.listStudentProfiles.items[0]
+      const studentSub = childProfile?.userId
+      // Resolve the child's course's active-semester grade scale (best-effort)
+      if (childProfile?.courseId) {
+        try {
+          const semRes = await (client.graphql({ query: listSemestersForScale }) as any)
+          const sems = semRes.data.listSemesters.items as any[]
+          const sem = sems.find(x => x.courseId === childProfile.courseId && x.isActive) || sems.find(x => x.courseId === childProfile.courseId)
+          if (sem) setGradeScale({ a: sem.gradeA ?? 90, b: sem.gradeB ?? 80, c: sem.gradeC ?? 70, d: sem.gradeD ?? 60 })
+        } catch { /* keep default scale */ }
+      }
       if (!studentSub) {
         // Linked child has no profile — invited but never signed up, or archived.
         setSubmissions([])
@@ -165,6 +186,27 @@ export default function ParentDashboard() {
     }
   }
 
+  function courseLabel(sub: Submission): string {
+    if (sub.assignment?.course?.title) return sub.assignment.course.title
+    // Schedule-flow submissions carry their labels in the content JSON, not
+    // the (null) assignment relation — same source the teacher pages read.
+    try { return JSON.parse(sub.content || '{}').courseTitle || 'Course' } catch { return 'Course' }
+  }
+
+  function lessonLabel(sub: Submission): string {
+    if (sub.assignment?.title) return sub.assignment.title
+    try { return JSON.parse(sub.content || '{}').lessonTitle || 'Lesson' } catch { return 'Lesson' }
+  }
+
+  function letterFor(avg: number): string {
+    const t = gradeScale
+    if (avg >= t.a) return 'A'
+    if (avg >= t.b) return 'B'
+    if (avg >= t.c) return 'C'
+    if (avg >= t.d) return 'D'
+    return 'F'
+  }
+
   async function openSubmission(sub: Submission) {
     setSelectedSubmission(sub)
     setImageUrls([])
@@ -179,11 +221,13 @@ export default function ParentDashboard() {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ key })
             })
+            if (!res.ok) return null
             const { url } = await res.json()
-            return url
+            return url || null
           })
         )
-        setImageUrls(urls)
+        // Drop failures rather than rendering broken <img> tags
+        setImageUrls(urls.filter(Boolean))
       }
     } catch {}
   }
@@ -272,7 +316,10 @@ export default function ParentDashboard() {
                     const avg = numGrades.reduce((a, b) => a + b, 0) / numGrades.length
                     return (
                       <div style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', padding: '16px 24px', minWidth: '120px' }}>
-                        <div style={{ fontFamily: 'var(--font-display)', fontSize: '28px', color: 'var(--foreground)' }}>{avg.toFixed(1)}</div>
+                        <div style={{ fontFamily: 'var(--font-display)', fontSize: '28px', color: 'var(--foreground)', display: 'flex', alignItems: 'baseline', gap: '10px' }}>
+                          {avg.toFixed(1)}
+                          <span style={{ fontSize: '18px', fontWeight: 700, color: 'var(--plum)', background: 'var(--plum-light)', borderRadius: '6px', padding: '1px 9px' }}>{letterFor(avg)}</span>
+                        </div>
                         <div style={{ fontSize: '12px', color: 'var(--gray-mid)', fontWeight: 500 }}>Avg Grade</div>
                       </div>
                     )
@@ -300,10 +347,10 @@ export default function ParentDashboard() {
                               onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 2px 8px rgba(123,79,166,0.12)')}
                               onMouseLeave={e => (e.currentTarget.style.boxShadow = 'none')}>
                               <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--foreground)', marginBottom: '3px' }}>
-                                {sub.assignment?.course?.title || 'Unknown course'}
+                                {courseLabel(sub)}
                               </div>
                               <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginBottom: '3px' }}>
-                                {sub.assignment?.title || 'Unknown lesson'}
+                                {lessonLabel(sub)}
                               </div>
                               <div style={{ fontSize: '11px', color: 'var(--gray-mid)' }}>
                                 {sub.submittedAt ? new Date(sub.submittedAt).toLocaleDateString() : ''}
@@ -324,12 +371,12 @@ export default function ParentDashboard() {
                               onMouseLeave={e => (e.currentTarget.style.boxShadow = 'none')}>
                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
                                 <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--foreground)' }}>
-                                  {sub.assignment?.course?.title || 'Unknown course'}
+                                  {courseLabel(sub)}
                                 </div>
                                 <span style={{ background: 'var(--plum)', color: 'white', fontSize: '11px', padding: '2px 8px', borderRadius: '20px' }}>{sub.grade}</span>
                               </div>
                               <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginBottom: '3px' }}>
-                                {sub.assignment?.title || 'Unknown lesson'}
+                                {lessonLabel(sub)}
                               </div>
                               <div style={{ fontSize: '11px', color: 'var(--gray-mid)' }}>
                                 {sub.submittedAt ? new Date(sub.submittedAt).toLocaleDateString() : ''}
@@ -347,10 +394,10 @@ export default function ParentDashboard() {
                   <div style={{ flex: 1 }}>
                     <div style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', padding: '28px' }}>
                       <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', color: 'var(--foreground)', marginBottom: '4px' }}>
-                        {selectedSubmission.assignment?.title || 'Submission'}
+                        {lessonLabel(selectedSubmission)}
                       </h2>
                       <p style={{ color: 'var(--gray-mid)', fontSize: '13px', marginBottom: '24px' }}>
-                        {selectedSubmission.assignment?.course?.title}
+                        {courseLabel(selectedSubmission)}
                         {selectedSubmission.submittedAt ? ` · Submitted ${new Date(selectedSubmission.submittedAt).toLocaleDateString()}` : ''}
                       </p>
 
