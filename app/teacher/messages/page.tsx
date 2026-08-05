@@ -34,6 +34,17 @@ const LIST_ENROLLMENTS = /* GraphQL */ `
   }
 `
 
+// The announce course filter lists every course from the Course table.
+// It used to be derived from enrollment rows, so a course with no enrolled
+// students (or only stale enrollments) simply vanished from the dropdown.
+const LIST_ALL_COURSES = /* GraphQL */ `
+  query ListAllCourses {
+    listCourses(limit: 100) {
+      items { id title isArchived }
+    }
+  }
+`
+
 const LIST_ANNOUNCEMENTS = /* GraphQL */ `
   query ListAnnouncements {
     listAnnouncements(limit: 200) {
@@ -178,9 +189,10 @@ export default function TeacherMessagesPage() {
 
   async function loadStudents() {
     try {
-      const [studentsRes, enrollmentsRes] = await Promise.all([
+      const [studentsRes, enrollmentsRes, coursesRes] = await Promise.all([
         client.graphql({ query: LIST_STUDENTS }) as any,
         client.graphql({ query: LIST_ENROLLMENTS }) as any,
+        client.graphql({ query: LIST_ALL_COURSES }) as any,
       ])
       const items = studentsRes.data.listStudentProfiles.items
       const list = items
@@ -193,18 +205,25 @@ export default function TeacherMessagesPage() {
       setStudents(list)
       setSelectedStudentIds(new Set(list.map((s: any) => s.userId)))
 
-      // Build studentId → courseId map from enrollments
+      // Build studentId → courseId map from enrollments (recipient filtering)
       const enrollments: any[] = enrollmentsRes.data.listEnrollments.items
       const courseMap: Record<string, string> = {}
-      const courseSet = new Map<string, string>() // courseId → title
       for (const e of enrollments) {
         if (e.studentId && e.course?.id) {
           courseMap[e.studentId] = e.course.id
-          courseSet.set(e.course.id, e.course.title)
         }
       }
       setStudentCourseMap(courseMap)
-      setCourses(Array.from(courseSet.entries()).map(([id, title]) => ({ id, title })).sort((a, b) => a.title.localeCompare(b.title)))
+
+      // Course dropdown comes from the Course table itself — every active
+      // course is offered, whether or not anyone is enrolled yet
+      const allCourses: any[] = coursesRes.data.listCourses.items
+      setCourses(
+        allCourses
+          .filter((c: any) => !c.isArchived)
+          .map((c: any) => ({ id: c.id, title: c.title }))
+          .sort((a: any, b: any) => a.title.localeCompare(b.title))
+      )
     } catch (err) {
       console.error('Error loading students:', err)
     }
