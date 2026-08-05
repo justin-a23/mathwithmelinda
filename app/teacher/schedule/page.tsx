@@ -73,6 +73,9 @@ function ScheduleWeekInner() {
       isInClass: day === 'Friday'
     }))
   )
+  // Extra assignments beyond the Mon–Fri grid — same shape as a day row, but
+  // the due date is teacher-chosen rather than derived from the week start.
+  const [extras, setExtras] = useState<DayPlan[]>([])
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [saveError, setSaveError] = useState('')
@@ -199,8 +202,50 @@ function ScheduleWeekInner() {
     setDays(updated)
   }
 
+  function addExtra() {
+    setExtras(prev => [...prev, {
+      day: 'Additional',
+      lessonTemplateId: '',
+      lessonNumber: '',
+      lessonTitle: '',
+      instructions: '',
+      videoUrl: '',
+      dueDate: '',
+      dueTime: '17:00',
+      isPublished: false,
+      isInClass: false,
+    }])
+  }
+
+  function removeExtra(index: number) {
+    setExtras(prev => prev.filter((_, i) => i !== index))
+  }
+
+  function selectExtraLesson(index: number, templateId: string) {
+    const template = lessonTemplates.find(t => t.id === templateId)
+    if (!template) return
+    setExtras(prev => prev.map((x, i) => i !== index ? x : {
+      ...x,
+      lessonTemplateId: templateId,
+      lessonNumber: String(template.lessonNumber),
+      lessonTitle: template.title,
+      instructions: template.instructions || '',
+      videoUrl: template.videoUrl || '',
+    }))
+  }
+
+  function updateExtra(index: number, field: keyof DayPlan, value: string | boolean) {
+    setExtras(prev => prev.map((x, i) => i !== index ? x : { ...x, [field]: value }))
+  }
+
   async function saveSchedule() {
     if (!selectedCourseId || !weekStartDate) return
+    // The Mon–Fri rows get default due dates from the week start, but an
+    // additional assignment's whole point is a chosen date — refuse to guess.
+    if (extras.some(x => x.lessonNumber && !x.dueDate)) {
+      setSaveError('Each additional assignment needs a due date.')
+      return
+    }
     setSaving(true)
     setSaveError('')
     try {
@@ -220,7 +265,7 @@ function ScheduleWeekInner() {
       const planId = planResult.data?.createWeeklyPlan?.id
       if (!planId) throw new Error('Failed to create weekly plan — no ID returned.')
 
-      for (const day of days) {
+      for (const day of [...days, ...extras]) {
         if (!day.lessonNumber) continue
         const lessonResult = await (client.graphql({
           query: createLesson,
@@ -271,7 +316,7 @@ function ScheduleWeekInner() {
         {selectedCourseName && (
           <p style={{ color: 'var(--plum)', fontWeight: 500, marginBottom: '4px', fontSize: '15px' }}>{selectedCourseName}</p>
         )}
-        <p style={{ color: 'var(--gray-mid)', marginBottom: '40px' }}>Select a week, assign students, then pick lessons for each day.</p>
+        <p style={{ color: 'var(--gray-mid)', marginBottom: '40px' }}>Select a week, assign students, then pick lessons for each day. Use “Add Additional Work” for extra assignments due on dates you choose.</p>
 
         {/* Course selector — only shown if no courseId in URL */}
         {!preselectedCourseId && (
@@ -397,6 +442,76 @@ function ScheduleWeekInner() {
               </div>
             </div>
           ))}
+        </div>
+
+        {/* Additional assignments — beyond the Mon–Fri grid, due on chosen dates */}
+        {extras.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '16px' }}>
+            {extras.map((extra, i) => (
+              <div key={i} style={{ background: 'var(--background)', border: '1px dashed var(--plum-mid)', borderRadius: 'var(--radius)', padding: '20px' }}>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <div style={{ fontFamily: 'var(--font-display)', fontSize: '18px', color: 'var(--plum)' }}>
+                    Additional Assignment{extras.length > 1 ? ` ${i + 1}` : ''}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: 'var(--gray-dark)', cursor: 'pointer' }}>
+                      <input type="checkbox" checked={extra.isInClass} onChange={e => updateExtra(i, 'isInClass', e.target.checked)}/>
+                      In-class assignment
+                    </label>
+                    <button onClick={() => removeExtra(i)} title="Remove this assignment"
+                      style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--gray-mid)', fontSize: '20px', lineHeight: 1, padding: '0 4px' }}>×</button>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px 120px 80px', gap: '12px', alignItems: 'start' }}>
+                  <div>
+                    <select value={extra.lessonTemplateId} onChange={e => selectExtraLesson(i, e.target.value)}
+                      disabled={!selectedCourseId}
+                      style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--gray-light)', borderRadius: '6px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)' }}>
+                      <option value="">Select lesson...</option>
+                      {lessonTemplates.map(t => <option key={t.id} value={t.id}>Lesson {t.lessonNumber} — {t.title}</option>)}
+                    </select>
+                    {extra.lessonTemplateId && (
+                      <div style={{ marginTop: '6px', fontSize: '12px', fontWeight: 500, color: extra.videoUrl ? '#059669' : '#B45309' }}>
+                        {extra.videoUrl ? '✓ Video attached' : '⚠ No video for this lesson'}
+                      </div>
+                    )}
+                    <textarea
+                      value={extra.instructions}
+                      onChange={e => updateExtra(i, 'instructions', e.target.value)}
+                      rows={2}
+                      placeholder="Instructions for students..."
+                      style={{ marginTop: '8px', width: '100%', padding: '8px 12px', border: '1px solid var(--gray-light)', borderRadius: '6px', fontSize: '13px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)', resize: 'vertical' }}
+                    />
+                  </div>
+                  <div>
+                    <input type="date" value={extra.dueDate} onChange={e => updateExtra(i, 'dueDate', e.target.value)}
+                      style={{ width: '100%', padding: '8px 12px', border: `1px solid ${extra.lessonNumber && !extra.dueDate ? '#f59e0b' : 'var(--gray-light)'}`, borderRadius: '6px', fontSize: '13px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)' }}/>
+                    {extra.lessonNumber && !extra.dueDate && (
+                      <div style={{ marginTop: '4px', fontSize: '11px', color: '#B45309' }}>Pick a due date</div>
+                    )}
+                  </div>
+                  <div>
+                    <input type="time" value={extra.dueTime} onChange={e => updateExtra(i, 'dueTime', e.target.value)}
+                      style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--gray-light)', borderRadius: '6px', fontSize: '13px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)' }}/>
+                  </div>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--gray-dark)', cursor: 'pointer', paddingTop: '10px' }}>
+                    <input type="checkbox" checked={extra.isPublished} onChange={e => updateExtra(i, 'isPublished', e.target.checked)}/>
+                    Publish
+                  </label>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Add additional work */}
+        <div style={{ marginBottom: '32px' }}>
+          <button onClick={addExtra}
+            style={{ background: 'transparent', color: 'var(--plum)', border: '1px dashed var(--plum-mid)', borderRadius: '8px', padding: '10px 20px', cursor: 'pointer', fontSize: '14px', fontWeight: 500 }}>
+            + Add Additional Work
+          </button>
         </div>
 
         {/* Save */}

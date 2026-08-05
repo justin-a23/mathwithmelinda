@@ -1055,8 +1055,12 @@ export default function Dashboard() {
             const visibleItems = (plan.items?.items || [])
               .filter(item => item.isPublished && !(item.lesson?.id && submittedLessonIds.has(item.lesson.id)))
               .sort((a, b) => {
+                // Non-weekday items ("Additional" assignments) sort AFTER the
+                // week's lessons — indexOf gives them -1, which would put them first.
                 const order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
-                return order.indexOf(a.dayOfWeek) - order.indexOf(b.dayOfWeek)
+                const ai = order.indexOf(a.dayOfWeek)
+                const bi = order.indexOf(b.dayOfWeek)
+                return (ai < 0 ? order.length : ai) - (bi < 0 ? order.length : bi)
               })
             if (visibleItems.length === 0) return null
             return (
