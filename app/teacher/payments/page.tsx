@@ -57,6 +57,7 @@ type Payment = {
   paymentId: string; scheduleId: string; studentId: string; studentName: string; studentEmail: string
   familyName: string; courseName: string; type: 'deposit' | 'monthly'; month: string
   amount: number; datePaid: string | null; notes: string; isDiscounted: boolean; status: 'active' | 'waived' | 'excluded'
+  createdAt?: string
 }
 type Student = { id: string; userId: string; email: string; firstName: string; lastName: string; courseId: string; gradeLevel: string | null }
 type Course = { id: string; title: string }
@@ -93,6 +94,12 @@ export default function PaymentsPage() {
   const [semesterYearId, setSemesterYearId] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [paymentsLoading, setPaymentsLoading] = useState(false)
+  // Which schedule the payments state actually belongs to. The sync effect
+  // keys off this, NOT paymentsLoading — before the first load starts,
+  // paymentsLoading is still false, and a sync firing in that window saw an
+  // empty list and re-added slots for every student (duplicate rows that
+  // silently doubled the outstanding totals).
+  const [paymentsLoadedFor, setPaymentsLoadedFor] = useState<string | null>(null)
   const [syncNote, setSyncNote] = useState('')
   // One sync pass per schedule per page visit — the roster is re-checked on
   // every load, but a completed pass must not re-trigger from its own reload.
@@ -162,6 +169,7 @@ export default function PaymentsPage() {
       const res = await apiFetch(`/api/payments/${scheduleId}`)
       const data = await res.json()
       setPayments(data.payments || [])
+      setPaymentsLoadedFor(scheduleId)
       if (data.schedule) {
         setSchedules(prev => prev.map(s => s.scheduleId === scheduleId ? data.schedule : s))
       }
@@ -194,11 +202,13 @@ export default function PaymentsPage() {
   // the year disappear (if nothing was ever paid) or stay tagged "not
   // enrolled" (money history is never deleted).
   useEffect(() => {
-    if (loading || paymentsLoading || !selectedSchedule) return
+    if (loading || !selectedSchedule) return
+    // Only sync once the payments state provably belongs to this schedule
+    if (paymentsLoadedFor !== selectedSchedule.scheduleId) return
     if (syncedSchedulesRef.current.has(selectedSchedule.scheduleId)) return
     syncedSchedulesRef.current.add(selectedSchedule.scheduleId)
     syncRoster(selectedSchedule)
-  }, [loading, paymentsLoading, selectedScheduleId])
+  }, [loading, paymentsLoadedFor, selectedScheduleId])
 
   async function syncRoster(schedule: Schedule) {
     const enrolled = enrolledForSchedule(schedule)
@@ -212,6 +222,28 @@ export default function PaymentsPage() {
 
     const rowStudentIds = new Set(payments.map(p => p.studentId))
     let changed = false
+
+    // Cleanup: earlier syncs raced an empty payment list and duplicated every
+    // slot. For each student+month with multiple rows, keep the best one
+    // (paid beats unpaid, active beats waived/excluded, then oldest) and
+    // delete the rest.
+    const bySlot = new Map<string, Payment[]>()
+    for (const p of payments) {
+      const key = `${p.studentId}:${p.month}:${p.type}`
+      if (!bySlot.has(key)) bySlot.set(key, [])
+      bySlot.get(key)!.push(p)
+    }
+    for (const rows of bySlot.values()) {
+      if (rows.length < 2) continue
+      const rank = (p: Payment) => (p.datePaid ? 0 : p.status === 'active' ? 1 : 2)
+      const sorted = [...rows].sort((a, b) => rank(a) - rank(b) || (a.createdAt || '').localeCompare(b.createdAt || ''))
+      for (const dupe of sorted.slice(1)) {
+        try {
+          await apiFetch(`/api/payments/${schedule.scheduleId}/${dupe.paymentId}`, { method: 'DELETE' })
+          changed = true
+        } catch (err) { console.error('Duplicate cleanup failed:', err) }
+      }
+    }
 
     // Add: enrolled students without payment rows
     for (const [sub, courseId] of enrolled) {
@@ -838,13 +870,20 @@ export default function PaymentsPage() {
                 Changes reprice what&apos;s still unpaid — collected amounts never change.
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
+                {/* Column labels stay visible after typing — placeholder-only
+                    labels vanished the moment a value went in */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 130px 130px', gap: '10px' }}>
+                  <span></span>
+                  <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--gray-mid)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Monthly ($)</span>
+                  <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--gray-mid)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Deposit ($)</span>
+                </div>
                 {courses.map(c => (
                   <div key={c.id} style={{ display: 'grid', gridTemplateColumns: '1fr 130px 130px', gap: '10px', alignItems: 'center' }}>
                     <span style={{ fontSize: '14px', color: 'var(--foreground)', fontWeight: 500 }}>{c.title}</span>
-                    <input type="number" step="0.01" style={{ ...inputStyle, width: '100%' }} placeholder={`${(selectedSchedule.monthlyRate / 100).toFixed(2)}/mo`}
+                    <input type="number" step="0.01" style={{ ...inputStyle, width: '100%' }} placeholder={(selectedSchedule.monthlyRate / 100).toFixed(2)}
                       value={rateForm[c.title]?.monthly ?? ''}
                       onChange={e => setRateForm(f => ({ ...f, [c.title]: { monthly: e.target.value, deposit: f[c.title]?.deposit ?? '' } }))} />
-                    <input type="number" step="0.01" style={{ ...inputStyle, width: '100%' }} placeholder={`${(selectedSchedule.depositAmount / 100).toFixed(2)} dep`}
+                    <input type="number" step="0.01" style={{ ...inputStyle, width: '100%' }} placeholder={(selectedSchedule.depositAmount / 100).toFixed(2)}
                       value={rateForm[c.title]?.deposit ?? ''}
                       onChange={e => setRateForm(f => ({ ...f, [c.title]: { monthly: f[c.title]?.monthly ?? '', deposit: e.target.value } }))} />
                   </div>

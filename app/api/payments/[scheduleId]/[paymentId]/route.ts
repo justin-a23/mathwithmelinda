@@ -1,6 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireTeacher } from '@/app/lib/auth'
-import { updatePayment } from '@/app/lib/payments'
+import { updatePayment, deletePayment } from '@/app/lib/payments'
+
+/** DELETE — remove a single payment row (used to clean up duplicate slots) */
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ scheduleId: string; paymentId: string }> }
+) {
+  const auth = await requireTeacher(req)
+  if (auth instanceof NextResponse) return auth
+
+  try {
+    const { paymentId } = await params
+    await deletePayment(paymentId)
+    return NextResponse.json({ success: true })
+  } catch (err: any) {
+    console.error('Error deleting payment:', err)
+    return NextResponse.json({ error: err.message }, { status: 500 })
+  }
+}
 
 /** PATCH — update a payment (mark paid, change amount, add notes) */
 export async function PATCH(

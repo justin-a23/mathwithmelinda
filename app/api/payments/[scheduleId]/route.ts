@@ -79,6 +79,15 @@ export async function POST(
     const schedule = await getSchedule(scheduleId)
     if (!schedule) return NextResponse.json({ error: 'Schedule not found' }, { status: 404 })
 
+    // Idempotency guard: a client race (the roster sync firing against a
+    // not-yet-loaded payment list) once created a full duplicate set of slots,
+    // silently doubling what a student appeared to owe. Adding is a no-op if
+    // the student already has any rows in this schedule.
+    const existing = await listPaymentsForSchedule(scheduleId)
+    if (existing.some(p => p.studentId === studentId)) {
+      return NextResponse.json({ payments: [], alreadyPresent: true })
+    }
+
     const payments = await addStudentToSchedule(schedule, {
       studentId,
       studentName,

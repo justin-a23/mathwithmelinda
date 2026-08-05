@@ -389,25 +389,42 @@ export default function StudentSubmissions() {
                                 {nCorrect} of {gradable.length} correct
                               </span>
                             </div>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                            {/* Translucent tints + theme-var text, same treatment as
+                                My Grades — solid light fills made the answer text
+                                (var(--foreground) = near-white) invisible in dark mode. */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                               {gradable.map((g, i) => (
-                                <div key={g.id} style={{ padding: '12px 14px', background: g.correct ? '#F0FDF4' : '#FEF2F2', borderRadius: 'var(--radius)', border: `1px solid ${g.correct ? '#BBF7D0' : '#FECACA'}` }}>
-                                  <div style={{ display: 'flex', gap: '8px', fontSize: '13px', fontWeight: 600, color: g.correct ? '#166534' : '#991B1B', marginBottom: '6px' }}>
-                                    <span style={{ flexShrink: 0 }}>{g.correct ? '✓' : '✗'} {i + 1}.</span>
-                                    <MathRenderer text={g.questionText} />
+                                <div key={g.id} style={{
+                                  display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '10px 12px', borderRadius: '8px',
+                                  background: g.correct ? 'rgba(21,128,61,0.06)' : 'rgba(220,38,38,0.06)',
+                                  border: `1px solid ${g.correct ? 'rgba(21,128,61,0.15)' : 'rgba(220,38,38,0.15)'}`,
+                                }}>
+                                  <div style={{
+                                    width: 22, height: 22, borderRadius: '50%', flexShrink: 0, marginTop: '1px',
+                                    background: g.correct ? '#dcfce7' : '#fee2e2',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  }}>
+                                    {g.correct
+                                      ? <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#15803d" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
+                                      : <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="3"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>}
                                   </div>
-                                  <div style={{ fontSize: '14px', color: 'var(--foreground)' }}>
-                                    <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--gray-mid)' }}>Your answer: </span>
-                                    {g.studentAnswer
-                                      ? <MathRenderer text={g.studentAnswer} />
-                                      : <span style={{ color: 'var(--gray-mid)' }}>No answer given</span>}
-                                  </div>
-                                  {!g.correct && g.correctAnswer && (
-                                    <div style={{ fontSize: '14px', color: '#166534', marginTop: '4px' }}>
-                                      <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--gray-mid)' }}>Correct answer: </span>
-                                      <MathRenderer text={g.correctAnswer} />
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ display: 'flex', gap: '6px', fontSize: '13px', color: 'var(--foreground)', lineHeight: 1.5 }}>
+                                      <span style={{ fontWeight: 600, flexShrink: 0 }}>{i + 1}.</span>
+                                      <MathRenderer text={g.questionText} />
                                     </div>
-                                  )}
+                                    <div style={{ marginTop: '4px', fontSize: '13px', color: g.correct ? '#15803d' : '#dc2626' }}>
+                                      Your answer:{' '}
+                                      {g.studentAnswer
+                                        ? <span style={{ fontWeight: 600 }}><MathRenderer text={g.studentAnswer} /></span>
+                                        : <span style={{ fontStyle: 'italic' }}>No answer given</span>}
+                                    </div>
+                                    {!g.correct && g.correctAnswer && (
+                                      <div style={{ marginTop: '2px', fontSize: '13px', color: '#15803d' }}>
+                                        Correct answer: <span style={{ fontWeight: 600 }}><MathRenderer text={g.correctAnswer} /></span>
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
                               ))}
                             </div>

@@ -588,7 +588,9 @@ export default function StudentGradesPage() {
                                           const params = new URLSearchParams({
                                             gradeQuestion: '1',
                                             submissionId: ag.submissionId!,
-                                            lessonTitle: ag.col.title,
+                                            // Course name included so Melinda knows which class
+                                            // the question is about without cross-referencing
+                                            lessonTitle: [selectedSemester?.course?.title, ag.col.title].filter(Boolean).join(' '),
                                           })
                                           router.push(`/student/messages?${params.toString()}`)
                                         }}
