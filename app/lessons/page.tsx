@@ -1337,11 +1337,14 @@ function LessonPageInner() {
                               headers: { 'Content-Type': 'application/json' },
                               body: JSON.stringify({ key }),
                             })
-                              .then(r => r.ok ? r.json() : null)
+                              .then(r => {
+                                if (!r.ok) console.error(`phone photo preview failed: ${r.status} for ${key}`)
+                                return r.ok ? r.json() : null
+                              })
                               .then(d => {
                                 if (d?.url) setFiles(prev => prev.map(f => f.uid === uid ? { ...f, previewUrl: d.url } : f))
                               })
-                              .catch(() => { /* preview is best-effort */ })
+                              .catch(err => { console.error('phone photo preview failed:', err) })
                           })
                         }}
                         hasShowWork={hasShowWork}

@@ -24,6 +24,9 @@ export async function POST(request: NextRequest) {
 
     // The key is caller-supplied — being signed in is not enough to read it.
     if (!(await canReadSubmissionKey(auth, key))) {
+      // Denials are correct behavior for cross-student probing but a bug when
+      // a student can't see their own work — log enough to tell which.
+      console.error(`view-submission denied: role=${auth.role} sub=${auth.userId} key=${key}`)
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 

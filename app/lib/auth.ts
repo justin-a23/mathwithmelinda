@@ -1,5 +1,6 @@
 import { CognitoJwtVerifier } from 'aws-jwt-verify'
 import { NextRequest, NextResponse } from 'next/server'
+import { roleFromGroups, type Role } from './roles'
 
 const verifier = CognitoJwtVerifier.create({
   userPoolId: process.env.COGNITO_USER_POOL_ID || 'us-east-1_LvIY8oPmV',
@@ -10,7 +11,7 @@ const verifier = CognitoJwtVerifier.create({
 export type AuthUser = {
   userId: string
   groups: string[]
-  role: 'teacher' | 'student' | 'parent' | 'unknown'
+  role: Role
   /**
    * The raw, already-verified access token.
    *
@@ -29,15 +30,14 @@ export async function verifyAuth(request: NextRequest): Promise<AuthUser | null>
   try {
     const payload = await verifier.verify(token)
     const groups: string[] = (payload['cognito:groups'] as string[]) || []
-    // 'admin' (IT/support) is teacher-equivalent by design — see app/lib/roles.ts
-    // for why it maps onto the existing role rather than becoming a fourth one.
-    // `groups` is returned unchanged, so a route that genuinely needs to tell
-    // them apart can still check it.
-    let role: AuthUser['role'] = 'unknown'
-    if (groups.includes('teacher') || groups.includes('admin')) role = 'teacher'
-    else if (groups.includes('parent')) role = 'parent'
-    else if (groups.includes('student')) role = 'student'
-    return { userId: payload.sub, groups, role, token }
+    // roleFromGroups is the single source of truth shared with the client:
+    // group-less users ARE students (self-signup assigns no Cognito group).
+    // This used to be an inline copy that mapped group-less to 'unknown' —
+    // which the ownership checks deny across the board, so every real student
+    // silently 403'd on their own submission previews while the client happily
+    // treated them as students. `groups` is returned unchanged, so a route
+    // that needs to tell admin from teacher can still check it.
+    return { userId: payload.sub, groups, role: roleFromGroups(groups), token }
   } catch {
     return null
   }
