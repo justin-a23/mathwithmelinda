@@ -9,8 +9,22 @@ import { getCurrentUser } from 'aws-amplify/auth'
 import { useTheme } from '../ThemeProvider'
 import { apiFetch } from '@/app/lib/apiFetch'
 import { useRoleGuard } from '../hooks/useRoleGuard'
+import MathRenderer from '../components/MathRenderer'
 
 const client = generateClient()
+
+// Per-question detail for the answers section. Selects ONLY parent-readable
+// fields — correctAnswer is teacher-only at the field level, and including it
+// would error the whole query for a parent (see the 2026-08-04 student fix).
+const getLessonTemplateQuestions = /* GraphQL */`
+  query GetLessonTemplateQuestions($id: ID!) {
+    getLessonTemplate(id: $id) {
+      questions {
+        items { id order questionText questionType }
+      }
+    }
+  }
+`
 
 /**
  * ParentStudent links a parent to a child by EMAIL, but Submission.studentId
@@ -97,6 +111,8 @@ type Submission = {
   } | null
 }
 
+type Question = { id: string; order: number; questionText: string; questionType: string }
+
 export default function ParentDashboard() {
   useRoleGuard('parent')
   const { authStatus, signOut } = useAuthenticator()
@@ -110,6 +126,7 @@ export default function ParentDashboard() {
   const [loadingSubmissions, setLoadingSubmissions] = useState(false)
   const [selectedSubmission, setSelectedSubmission] = useState<Submission | null>(null)
   const [imageUrls, setImageUrls] = useState<string[]>([])
+  const [questionMap, setQuestionMap] = useState<Record<string, Question[]>>({})
 
   useEffect(() => {
     if (authStatus === 'unauthenticated') router.replace('/login')
@@ -228,6 +245,21 @@ export default function ParentDashboard() {
         )
         // Drop failures rather than rendering broken <img> tags
         setImageUrls(urls.filter(Boolean))
+      }
+      // Fetch the lesson's questions so answers can be shown alongside them
+      const templateId: string | undefined = parsed.lessonTemplateId
+      if (templateId && !questionMap[templateId]) {
+        try {
+          const result = await (client.graphql({
+            query: getLessonTemplateQuestions,
+            variables: { id: templateId }
+          }) as any)
+          const qs: Question[] = result.data.getLessonTemplate?.questions?.items || []
+          qs.sort((a, b) => a.order - b.order)
+          setQuestionMap(prev => ({ ...prev, [templateId]: qs }))
+        } catch (err) {
+          console.error('Error fetching template questions:', err)
+        }
       }
     } catch {}
   }
@@ -434,6 +466,51 @@ export default function ParentDashboard() {
                             </div>
                           ) : null
                         } catch { return null }
+                      })()}
+
+                      {/* Question-by-question answers — same detail the student sees */}
+                      {selectedSubmission.content && (() => {
+                        let parsed: Record<string, any> = {}
+                        try { parsed = JSON.parse(selectedSubmission.content) } catch { return null }
+                        const templateId: string | undefined = parsed.lessonTemplateId
+                        const questions: Question[] = (templateId && questionMap[templateId]) || []
+                        const answers: Record<string, string> = parsed.answers || {}
+                        const answerable = questions.filter(q => q.questionType !== 'section_header' && q.questionType !== 'show_work')
+                        if (answerable.length === 0) return null
+                        return (
+                          <div style={{ marginBottom: '20px' }}>
+                            <div style={{ fontSize: '11px', fontWeight: 500, color: 'var(--gray-mid)', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                              Questions &amp; Answers
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                              {(() => {
+                                let qNum = 0
+                                return questions.map(q => {
+                                  const isHeader = q.questionType === 'section_header'
+                                  const isShowWork = q.questionType === 'show_work'
+                                  if (!isHeader) qNum++
+                                  if (isHeader || isShowWork) return null
+                                  const bookNumMatch = q.questionText.match(/^(\d+\.)\s([\s\S]*)$/)
+                                  const qLabel = bookNumMatch ? bookNumMatch[1] : `${qNum}.`
+                                  const qBody = bookNumMatch ? bookNumMatch[2] : q.questionText
+                                  return (
+                                    <div key={q.id} style={{ padding: '12px 14px', background: 'var(--page-bg)', borderRadius: '8px', border: '1px solid var(--gray-light)' }}>
+                                      <div style={{ display: 'flex', gap: '8px', fontSize: '13px', fontWeight: 600, color: 'var(--gray-mid)', marginBottom: '6px' }}>
+                                        <span style={{ flexShrink: 0 }}>{qLabel}</span>
+                                        <MathRenderer text={qBody} />
+                                      </div>
+                                      <div style={{ fontSize: '14px', color: 'var(--foreground)' }}>
+                                        {answers[q.id]
+                                          ? <MathRenderer text={answers[q.id]} />
+                                          : <span style={{ color: 'var(--gray-mid)' }}>No answer provided</span>}
+                                      </div>
+                                    </div>
+                                  )
+                                })
+                              })()}
+                            </div>
+                          </div>
+                        )
                       })()}
 
                       {/* Photos */}
