@@ -79,6 +79,10 @@ function ScheduleWeekInner() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [saveError, setSaveError] = useState('')
+  // Synchronous double-click guard. The disabled={saving} on the button is
+  // not enough: two rapid clicks both read saving=false before React commits
+  // the state update, and each created a full week of duplicate assignments.
+  const savingRef = useRef(false)
 
   useEffect(() => {
     if (user === null) router.replace('/login')
@@ -240,15 +244,48 @@ function ScheduleWeekInner() {
 
   async function saveSchedule() {
     if (!selectedCourseId || !weekStartDate) return
+    if (savingRef.current) return
+    savingRef.current = true
     // The Mon–Fri rows get default due dates from the week start, but an
     // additional assignment's whole point is a chosen date — refuse to guess.
     if (extras.some(x => x.lessonNumber && !x.dueDate)) {
       setSaveError('Each additional assignment needs a due date.')
+      savingRef.current = false
       return
     }
     setSaving(true)
     setSaveError('')
     try {
+      // A schedule for this course + week may already exist (double-click,
+      // back-button resave, or a genuine second plan for a student subset).
+      // Creating it silently doubles every assignment on the student side,
+      // so surface it and let Melinda decide.
+      try {
+        const dupRes = await (client.graphql({
+          query: /* GraphQL */`
+            query CheckExistingWeekPlan($filter: ModelWeeklyPlanFilterInput) {
+              listWeeklyPlans(filter: $filter, limit: 500) {
+                items { id }
+              }
+            }
+          `,
+          variables: { filter: { courseWeeklyPlansId: { eq: selectedCourseId }, weekStartDate: { eq: weekStartDate } } }
+        }) as any)
+        const existing = dupRes?.data?.listWeeklyPlans?.items ?? []
+        if (existing.length > 0) {
+          const proceed = window.confirm(
+            `A schedule for this course starting ${weekStartDate} already exists — students would see the week's work twice.\n\n` +
+            `To change that week, delete the existing plan under Assigned Work first.\n\n` +
+            `Create a second schedule for this week anyway?`
+          )
+          if (!proceed) {
+            setSaving(false)
+            savingRef.current = false
+            return
+          }
+        }
+      } catch { /* dup check is best-effort — never block saving on its failure */ }
+
       const { createWeeklyPlan, createWeeklyPlanItem, createLesson } = await import('../../../src/graphql/mutations')
 
       // Build assignedStudentIds — null means all students
@@ -300,6 +337,7 @@ function ScheduleWeekInner() {
       setSaveError(msg)
     } finally {
       setSaving(false)
+      savingRef.current = false
     }
   }
 
