@@ -24,7 +24,21 @@ type CourseWeekStats = {
   received: number   // actually submitted this week
   graded: number     // graded submissions this week
   late: number       // past due, no submission
+  avg: number | null      // class average of graded work submitted this week
+  prevAvg: number | null  // same, for last week — drives the trend arrow
+  videoAssigned: number   // video lessons this week × assigned students
+  videoWatched: number    // of those, watched (completed or ≥90%)
 }
+
+type AttentionRow = {
+  id: string          // StudentProfile row id
+  name: string
+  late: number                              // past-due assignments not turned in
+  quiet: boolean                            // nothing submitted this week
+  drop: { from: number; to: number } | null // recent graded avg vs prior avg
+}
+
+type GradeScale = { courseId: string | null; isActive: boolean | null; gradeA: number | null; gradeB: number | null; gradeC: number | null; gradeD: number | null }
 
 const listRecentSubmissionsQuery = /* GraphQL */`
   query ListRecentSubmissions {
@@ -82,6 +96,38 @@ function GradingBar({ graded, received }: { graded: number; received: number }) 
           position: 'absolute', left: 0, top: 0, bottom: 0,
           width: ready ? pct + '%' : '0%',
           background: allDone ? 'var(--accent)' : 'var(--plum)',
+          borderRadius: '6px',
+          transition: 'width 0.8s cubic-bezier(0.4,0,0.2,1)',
+        }} />
+      )}
+    </div>
+  )
+}
+
+/** Video bar — same shape as GradingBar, accent-gold so it reads as its own metric. */
+function VideoBar({ watched, assigned }: { watched: number; assigned: number }) {
+  const [ready, setReady] = useState(false)
+  useEffect(() => {
+    const t = setTimeout(() => setReady(true), 100)
+    return () => clearTimeout(t)
+  }, [])
+
+  const pct = assigned > 0 ? (watched / assigned) * 100 : 0
+
+  return (
+    <div style={{
+      position: 'relative',
+      height: '12px',
+      borderRadius: '6px',
+      background: assigned > 0 ? 'rgba(242,201,76,0.18)' : 'var(--gray-light)',
+      overflow: 'hidden',
+      flex: 1,
+    }}>
+      {assigned > 0 && (
+        <div style={{
+          position: 'absolute', left: 0, top: 0, bottom: 0,
+          width: ready ? pct + '%' : '0%',
+          background: 'var(--accent)',
           borderRadius: '6px',
           transition: 'width 0.8s cubic-bezier(0.4,0,0.2,1)',
         }} />
@@ -179,7 +225,7 @@ const listWeeklyPlansQuery = /* GraphQL */`
             dayOfWeek
             dueTime
             isPublished
-            lesson { id title }
+            lesson { id title videoUrl }
           }
         }
       }
@@ -191,6 +237,24 @@ const listAssignmentCountQuery = /* GraphQL */`
   query ListAssignmentCount {
     listAssignments(limit: 1) {
       items { id }
+    }
+  }
+`
+
+// NOTE: no server-side filter — AppSync applies `limit` to the table scan
+// BEFORE filtering, so a filtered query with a small limit silently drops rows.
+const listVideoWatchesQuery = /* GraphQL */`
+  query ListVideoWatchesForDashboard {
+    listVideoWatches(limit: 1000) {
+      items { studentId lessonId percentWatched completed }
+    }
+  }
+`
+
+const listGradeScalesQuery = /* GraphQL */`
+  query ListGradeScales {
+    listSemesters(limit: 100) {
+      items { id courseId isActive gradeA gradeB gradeC gradeD }
     }
   }
 `
@@ -210,6 +274,8 @@ export default function TeacherDashboard() {
   const [courses, setCourses] = useState<Course[]>([])
   const [loading, setLoading] = useState(true)
   const [weekStats, setWeekStats] = useState<CourseWeekStats[]>([])
+  const [gradeScales, setGradeScales] = useState<GradeScale[]>([])
+  const [attention, setAttention] = useState<AttentionRow[]>([])
   const [overdueStats, setOverdueStats] = useState<{ courseId: string; ungraded: number }[]>([])
   const [statsLoading, setStatsLoading] = useState(true)
   const [pendingStudents, setPendingStudents] = useState<{ id: string; firstName: string; lastName: string; email: string; gradeLevel: string | null }[]>([])
@@ -543,6 +609,48 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
             href: '/teacher/grades',
           })
         }
+
+        // ── Needs-attention rows: late work, silence, or slipping grades ──
+        // Reuses the late/quiet data computed above; adds a grade trend per
+        // student (recent 3 graded vs the prior average, 7+ point drop flags).
+        const rowByProfileId = new Map<string, AttentionRow>()
+        const rowFor = (st: { id: string; firstName: string; lastName: string }) => {
+          if (!rowByProfileId.has(st.id)) {
+            rowByProfileId.set(st.id, { id: st.id, name: `${st.firstName} ${st.lastName}`, late: 0, quiet: false, drop: null })
+          }
+          return rowByProfileId.get(st.id)!
+        }
+
+        for (const st of activeStudents) {
+          const late = lateByStudent.get(st.id)?.count ?? 0
+          if (late > 0) rowFor(st).late = late
+
+          if (notSubmitted.some(n => n.id === st.id)) rowFor(st).quiet = true
+
+          // Grade trend — needs at least 5 graded submissions to say anything
+          const graded = allSubs
+            .filter((s: any) => !s.isArchived && s.submittedAt && s.grade
+              && (s.studentId === st.userId || s.studentId === st.email))
+            .map((s: any) => ({ ts: new Date(s.submittedAt).getTime(), n: parseFloat(s.grade) }))
+            .filter((g: any) => !isNaN(g.n))
+            .sort((a: any, b: any) => a.ts - b.ts)
+          if (graded.length >= 5) {
+            const recent = graded.slice(-3).map((g: any) => g.n)
+            const prior = graded.slice(0, -3).slice(-5).map((g: any) => g.n)
+            const avg = (arr: number[]) => arr.reduce((a, b) => a + b, 0) / arr.length
+            const from = Math.round(avg(prior))
+            const to = Math.round(avg(recent))
+            if (from - to >= 7) rowFor(st).drop = { from, to }
+          }
+        }
+
+        const attentionRows = Array.from(rowByProfileId.values())
+          .filter(r => r.late > 0 || r.quiet || r.drop)
+          .sort((a, b) =>
+            (b.late - a.late)
+            || ((b.drop ? b.drop.from - b.drop.to : 0) - (a.drop ? a.drop.from - a.drop.to : 0))
+            || Number(b.quiet) - Number(a.quiet))
+        setAttention(attentionRows)
       }
 
       // 3. Next week's plans not set yet (warn Thu/Fri/weekend)
@@ -630,16 +738,32 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
 
       // Fetch everything in parallel
       const safeQ = (p: Promise<any>) => p.then(r => r).catch(() => null)
-      const [subsRes, plansRes, studentsRes] = await Promise.all([
+      const [subsRes, plansRes, studentsRes, watchesRes, scalesRes] = await Promise.all([
         safeQ(client.graphql({ query: listRecentSubmissionsQuery }) as any),
         safeQ(client.graphql({ query: listWeeklyPlansQuery }) as any),
         safeQ(client.graphql({ query: listActiveStudentsQuery }) as any),
+        safeQ(client.graphql({ query: listVideoWatchesQuery }) as any),
+        safeQ(client.graphql({ query: listGradeScalesQuery }) as any),
       ])
 
       const allSubs = subsRes?.data?.listSubmissions?.items ?? []
       const allPlans = plansRes?.data?.listWeeklyPlans?.items ?? []
       const activeStudents: { id: string; userId: string; email: string; courseId?: string | null }[] =
         studentsRes?.data?.listStudentProfiles?.items ?? []
+      setGradeScales(scalesRes?.data?.listSemesters?.items ?? [])
+
+      // Best watch progress per student+lesson. VideoWatch.studentId is the
+      // Cognito sub (see app/lib/identity.ts) and lessonId is the Lesson row id
+      // — the same ids the plan items and active students carry below.
+      const watchByKey = new Map<string, { percent: number; completed: boolean }>()
+      for (const w of watchesRes?.data?.listVideoWatches?.items ?? []) {
+        const key = `${w.studentId}:${w.lessonId}`
+        const prev = watchByKey.get(key)
+        const percent = w.percentWatched ?? 0
+        if (!prev || percent > prev.percent) {
+          watchByKey.set(key, { percent, completed: !!w.completed })
+        }
+      }
 
       // Build: submittedLessonsByStudent for "is this lesson turned in?" lookup
       const submittedLessonsByStudent = new Map<string, Set<string>>()
@@ -656,7 +780,7 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
       // Initialize per-course counters
       const byCourse: Record<string, CourseWeekStats> = {}
       const bumpCourse = (courseId: string) => {
-        if (!byCourse[courseId]) byCourse[courseId] = { courseId, assigned: 0, received: 0, graded: 0, late: 0 }
+        if (!byCourse[courseId]) byCourse[courseId] = { courseId, assigned: 0, received: 0, graded: 0, late: 0, avg: null, prevAvg: null, videoAssigned: 0, videoWatched: 0 }
         return byCourse[courseId]
       }
 
@@ -696,6 +820,14 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
                 bumpCourse(courseId).late += 1
               }
             }
+            // Video gauge: lessons with a video count one watch per student
+            if (item.lesson.videoUrl) {
+              bumpCourse(courseId).videoAssigned += 1
+              const watch = watchByKey.get(`${st.userId}:${item.lesson.id}`)
+              if (watch && (watch.completed || watch.percent >= 90)) {
+                bumpCourse(courseId).videoWatched += 1
+              }
+            }
           }
         }
       }
@@ -711,6 +843,33 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
         if (!courseId) continue
         bumpCourse(courseId).received += 1
         if (sub.grade) bumpCourse(courseId).graded += 1
+      }
+
+      // ── Class average this week vs last, per course ──
+      const lastMonday = new Date(monday); lastMonday.setDate(monday.getDate() - 7)
+      const lastMondayMs = lastMonday.getTime()
+      const thisWeekGrades: Record<string, number[]> = {}
+      const lastWeekGrades: Record<string, number[]> = {}
+      for (const sub of allSubs) {
+        if (sub.isArchived || !sub.submittedAt || !sub.grade) continue
+        const n = parseFloat(sub.grade)
+        if (isNaN(n)) continue
+        let courseId = ''
+        try { courseId = JSON.parse(sub.content || '{}').courseId || '' } catch { continue }
+        if (!courseId) continue
+        const ts = new Date(sub.submittedAt).getTime()
+        if (ts >= weekStartMs) {
+          (thisWeekGrades[courseId] ||= []).push(n)
+        } else if (ts >= lastMondayMs) {
+          (lastWeekGrades[courseId] ||= []).push(n)
+        }
+      }
+      const mean = (arr: number[] | undefined) =>
+        arr && arr.length > 0 ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : null
+      for (const courseId of new Set([...Object.keys(thisWeekGrades), ...Object.keys(lastWeekGrades)])) {
+        const stat = bumpCourse(courseId)
+        stat.avg = mean(thisWeekGrades[courseId])
+        stat.prevAvg = mean(lastWeekGrades[courseId])
       }
 
       setWeekStats(Object.values(byCourse))
@@ -746,6 +905,15 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
     const bi = courseOrder.indexOf(b.title)
     return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi)
   })
+
+  // Letter for a course average, from the course's active semester thresholds
+  // (Melinda configures these per semester), standard scale as fallback.
+  function letterFor(courseId: string, avg: number): string {
+    const scale = gradeScales.find(s => s.isActive && s.courseId === courseId)
+      || gradeScales.find(s => s.isActive)
+    const a = scale?.gradeA ?? 90, b = scale?.gradeB ?? 80, c = scale?.gradeC ?? 70, d = scale?.gradeD ?? 60
+    return avg >= a ? 'A' : avg >= b ? 'B' : avg >= c ? 'C' : avg >= d ? 'D' : 'F'
+  }
 
   if (checking) return null
 
@@ -928,6 +1096,55 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
           </div>
         )}
 
+        {/* ── STUDENTS NEEDING ATTENTION ── */}
+        {attention.length > 0 && (
+          <div style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', padding: '24px 28px', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <h2 style={{ fontSize: '13px', fontWeight: 500, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--plum)', margin: 0 }}>
+                Students Needing Attention
+              </h2>
+              <span style={{ fontSize: '13px', color: 'var(--gray-mid)' }}>Click a student to open the gradebook</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              {attention.map((row, idx) => (
+                <div
+                  key={row.id}
+                  onClick={() => router.push('/teacher/gradebook')}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap',
+                    paddingTop: '12px', paddingBottom: '12px', cursor: 'pointer',
+                    borderBottom: idx === attention.length - 1 ? 'none' : '1px solid var(--gray-light)',
+                  }}
+                >
+                  <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--plum-light)', color: 'var(--plum)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: 700, flexShrink: 0 }}>
+                    {row.name.split(' ').map(p => p[0]).slice(0, 2).join('')}
+                  </div>
+                  <span style={{ fontFamily: 'var(--font-display)', fontSize: '15px', color: 'var(--foreground)', minWidth: '140px' }}>
+                    {row.name}
+                  </span>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    {row.late > 0 && (
+                      <span style={{ fontSize: '12px', fontWeight: 700, color: '#b91c1c', background: '#FEE2E2', border: '1px solid #fecaca', padding: '2px 10px', borderRadius: '20px' }}>
+                        ⚠ {row.late} late
+                      </span>
+                    )}
+                    {row.drop && (
+                      <span style={{ fontSize: '12px', fontWeight: 700, color: '#92400E', background: '#FEF3C7', border: '1px solid #FDE68A', padding: '2px 10px', borderRadius: '20px' }}>
+                        📉 slipping: {row.drop.from} → {row.drop.to}
+                      </span>
+                    )}
+                    {row.quiet && (
+                      <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--gray-dark)', background: 'var(--gray-light)', padding: '2px 10px', borderRadius: '20px' }}>
+                        Nothing submitted this week
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* ── OVERDUE (previous weeks, ungraded) ── */}
         {!statsLoading && overdueStats.length > 0 && (
           <div style={{ background: 'var(--background)', border: '1px solid var(--accent)', borderRadius: 'var(--radius)', padding: '24px 28px', marginBottom: '16px' }}>
@@ -1023,8 +1240,20 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
                       <span style={{ fontFamily: 'var(--font-display)', fontSize: '16px', color: 'var(--foreground)', lineHeight: 1.2 }}>
                         {course.title}
                       </span>
-                      <span style={{ fontSize: '12px', color: 'var(--gray-mid)' }}>
-                        {assigned > 0 ? `${assigned} assigned` : 'No assignments this week'}
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '10px', fontSize: '12px', color: 'var(--gray-mid)' }}>
+                        {stat?.avg != null && (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ fontWeight: 700, color: 'var(--plum)', background: 'var(--plum-light)', padding: '2px 10px', borderRadius: '20px' }}>
+                              Avg {stat.avg} · {letterFor(course.id, stat.avg)}
+                            </span>
+                            {stat.prevAvg != null && stat.avg - stat.prevAvg !== 0 && (
+                              <span style={{ fontWeight: 700, color: stat.avg > stat.prevAvg ? '#15803d' : '#b91c1c' }}>
+                                {stat.avg > stat.prevAvg ? '▲' : '▼'} {Math.abs(stat.avg - stat.prevAvg)}
+                              </span>
+                            )}
+                          </span>
+                        )}
+                        <span>{assigned > 0 ? `${assigned} assigned` : 'No assignments this week'}</span>
                       </span>
                     </div>
 
@@ -1095,6 +1324,32 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
                             )}
                           </div>
                         </div>
+
+                        {/* Videos row — only when this week's plan has video lessons */}
+                        {(stat?.videoAssigned ?? 0) > 0 && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                            <span style={{ width: '90px', flexShrink: 0, fontSize: '12px', color: 'var(--gray-dark)', fontWeight: 600, letterSpacing: '0.3px' }}>
+                              Videos
+                            </span>
+                            <VideoBar watched={stat!.videoWatched} assigned={stat!.videoAssigned} />
+                            <div style={{ width: '200px', flexShrink: 0, textAlign: 'right', fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
+                              <span style={{ color: 'var(--gray-mid)' }}>
+                                <span style={{ fontWeight: 600, color: stat!.videoWatched >= stat!.videoAssigned ? 'var(--accent)' : 'var(--foreground)' }}>{stat!.videoWatched}</span>
+                                {' of '}
+                                <span style={{ fontWeight: 600, color: 'var(--foreground)' }}>{stat!.videoAssigned}</span>
+                                {' watched'}
+                              </span>
+                              <span style={{
+                                fontSize: '12px', fontWeight: 700,
+                                color: stat!.videoWatched >= stat!.videoAssigned ? 'var(--accent)' : 'var(--gray-mid)',
+                                background: stat!.videoWatched >= stat!.videoAssigned ? 'rgba(242,201,76,0.15)' : 'var(--gray-light)',
+                                padding: '2px 8px', borderRadius: '20px',
+                              }}>
+                                {stat!.videoWatched >= stat!.videoAssigned ? '✓ All' : Math.round((stat!.videoWatched / stat!.videoAssigned) * 100) + '%'}
+                              </span>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
