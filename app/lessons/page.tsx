@@ -87,7 +87,7 @@ const updateVideoWatchMutation = /* GraphQL */`
 `
 const findVideoWatchQuery = /* GraphQL */`
   query ListVideoWatches($filter: ModelVideoWatchFilterInput) {
-    listVideoWatches(filter: $filter, limit: 1) {
+    listVideoWatches(filter: $filter, limit: 1000) {
       items { id watchedSeconds percentWatched completed }
     }
   }

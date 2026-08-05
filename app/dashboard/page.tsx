@@ -10,7 +10,7 @@ import { apiFetch } from '@/app/lib/apiFetch'
 import { useRoleGuard } from '@/app/hooks/useRoleGuard'
 const findPlanItemByLessonQuery = /* GraphQL */`
   query FindPlanItemByLesson($filter: ModelWeeklyPlanItemFilterInput) {
-    listWeeklyPlanItems(filter: $filter, limit: 1) {
+    listWeeklyPlanItems(filter: $filter, limit: 1000) {
       items { id }
     }
   }
@@ -105,7 +105,7 @@ type ReturnedSubmission = {
 // dashboard's plan window.
 const listActiveSemestersQuery = /* GraphQL */`
   query ListActiveSemesters($courseId: ID!) {
-    listSemesters(filter: { courseId: { eq: $courseId }, isActive: { eq: true } }, limit: 20) {
+    listSemesters(filter: { courseId: { eq: $courseId }, isActive: { eq: true } }, limit: 500) {
       items { id startDate endDate }
     }
   }

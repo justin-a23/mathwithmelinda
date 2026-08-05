@@ -31,7 +31,7 @@ const CREATE_MESSAGE = /* GraphQL */ `
 
 const LIST_PARENT_STUDENTS = /* GraphQL */ `
   query ListParentStudents($filter: ModelParentStudentFilterInput) {
-    listParentStudents(filter: $filter, limit: 20) {
+    listParentStudents(filter: $filter, limit: 1000) {
       items { id parentId studentEmail studentName }
     }
   }

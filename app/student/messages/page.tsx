@@ -41,7 +41,7 @@ const UPDATE_MESSAGE = /* GraphQL */ `
 // back to showing the raw Cognito sub.
 const GET_MY_PROFILE = /* GraphQL */ `
   query GetMyProfile($userId: String!) {
-    listStudentProfiles(filter: { userId: { eq: $userId } }, limit: 1) {
+    listStudentProfiles(filter: { userId: { eq: $userId } }, limit: 1000) {
       items { id firstName lastName preferredName }
     }
   }

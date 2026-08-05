@@ -13,7 +13,7 @@ const client = generateClient()
 
 const LIST_PARENT_STUDENTS = /* GraphQL */ `
   query ListParentStudents($filter: ModelParentStudentFilterInput) {
-    listParentStudents(filter: $filter, limit: 20) {
+    listParentStudents(filter: $filter, limit: 1000) {
       items { id parentId studentEmail studentName }
     }
   }
@@ -41,7 +41,7 @@ const LIST_SEMESTERS_FOR_COURSE = /* GraphQL */ `
 
 const LIST_SYLLABI_FOR_SEMESTER = /* GraphQL */ `
   query ListSyllabiForSemester($semesterId: ID!) {
-    listSyllabi(filter: { semesterId: { eq: $semesterId } }, limit: 10) {
+    listSyllabi(filter: { semesterId: { eq: $semesterId } }, limit: 500) {
       items { semesterId pdfKey publishedPdfKey publishedAt }
     }
   }

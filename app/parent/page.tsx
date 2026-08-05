@@ -22,7 +22,7 @@ const client = generateClient()
  */
 const getStudentSubByEmail = /* GraphQL */`
   query GetStudentSubByEmail($email: String!) {
-    listStudentProfiles(filter: { email: { eq: $email } }, limit: 1) {
+    listStudentProfiles(filter: { email: { eq: $email } }, limit: 1000) {
       items { userId }
     }
   }
@@ -30,7 +30,7 @@ const getStudentSubByEmail = /* GraphQL */`
 
 const listParentStudents = /* GraphQL */`
   query ListParentStudents($filter: ModelParentStudentFilterInput) {
-    listParentStudents(filter: $filter, limit: 20) {
+    listParentStudents(filter: $filter, limit: 1000) {
       items {
         id
         parentId

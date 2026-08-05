@@ -30,7 +30,7 @@ const createParentStudent = /* GraphQL */`
 
 const listParentStudentLinks = /* GraphQL */`
   query ListParentStudents($filter: ModelParentStudentFilterInput) {
-    listParentStudents(filter: $filter, limit: 5) {
+    listParentStudents(filter: $filter, limit: 1000) {
       items { id }
     }
   }
@@ -38,7 +38,7 @@ const listParentStudentLinks = /* GraphQL */`
 
 const findParentProfile = `
   query ListParentProfiles($filter: ModelParentProfileFilterInput) {
-    listParentProfiles(filter: $filter, limit: 1) {
+    listParentProfiles(filter: $filter, limit: 1000) {
       items { id }
     }
   }

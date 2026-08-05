@@ -218,8 +218,15 @@ export default function StudentGradesPage() {
       // Enrollment cutoff — hide plans whose week ended before student enrolled.
       // Compare against end of week so enrolling mid-week still shows that week.
       const enrolledAtMs = profile.enrolledAt ? new Date(profile.enrolledAt).getTime() : null
+      // The grid's lower bound is the semester start, EXCEPT when the student
+      // enrolled before it: work assigned pre-season (Melinda's demo week, an
+      // early start) is still this semester's work, and its grades must show.
+      const semStartMs = new Date(sem.startDate + 'T00:00:00').getTime()
+      const lowerBoundMs = enrolledAtMs !== null ? Math.min(semStartMs, enrolledAtMs) : semStartMs
       const plansInRange = allPlans.filter((p: any) => {
-        if (p.weekStartDate < sem.startDate || p.weekStartDate > sem.endDate) return false
+        const wkStart = new Date(p.weekStartDate + 'T00:00:00')
+        const wkEnd = new Date(wkStart); wkEnd.setDate(wkStart.getDate() + 7)
+        if (wkEnd.getTime() < lowerBoundMs || p.weekStartDate > sem.endDate) return false
         if (p.courseWeeklyPlansId !== sem.courseId) return false
         if (enrolledAtMs !== null) {
           const weekStart = new Date(p.weekStartDate + 'T00:00:00')
