@@ -340,6 +340,17 @@ export default function ImportLessonPage() {
               </div>
             )}
 
+            {(parsed as any).notices?.length > 0 && (
+              <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', padding: '12px 16px', marginBottom: '20px' }}>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: '#1d4ed8', marginBottom: '6px', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
+                  Adjustments made
+                </div>
+                <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '13px', color: '#1e40af', lineHeight: 1.6 }}>
+                  {(parsed as any).notices.map((n: string, i: number) => <li key={i}>{n}</li>)}
+                </ul>
+              </div>
+            )}
+
             {parsed.warnings.length > 0 && (
               <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', padding: '12px 16px', marginBottom: '20px' }}>
                 <div style={{ fontSize: '12px', fontWeight: 700, color: '#92400e', marginBottom: '6px', letterSpacing: '0.5px', textTransform: 'uppercase' }}>

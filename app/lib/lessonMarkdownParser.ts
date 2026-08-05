@@ -83,6 +83,7 @@ export type ParsedLesson = {
   assignmentType: string      // 'both' | 'upload' | 'questions'
   lessonCategory: string      // 'lesson' | 'quiz' | 'test'
   questions: ParsedQuestion[] // questions + headers, interleaved in source order
+  notices: string[]           // routine transformations the importer performed — informational, not problems
   warnings: string[]          // non-fatal issues to show the teacher
   errors: string[]            // fatal — the import API must refuse to publish
 }
@@ -115,6 +116,7 @@ function extractField(line: string, field: string): string | null {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function parseLessonMarkdown(raw: string): ParsedLesson {
+  const notices: string[] = []
   const warnings: string[] = []
   const errors: string[] = []
   const lines = raw.split(/\r?\n/)
@@ -299,7 +301,7 @@ export function parseLessonMarkdown(raw: string): ParsedLesson {
       if (fa) {
         text = fa[1].trim()
         if (!correctAnswer) correctAnswer = fa[2].trim()
-        warnings.push(`Q${declaredNum}: "(Final answer: …)" moved out of the student-visible question text into the answer key.`)
+        notices.push(`Q${declaredNum}: moved "(Final answer: ${fa[2].trim()})" into the teacher-only answer key — students won't see it.`)
       }
     }
 
@@ -380,6 +382,7 @@ export function parseLessonMarkdown(raw: string): ParsedLesson {
     assignmentType,
     lessonCategory,
     questions,
+    notices,
     warnings,
     errors,
   }
