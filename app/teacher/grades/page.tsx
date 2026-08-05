@@ -68,7 +68,7 @@ const client = generateClient()
 
 const listSubmissionsWithDetails = /* GraphQL */`
   query ListSubmissionsWithDetails {
-    listSubmissions(limit: 100) {
+    listSubmissions(limit: 1000) {
       items {
         id
         studentId
@@ -103,6 +103,7 @@ const listStudentProfilesQuery = /* GraphQL */`
         email
         firstName
         lastName
+        status
       }
     }
   }
@@ -451,6 +452,7 @@ function GradingPageInner() {
   const [gradeCleared, setGradeCleared] = useState(false)
   const [imageUrls, setImageUrls] = useState<string[]>([])
   const [studentNameMap, setStudentNameMap] = useState<Record<string, string>>({})
+  const [archivedStudentIds, setArchivedStudentIds] = useState<Set<string>>(new Set())
   const [questions, setQuestions] = useState<Question[]>([])
   const [showWorkImageUrls, setShowWorkImageUrls] = useState<Record<string, string[]>>({})
   const { theme } = useTheme()
@@ -532,14 +534,23 @@ function GradingPageInner() {
   async function fetchStudentProfiles() {
     try {
       const result = await client.graphql({ query: listStudentProfilesQuery }) as any
-      const items = result.data.listStudentProfiles.items as { id: string; userId: string; email: string; firstName: string; lastName: string }[]
+      const items = result.data.listStudentProfiles.items as { id: string; userId: string; email: string; firstName: string; lastName: string; status?: string | null }[]
       const map: Record<string, string> = {}
+      const archived = new Set<string>()
       for (const p of items) {
         const name = `${p.firstName} ${p.lastName}`
         if (p.email) map[p.email] = name
         if (p.userId) map[p.userId] = name
+        // A past-year student's submissions stay in the database forever, but
+        // the grading queue is a working view — an archived student's rows only
+        // clutter it. (They remain reachable via transcripts/gradebook.)
+        if (p.status === 'archived') {
+          if (p.email) archived.add(p.email)
+          if (p.userId) archived.add(p.userId)
+        }
       }
       setStudentNameMap(map)
+      setArchivedStudentIds(archived)
     } catch (err) {
       console.error('Error fetching student profiles:', err)
     }
@@ -1027,6 +1038,7 @@ function GradingPageInner() {
 
   const filteredSubmissions = submissions
     .filter(s => {
+      if (archivedStudentIds.has(s.studentId)) return false
       if (!!s.isArchived !== showArchived) return false
       if (filterCourse !== 'all' && getSubmissionCourseId(s) !== filterCourse) return false
       if (!showArchived) {

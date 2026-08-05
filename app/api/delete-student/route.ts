@@ -25,7 +25,7 @@ const USER_POOL_ID = process.env.COGNITO_USER_POOL_ID || 'us-east-1_LvIY8oPmV'
 
 const deleteStudentProfileMutation = /* GraphQL */`
   mutation DeleteStudentProfile($input: DeleteStudentProfileInput!) {
-    deleteStudentProfile(auth.token, input: $input) { id }
+    deleteStudentProfile(input: $input) { id }
   }
 `
 
@@ -139,9 +139,12 @@ async function cascadeDeleteStudentData(token: string, userId: string, email: st
     counts.reports = items.length
   } catch (e: any) { errors.push(`list reports: ${e.message}`) }
 
-  // 6) StudentInvite — any outstanding invites for this student email
+  // 6) StudentInvite — any outstanding invites for this student email.
+  // The model's field is `email` (ParentInvite is the one with studentEmail) —
+  // filtering on studentEmail made AppSync reject the query, which surfaced as
+  // "list invites" cascade errors on every delete.
   try {
-    const d = await gql(listStudentInvitesQuery, { filter: { studentEmail: { eq: email } } })
+    const d = await gql(listStudentInvitesQuery, { filter: { email: { eq: email } } })
     const items = d?.listStudentInvites?.items || []
     await Promise.all(items.map((i: any) =>
       gql(DELETE_MUTATIONS.studentInvite, { input: { id: i.id } }).catch((err: any) => errors.push(`invite ${i.id}: ${err.message}`))
@@ -200,7 +203,22 @@ export async function POST(request: NextRequest) {
     console.warn('No email provided — skipping cascade. Orphans will be left.')
   }
 
-  // 2) Delete from Cognito — look up actual Username by sub first
+  // 2) Delete the StudentProfile BEFORE the Cognito account. ORDER MATTERS —
+  // the same lesson archive-student learned on 2026-07-28, relearned here on
+  // 2026-08-04: this route deleted Cognito first, then the profile delete
+  // failed (a malformed mutation), leaving a destroyed login with a live
+  // profile row. That combination deleted the admin's own account when the
+  // roster's declined-row Delete was clicked on a staff profile. This way
+  // round, a failure after the profile delete leaves an orphaned login —
+  // recoverable and harmless — instead of a dead one.
+  try {
+    await deleteStudentProfile(auth.token, profileId)
+  } catch (err: any) {
+    console.error('Error deleting student profile from DB:', err)
+    return NextResponse.json({ error: err.message || 'Failed to delete student record' }, { status: 500 })
+  }
+
+  // 3) Delete from Cognito — look up actual Username by sub first
   try {
     const cognito = makeCognitoClient()
     const cognitoUsername = await findCognitoUsername(cognito, userId)
@@ -215,14 +233,6 @@ export async function POST(request: NextRequest) {
   } catch (err: any) {
     cognitoError = err?.message || 'Cognito deletion failed'
     console.error('Cognito deletion failed:', cognitoError)
-  }
-
-  // 3) Delete the StudentProfile itself (last, so we have the id for all the filters above)
-  try {
-    await deleteStudentProfile(auth.token, profileId)
-  } catch (err: any) {
-    console.error('Error deleting student profile from DB:', err)
-    return NextResponse.json({ error: err.message || 'Failed to delete student record' }, { status: 500 })
   }
 
   return NextResponse.json({
