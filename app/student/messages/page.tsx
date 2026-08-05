@@ -83,6 +83,9 @@ function StudentMessagesPageInner() {
   const [messages, setMessages] = useState<Message[]>([])
   const [loading, setLoading] = useState(true)
   const [compose, setCompose] = useState('')
+  // Attached grade context — shown as a chip above the compose box and folded
+  // into the message on send. The student never sees the [ref:sub=…] token.
+  const [gradeRef, setGradeRef] = useState<{ submissionId: string; lesson: string } | null>(null)
   const [sending, setSending] = useState(false)
   const [profileName, setProfileName] = useState('')
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -103,10 +106,12 @@ function StudentMessagesPageInner() {
     return () => clearInterval(interval)
   }, [studentId])
 
-  // Pre-fill compose when arriving from a grade question link
+  // Arriving from "Question about this grade": attach the context as a chip
+  // instead of dumping a machine token into the compose box. The student just
+  // types their question; the reference travels invisibly on send.
   useEffect(() => {
     if (isGradeQuestion && gradeQuestionSubmissionId) {
-      setCompose(`[ref:sub=${gradeQuestionSubmissionId}]\nQuestion about my grade on: ${gradeQuestionLesson}\n\n`)
+      setGradeRef({ submissionId: gradeQuestionSubmissionId, lesson: gradeQuestionLesson })
       setTimeout(() => textareaRef.current?.focus(), 100)
     }
   }, [isGradeQuestion, gradeQuestionSubmissionId])
@@ -155,8 +160,13 @@ function StudentMessagesPageInner() {
   }
 
   async function sendMessage() {
-    const content = compose.trim()
-    if (!content || sending) return
+    const typed = compose.trim()
+    if (!typed || sending) return
+    // Same wire format the teacher page and email already parse: hidden ref
+    // line + a human-readable context line, then the student's own words.
+    const content = gradeRef
+      ? `[ref:sub=${gradeRef.submissionId}]\nQuestion about my grade on: ${gradeRef.lesson}\n\n${typed}`
+      : typed
     setSending(true)
     try {
       const result: any = await client.graphql({
@@ -174,6 +184,7 @@ function StudentMessagesPageInner() {
       const newMsg: Message = result.data.createMessage
       setMessages(prev => [...prev, newMsg])
       setCompose('')
+      setGradeRef(null)
 
       // Notify Melinda by email — fire and forget
       const studentDisplayName = profileName || studentId
@@ -367,14 +378,27 @@ function StudentMessagesPageInner() {
             </div>
           )}
 
+          {/* Grade-question context chip — travels with the message on send */}
+          {gradeRef && (
+            <div style={{ borderTop: '1px solid var(--gray-light)', padding: '10px 16px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a', borderRadius: '20px', padding: '4px 12px', fontSize: '12px', fontWeight: 600 }}>
+                📋 About your grade on: {gradeRef.lesson}
+                <button onClick={() => setGradeRef(null)} title="Remove — send as a regular message instead"
+                  style={{ background: 'none', border: 'none', color: '#92400e', cursor: 'pointer', fontSize: '13px', lineHeight: 1, padding: 0 }}>
+                  ✕
+                </button>
+              </span>
+            </div>
+          )}
+
           {/* Compose area */}
-          <div style={{ borderTop: '1px solid var(--gray-light)', padding: '14px 16px', display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
+          <div style={{ borderTop: gradeRef ? 'none' : '1px solid var(--gray-light)', padding: '14px 16px', display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
             <textarea
               ref={textareaRef}
               value={compose}
               onChange={e => setCompose(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Type a message… (Ctrl+Enter to send)"
+              placeholder={gradeRef ? 'Type your question about this grade…' : 'Type a message… (Ctrl+Enter to send)'}
               rows={3}
               style={{
                 flex: 1, padding: '10px 12px', border: '1px solid var(--gray-light)',

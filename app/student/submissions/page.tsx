@@ -49,6 +49,23 @@ type StudentSubmission = {
 }
 
 type Question = { id: string; order: number; questionText: string; questionType: string }
+type GradedQuestion = { id: string; questionText: string; questionType: string; correct: boolean; studentAnswer: string | null; correctAnswer: string | null }
+
+function fmtDateTime(iso: string): string {
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ''
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) +
+    ' at ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+}
+
+/** Due date + late flag from the submission's content JSON (best-effort). */
+function dueInfo(parsed: Record<string, any>, submittedAt: string | null): { due: string | null; late: boolean } {
+  if (!parsed.dueDateTime) return { due: null, late: false }
+  const due = new Date(parsed.dueDateTime)
+  if (isNaN(due.getTime())) return { due: null, late: false }
+  const late = !!submittedAt && new Date(submittedAt) > due
+  return { due: parsed.dueDateTime, late }
+}
 
 function SubmissionImage({ url, alt, style }: { url: string; alt: string; style?: React.CSSProperties }) {
   const [failed, setFailed] = useState(false)
@@ -279,8 +296,21 @@ export default function StudentSubmissions() {
                       {lessonTitle}
                       {courseTitle ? <span style={{ color: 'var(--gray-mid)', fontWeight: 400, fontSize: '14px' }}> &middot; {courseTitle}</span> : null}
                     </div>
-                    <div style={{ fontSize: '13px', color: 'var(--gray-mid)' }}>
-                      {sub.submittedAt ? formatSubmittedAt(sub.submittedAt) : ''}
+                    <div style={{ fontSize: '13px', color: 'var(--gray-mid)', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      {(() => {
+                        const { due, late } = dueInfo(parsed, sub.submittedAt)
+                        return (
+                          <>
+                            {due && <span>Due {fmtDateTime(due)}</span>}
+                            {sub.submittedAt && <span>{due ? '· ' : ''}Submitted {formatSubmittedAt(sub.submittedAt)}</span>}
+                            {late && (
+                              <span style={{ background: '#FEE2E2', color: '#B91C1C', border: '1px solid #FECACA', fontSize: '11px', fontWeight: 700, padding: '0px 8px', borderRadius: '20px' }}>
+                                Turned in late
+                              </span>
+                            )}
+                          </>
+                        )
+                      })()}
                     </div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0, marginLeft: '16px' }}>
@@ -341,42 +371,89 @@ export default function StudentSubmissions() {
                       </div>
                     )}
 
-                    {/* Answers section */}
-                    {questions.filter(q => q.questionType !== 'section_header' && q.questionType !== 'show_work').length > 0 && (
-                      <div style={{ marginTop: '16px' }}>
-                        <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--foreground)', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '1px' }}>
-                          Answers
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                          {(() => {
-                            let qNum = 0
-                            return questions.map((q) => {
-                              const isHeader = q.questionType === 'section_header'
-                              const isShowWork = q.questionType === 'show_work'
-                              if (!isHeader) qNum++
-                              if (isHeader || isShowWork) return null
-                              const bookNumMatch = q.questionText.match(/^(\d+\.)\s([\s\S]*)$/)
-                              const qLabel = bookNumMatch ? bookNumMatch[1] : `${qNum}.`
-                              const qBody = bookNumMatch ? bookNumMatch[2] : q.questionText
-                              return (
-                                <div key={q.id} style={{ padding: '12px 14px', background: 'var(--page-bg)', borderRadius: 'var(--radius)', border: '1px solid var(--gray-light)' }}>
-                                  <div style={{ display: 'flex', gap: '8px', fontSize: '13px', fontWeight: 600, color: 'var(--gray-mid)', marginBottom: '6px' }}>
-                                    <span style={{ flexShrink: 0 }}>{qLabel}</span>
-                                    <MathRenderer text={qBody} />
+                    {/* Answers section — graded breakdown once Melinda has
+                        graded (right/wrong + correct answer), plain answers
+                        clearly labeled as yours before that. */}
+                    {(() => {
+                      const graded: GradedQuestion[] = Array.isArray(parsed.gradedQuestions) ? parsed.gradedQuestions : []
+                      if (graded.length > 0) {
+                        const gradable = graded.filter(g => g.questionType !== 'section_header')
+                        const nCorrect = gradable.filter(g => g.correct).length
+                        return (
+                          <div style={{ marginTop: '16px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+                              <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--foreground)', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                                Graded Results
+                              </span>
+                              <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--plum)', background: 'var(--plum-light)', padding: '1px 10px', borderRadius: '20px' }}>
+                                {nCorrect} of {gradable.length} correct
+                              </span>
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                              {gradable.map((g, i) => (
+                                <div key={g.id} style={{ padding: '12px 14px', background: g.correct ? '#F0FDF4' : '#FEF2F2', borderRadius: 'var(--radius)', border: `1px solid ${g.correct ? '#BBF7D0' : '#FECACA'}` }}>
+                                  <div style={{ display: 'flex', gap: '8px', fontSize: '13px', fontWeight: 600, color: g.correct ? '#166534' : '#991B1B', marginBottom: '6px' }}>
+                                    <span style={{ flexShrink: 0 }}>{g.correct ? '✓' : '✗'} {i + 1}.</span>
+                                    <MathRenderer text={g.questionText} />
                                   </div>
                                   <div style={{ fontSize: '14px', color: 'var(--foreground)' }}>
-                                    {answers[q.id]
-                                      ? <MathRenderer text={answers[q.id]} />
-                                      : <span style={{ color: 'var(--gray-mid)' }}>No answer provided</span>
-                                    }
+                                    <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--gray-mid)' }}>Your answer: </span>
+                                    {g.studentAnswer
+                                      ? <MathRenderer text={g.studentAnswer} />
+                                      : <span style={{ color: 'var(--gray-mid)' }}>No answer given</span>}
                                   </div>
+                                  {!g.correct && g.correctAnswer && (
+                                    <div style={{ fontSize: '14px', color: '#166534', marginTop: '4px' }}>
+                                      <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--gray-mid)' }}>Correct answer: </span>
+                                      <MathRenderer text={g.correctAnswer} />
+                                    </div>
+                                  )}
                                 </div>
-                              )
-                            })
-                          })()}
+                              ))}
+                            </div>
+                          </div>
+                        )
+                      }
+
+                      if (questions.filter(q => q.questionType !== 'section_header' && q.questionType !== 'show_work').length === 0) return null
+                      return (
+                        <div style={{ marginTop: '16px' }}>
+                          <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--foreground)', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                            Your Answers
+                            <span style={{ marginLeft: '8px', textTransform: 'none', letterSpacing: 0, fontWeight: 400, color: 'var(--gray-mid)' }}>(not graded yet)</span>
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                            {(() => {
+                              let qNum = 0
+                              return questions.map((q) => {
+                                const isHeader = q.questionType === 'section_header'
+                                const isShowWork = q.questionType === 'show_work'
+                                if (!isHeader) qNum++
+                                if (isHeader || isShowWork) return null
+                                const bookNumMatch = q.questionText.match(/^(\d+\.)\s([\s\S]*)$/)
+                                const qLabel = bookNumMatch ? bookNumMatch[1] : `${qNum}.`
+                                const qBody = bookNumMatch ? bookNumMatch[2] : q.questionText
+                                return (
+                                  <div key={q.id} style={{ padding: '12px 14px', background: 'var(--page-bg)', borderRadius: 'var(--radius)', border: '1px solid var(--gray-light)' }}>
+                                    <div style={{ display: 'flex', gap: '8px', fontSize: '13px', fontWeight: 600, color: 'var(--gray-mid)', marginBottom: '6px' }}>
+                                      <span style={{ flexShrink: 0 }}>{qLabel}</span>
+                                      <MathRenderer text={qBody} />
+                                    </div>
+                                    <div style={{ fontSize: '14px', color: 'var(--foreground)' }}>
+                                      <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--gray-mid)' }}>Your answer: </span>
+                                      {answers[q.id]
+                                        ? <MathRenderer text={answers[q.id]} />
+                                        : <span style={{ color: 'var(--gray-mid)' }}>No answer given</span>
+                                      }
+                                    </div>
+                                  </div>
+                                )
+                              })
+                            })()}
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )
+                    })()}
 
                     {/* Submitted photos section */}
                     {files.length > 0 && (

@@ -112,6 +112,26 @@ type Submission = {
 }
 
 type Question = { id: string; order: number; questionText: string; questionType: string }
+type GradedQuestion = { id: string; questionText: string; questionType: string; correct: boolean; studentAnswer: string | null; correctAnswer: string | null }
+
+function fmtDateTime(iso: string): string {
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ''
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) +
+    ' at ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+}
+
+/** Due date + late flag from a submission's content JSON (best-effort). */
+function dueInfo(sub: { content: string | null; submittedAt: string | null }): { due: string | null; late: boolean } {
+  try {
+    const parsed = JSON.parse(sub.content || '{}')
+    if (!parsed.dueDateTime) return { due: null, late: false }
+    const due = new Date(parsed.dueDateTime)
+    if (isNaN(due.getTime())) return { due: null, late: false }
+    const late = !!sub.submittedAt && new Date(sub.submittedAt) > due
+    return { due: parsed.dueDateTime, late }
+  } catch { return { due: null, late: false } }
+}
 
 export default function ParentDashboard() {
   useRoleGuard('parent')
@@ -385,7 +405,8 @@ export default function ParentDashboard() {
                                 {lessonLabel(sub)}
                               </div>
                               <div style={{ fontSize: '11px', color: 'var(--gray-mid)' }}>
-                                {sub.submittedAt ? new Date(sub.submittedAt).toLocaleDateString() : ''}
+                                {sub.submittedAt ? `Submitted ${new Date(sub.submittedAt).toLocaleDateString()}` : ''}
+                                {dueInfo(sub).late && <span style={{ color: '#B91C1C', fontWeight: 700, marginLeft: '6px' }}>· late</span>}
                               </div>
                             </div>
                           ))}
@@ -411,7 +432,8 @@ export default function ParentDashboard() {
                                 {lessonLabel(sub)}
                               </div>
                               <div style={{ fontSize: '11px', color: 'var(--gray-mid)' }}>
-                                {sub.submittedAt ? new Date(sub.submittedAt).toLocaleDateString() : ''}
+                                {sub.submittedAt ? `Submitted ${new Date(sub.submittedAt).toLocaleDateString()}` : ''}
+                                {dueInfo(sub).late && <span style={{ color: '#B91C1C', fontWeight: 700, marginLeft: '6px' }}>· late</span>}
                               </div>
                             </div>
                           ))}
@@ -428,10 +450,21 @@ export default function ParentDashboard() {
                       <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', color: 'var(--foreground)', marginBottom: '4px' }}>
                         {lessonLabel(selectedSubmission)}
                       </h2>
-                      <p style={{ color: 'var(--gray-mid)', fontSize: '13px', marginBottom: '24px' }}>
-                        {courseLabel(selectedSubmission)}
-                        {selectedSubmission.submittedAt ? ` · Submitted ${new Date(selectedSubmission.submittedAt).toLocaleDateString()}` : ''}
-                      </p>
+                      {(() => {
+                        const { due, late } = dueInfo(selectedSubmission)
+                        return (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '24px', fontSize: '13px', color: 'var(--gray-mid)' }}>
+                            <span>{courseLabel(selectedSubmission)}</span>
+                            {due && <span>· Due {fmtDateTime(due)}</span>}
+                            {selectedSubmission.submittedAt && <span>· Submitted {fmtDateTime(selectedSubmission.submittedAt)}</span>}
+                            {late && (
+                              <span style={{ background: '#FEE2E2', color: '#B91C1C', border: '1px solid #FECACA', fontSize: '11px', fontWeight: 700, padding: '1px 8px', borderRadius: '20px' }}>
+                                Turned in late
+                              </span>
+                            )}
+                          </div>
+                        )
+                      })()}
 
                       {/* Grade */}
                       {selectedSubmission.grade && (
@@ -468,10 +501,54 @@ export default function ParentDashboard() {
                         } catch { return null }
                       })()}
 
-                      {/* Question-by-question answers — same detail the student sees */}
+                      {/* Question-by-question detail. Once Melinda has graded,
+                          content.gradedQuestions carries per-question right/wrong
+                          plus the correct answer — show that. Before grading,
+                          show the student's answers clearly labeled as theirs. */}
                       {selectedSubmission.content && (() => {
                         let parsed: Record<string, any> = {}
                         try { parsed = JSON.parse(selectedSubmission.content) } catch { return null }
+
+                        const graded: GradedQuestion[] = Array.isArray(parsed.gradedQuestions) ? parsed.gradedQuestions : []
+                        if (graded.length > 0) {
+                          const gradable = graded.filter(g => g.questionType !== 'section_header')
+                          const nCorrect = gradable.filter(g => g.correct).length
+                          return (
+                            <div style={{ marginBottom: '20px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+                                <span style={{ fontSize: '11px', fontWeight: 500, color: 'var(--gray-mid)', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                                  Graded Results
+                                </span>
+                                <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--plum)', background: 'var(--plum-light)', padding: '1px 10px', borderRadius: '20px' }}>
+                                  {nCorrect} of {gradable.length} correct
+                                </span>
+                              </div>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                {gradable.map((g, i) => (
+                                  <div key={g.id} style={{ padding: '12px 14px', background: g.correct ? '#F0FDF4' : '#FEF2F2', borderRadius: '8px', border: `1px solid ${g.correct ? '#BBF7D0' : '#FECACA'}` }}>
+                                    <div style={{ display: 'flex', gap: '8px', fontSize: '13px', fontWeight: 600, color: g.correct ? '#166534' : '#991B1B', marginBottom: '6px' }}>
+                                      <span style={{ flexShrink: 0 }}>{g.correct ? '✓' : '✗'} {i + 1}.</span>
+                                      <MathRenderer text={g.questionText} />
+                                    </div>
+                                    <div style={{ fontSize: '14px', color: 'var(--foreground)' }}>
+                                      <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--gray-mid)' }}>Student&apos;s answer: </span>
+                                      {g.studentAnswer
+                                        ? <MathRenderer text={g.studentAnswer} />
+                                        : <span style={{ color: 'var(--gray-mid)' }}>No answer given</span>}
+                                    </div>
+                                    {!g.correct && g.correctAnswer && (
+                                      <div style={{ fontSize: '14px', color: '#166534', marginTop: '4px' }}>
+                                        <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--gray-mid)' }}>Correct answer: </span>
+                                        <MathRenderer text={g.correctAnswer} />
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )
+                        }
+
                         const templateId: string | undefined = parsed.lessonTemplateId
                         const questions: Question[] = (templateId && questionMap[templateId]) || []
                         const answers: Record<string, string> = parsed.answers || {}
@@ -480,7 +557,8 @@ export default function ParentDashboard() {
                         return (
                           <div style={{ marginBottom: '20px' }}>
                             <div style={{ fontSize: '11px', fontWeight: 500, color: 'var(--gray-mid)', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '1px' }}>
-                              Questions &amp; Answers
+                              Questions &amp; Student&apos;s Answers
+                              <span style={{ marginLeft: '8px', textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>(not graded yet)</span>
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                               {(() => {
@@ -500,9 +578,10 @@ export default function ParentDashboard() {
                                         <MathRenderer text={qBody} />
                                       </div>
                                       <div style={{ fontSize: '14px', color: 'var(--foreground)' }}>
+                                        <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--gray-mid)' }}>Student&apos;s answer: </span>
                                         {answers[q.id]
                                           ? <MathRenderer text={answers[q.id]} />
-                                          : <span style={{ color: 'var(--gray-mid)' }}>No answer provided</span>}
+                                          : <span style={{ color: 'var(--gray-mid)' }}>No answer given</span>}
                                       </div>
                                     </div>
                                   )
