@@ -13,7 +13,7 @@ const client = generateClient()
 const GET_STUDENT_PROFILE = /* GraphQL */ `
   query GetStudentProfile($userId: String!) {
     listStudentProfiles(filter: { userId: { eq: $userId } }, limit: 500) {
-      items { id firstName lastName email courseId enrolledAt }
+      items { id firstName lastName email courseId enrolledAt createdAt }
     }
   }
 `
@@ -71,6 +71,7 @@ type StudentProfile = {
   email: string
   courseId: string | null
   enrolledAt: string | null
+  createdAt?: string | null
 }
 
 type Semester = {
@@ -217,7 +218,12 @@ export default function StudentGradesPage() {
       const studentUserId = user?.userId || ''
       // Enrollment cutoff — hide plans whose week ended before student enrolled.
       // Compare against end of week so enrolling mid-week still shows that week.
-      const enrolledAtMs = profile.enrolledAt ? new Date(profile.enrolledAt).getTime() : null
+      // enrolledAt is stamped at invite-redemption and teacher approval, but
+      // profiles created before that fix carry null — fall back to the row's
+      // createdAt (always present) so legacy students aren't stuck behind the
+      // semester-start floor.
+      const enrolledStamp = profile.enrolledAt || profile.createdAt || null
+      const enrolledAtMs = enrolledStamp ? new Date(enrolledStamp).getTime() : null
       // The grid's lower bound is the semester start, EXCEPT when the student
       // enrolled before it: work assigned pre-season (Melinda's demo week, an
       // early start) is still this semester's work, and its grades must show.
@@ -376,7 +382,11 @@ export default function StudentGradesPage() {
   const pendingCount = assignments.filter(a => a.grade === 'pending').length
   const notStartedCount = assignments.filter(a => !a.grade).length
 
-  if (checking) return null
+  if (checking) return (
+    <div style={{ fontFamily: 'var(--font-body)', background: 'var(--page-bg)', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <p style={{ color: 'var(--gray-mid)', fontSize: '14px' }}>Loading…</p>
+    </div>
+  )
   return (
     <div style={{ fontFamily: 'var(--font-body)', background: 'var(--page-bg)', minHeight: '100vh' }}>
       <style>{`

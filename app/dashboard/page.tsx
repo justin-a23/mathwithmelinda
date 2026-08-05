@@ -668,7 +668,11 @@ export default function Dashboard() {
       ' at ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
   }
 
-  if (checking) return null
+  if (checking) return (
+    <div style={{ fontFamily: 'var(--font-body)', background: 'var(--page-bg)', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <p style={{ color: 'var(--gray-mid)', fontSize: '14px' }}>Loading…</p>
+    </div>
+  )
 
   // Pending approval waiting room
   if (pendingApproval) {
