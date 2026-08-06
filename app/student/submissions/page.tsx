@@ -501,14 +501,24 @@ export default function StudentSubmissions() {
                       </div>
                     )}
 
-                    {/* Revise & Resubmit button */}
-                    {sub.status === 'returned' && weeklyPlanItemId && (
-                      <div style={{ marginTop: '16px' }}>
+                    {/* Revise & Resubmit (returned work gets the full lesson page) +
+                        video-only review for everything turned in */}
+                    {weeklyPlanItemId && (
+                      <div style={{ marginTop: '16px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                        {sub.status === 'returned' && (
+                          <button
+                            onClick={() => router.push(`/lessons?id=${weeklyPlanItemId}`)}
+                            style={{ background: '#f59e0b', color: 'white', border: 'none', borderRadius: '6px', padding: '10px 20px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}
+                          >
+                            Revise &amp; Resubmit
+                          </button>
+                        )}
                         <button
-                          onClick={() => router.push(`/lessons?id=${weeklyPlanItemId}`)}
-                          style={{ background: '#f59e0b', color: 'white', border: 'none', borderRadius: '6px', padding: '10px 20px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}
+                          onClick={() => router.push(`/lessons/review?id=${weeklyPlanItemId}`)}
+                          title="Re-watch this lesson's video"
+                          style={{ background: 'transparent', color: 'var(--plum)', border: '1px solid var(--plum-mid)', borderRadius: '6px', padding: '10px 20px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}
                         >
-                          Revise &amp; Resubmit
+                          ▶ Review Lesson
                         </button>
                       </div>
                     )}
