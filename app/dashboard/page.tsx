@@ -33,6 +33,7 @@ const listWeeklyPlansWithItems = /* GraphQL */`
             dayOfWeek
             dueTime
             isPublished
+            isInClass
             zoomJoinUrl
             lesson {
               id
@@ -168,6 +169,14 @@ const updateStudentProfileUserIdMutation = /* GraphQL */`
   }
 `
 
+// In-class (participation) day — covered in class; students who are there get
+// marked present by Melinda and don't submit. Items saved before the isInClass
+// flag existed have it null — Friday defaulted to in-class on the schedule
+// page, so legacy Fridays count too.
+function isInClassItem(item: { isInClass?: boolean | null; dayOfWeek: string }): boolean {
+  return item.isInClass === true || (item.isInClass == null && item.dayOfWeek === 'Friday')
+}
+
 function getDueStatus(weekStartDate: string, dayOfWeek: string, dueTime: string | null): 'overdue' | 'due-today' | null {
   if (!dueTime) return null
   const now = new Date()
@@ -228,6 +237,7 @@ type WeeklyPlanItem = {
   dayOfWeek: string
   dueTime: string | null
   isPublished: boolean | null
+  isInClass?: boolean | null
   zoomJoinUrl?: string | null
   lesson?: {
     id: string
@@ -1104,6 +1114,11 @@ export default function Dashboard() {
                           <div>
                             <div style={{ fontSize: '12px', fontWeight: 500, marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                               <span style={{ textTransform: 'uppercase', letterSpacing: '1px', color: isOverdue ? '#b91c1c' : 'var(--plum)' }}>{item.dayOfWeek}</span>
+                              {isInClassItem(item) && (
+                                <span style={{ background: '#FEF3C7', color: '#92400E', fontSize: '10px', fontWeight: 700, padding: '2px 9px', borderRadius: '20px', letterSpacing: '0.3px' }}>
+                                  🏫 In Class
+                                </span>
+                              )}
                               {isOverdue && (
                                 <span style={{ background: '#FEE2E2', color: '#b91c1c', fontSize: '10px', fontWeight: 700, padding: '2px 9px', borderRadius: '20px', letterSpacing: '0.3px' }}>
                                   Past Due

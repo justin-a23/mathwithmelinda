@@ -31,6 +31,7 @@ const getWeeklyPlanItemQuery = /* GraphQL */`
       id
       dayOfWeek
       dueTime
+      isInClass
       lessonTemplateId
       weeklyPlan {
         weekStartDate
@@ -101,10 +102,19 @@ const findSubmissionsQuery = /* GraphQL */`
   }
 `
 
+// In-class (participation) day — covered in class, so students who are there
+// don't submit; Melinda marks them present. Items saved before the isInClass
+// flag existed have it null — Friday defaulted to in-class on the schedule
+// page, so legacy Fridays count too.
+function isInClassItem(item: { isInClass?: boolean | null; dayOfWeek: string }): boolean {
+  return item.isInClass === true || (item.isInClass == null && item.dayOfWeek === 'Friday')
+}
+
 type WeeklyPlanItemData = {
   id: string
   dayOfWeek: string
   dueTime: string | null
+  isInClass?: boolean | null
   lessonTemplateId: string | null
   weeklyPlan?: {
     weekStartDate?: string | null
@@ -1152,6 +1162,17 @@ function LessonPageInner() {
                     </div>
                   </div>
                 )}
+              </div>
+            )}
+
+            {isInClassItem(planItem) && !submitted && (
+              <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 'var(--radius)', padding: '18px 24px', marginBottom: '32px', display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                <span style={{ fontSize: '20px', flexShrink: 0, marginTop: '1px' }}>🏫</span>
+                <p style={{ fontSize: '14px', color: '#78350F', lineHeight: '1.7', margin: 0 }}>
+                  <strong>This lesson will be covered in class on {planItem.dayOfWeek}.</strong> If you&apos;re
+                  there, Melinda will mark you present and you&apos;re all set — nothing to turn in. If you
+                  can&apos;t make it to class, watch the lesson and submit your work here like any other day.
+                </p>
               </div>
             )}
 
