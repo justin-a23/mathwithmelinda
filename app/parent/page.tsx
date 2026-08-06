@@ -147,6 +147,7 @@ export default function ParentDashboard() {
   const [selectedSubmission, setSelectedSubmission] = useState<Submission | null>(null)
   const [imageUrls, setImageUrls] = useState<string[]>([])
   const [questionMap, setQuestionMap] = useState<Record<string, Question[]>>({})
+  const [openWeeks, setOpenWeeks] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     if (authStatus === 'unauthenticated') router.replace('/login')
@@ -209,13 +210,18 @@ export default function ParentDashboard() {
         query: listSubmissionsByStudent,
         variables: { studentId: studentSub }
       }) as any
-      const items = (result.data as { listSubmissions: { items: Submission[] } }).listSubmissions.items
+      const items = (result.data as any).listSubmissionsByStudentId.items as Submission[]
       const sorted = items.sort((a, b) => {
         if (!a.submittedAt) return 1
         if (!b.submittedAt) return -1
         return new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime()
       })
       setSubmissions(sorted)
+      // Start with only the newest week expanded
+      {
+        const weeks = [...new Set(sorted.filter((x: Submission) => x.grade).map((x: Submission) => weekOf(x)))].sort()
+        setOpenWeeks(new Set(weeks.length ? [weeks[weeks.length - 1] as string] : []))
+      }
     } catch (err) {
       console.error(err)
     } finally {
@@ -286,6 +292,51 @@ export default function ParentDashboard() {
 
   const graded = submissions.filter(s => s.grade)
   const pending = submissions.filter(s => !s.grade)
+
+  // Monday of the week a submission belongs to — from its due date when the
+  // content JSON carries one, else the submission time. Used to group the
+  // graded list: 150 lessons/year is unreadable flat, one line per week isn't.
+  function weekOf(sub: Submission): string {
+    let base: Date | null = null
+    try {
+      const c = JSON.parse(sub.content || '{}')
+      if (c.dueDateTime) base = new Date(c.dueDateTime)
+    } catch { /* fall through */ }
+    if ((!base || isNaN(base.getTime())) && sub.submittedAt) base = new Date(sub.submittedAt)
+    if (!base || isNaN(base.getTime())) return 'unknown'
+    const d = new Date(base); d.setHours(0, 0, 0, 0)
+    const dow = (d.getDay() + 6) % 7 // Monday = 0
+    d.setDate(d.getDate() - dow)
+    return d.toISOString().slice(0, 10)
+  }
+
+  function weekTitle(week: string): string {
+    const d = new Date(week + 'T00:00:00')
+    if (isNaN(d.getTime())) return 'Other'
+    return 'Week of ' + d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  }
+
+  const gradedWeekGroups = (() => {
+    const m = new Map<string, Submission[]>()
+    for (const sub of graded) {
+      const k = weekOf(sub)
+      if (!m.has(k)) m.set(k, [])
+      m.get(k)!.push(sub)
+    }
+    return [...m.entries()].map(([week, items]) => {
+      const nums = items.map(x => parseFloat(x.grade || '')).filter(n => !isNaN(n))
+      return { week, items, avg: nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : null }
+    }).sort((a, b) => b.week.localeCompare(a.week))
+  })()
+
+  function toggleWeek(week: string) {
+    setOpenWeeks(prev => {
+      const next = new Set(prev)
+      if (next.has(week)) next.delete(week)
+      else next.add(week)
+      return next
+    })
+  }
 
   if (loadingChildren) {
     return (
@@ -417,7 +468,20 @@ export default function ParentDashboard() {
                           <div style={{ fontSize: '11px', fontWeight: 500, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--plum)', marginBottom: '10px' }}>
                             Graded ({graded.length})
                           </div>
-                          {graded.map(sub => (
+                          {gradedWeekGroups.map(group => (
+                            <div key={group.week} style={{ marginBottom: '10px', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
+                              <button onClick={() => toggleWeek(group.week)}
+                                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '10px', padding: '11px 14px', background: 'rgba(123,79,166,0.04)', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-body)', textAlign: 'left' }}>
+                                <span style={{ fontSize: '11px', color: 'var(--plum)', transform: openWeeks.has(group.week) ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s', display: 'inline-block' }}>▶</span>
+                                <span style={{ fontWeight: 700, fontSize: '13px', color: 'var(--foreground)', flex: 1 }}>{weekTitle(group.week)}</span>
+                                <span style={{ fontSize: '11px', color: 'var(--gray-mid)' }}>{group.items.length} graded</span>
+                                {group.avg !== null && (
+                                  <span style={{ fontSize: '11px', fontWeight: 700, background: 'var(--plum)', color: 'white', padding: '2px 8px', borderRadius: '12px' }}>{group.avg.toFixed(0)} avg</span>
+                                )}
+                              </button>
+                              {openWeeks.has(group.week) && (
+                                <div style={{ padding: '8px 8px 0' }}>
+                          {group.items.map(sub => (
                             <div key={sub.id} onClick={() => openSubmission(sub)}
                               style={{ background: selectedSubmission?.id === sub.id ? 'var(--plum-light)' : 'var(--background)', border: `1px solid ${selectedSubmission?.id === sub.id ? 'var(--plum-mid)' : 'var(--gray-light)'}`, borderRadius: 'var(--radius)', padding: '14px 16px', marginBottom: '8px', cursor: 'pointer' }}
                               onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 2px 8px rgba(123,79,166,0.12)')}
@@ -435,6 +499,10 @@ export default function ParentDashboard() {
                                 {sub.submittedAt ? `Submitted ${new Date(sub.submittedAt).toLocaleDateString()}` : ''}
                                 {dueInfo(sub).late && <span style={{ color: '#B91C1C', fontWeight: 700, marginLeft: '6px' }}>· late</span>}
                               </div>
+                            </div>
+                          ))}
+                                </div>
+                              )}
                             </div>
                           ))}
                         </div>
