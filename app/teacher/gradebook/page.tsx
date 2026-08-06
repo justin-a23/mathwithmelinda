@@ -30,7 +30,7 @@ const LIST_WEEKLY_PLANS = /* GraphQL */ `
         id weekStartDate courseWeeklyPlansId assignedStudentIds
         items {
           items {
-            id dayOfWeek lessonTemplateId isPublished isInClass
+            id dayOfWeek dueTime lessonTemplateId isPublished isInClass
             lesson { id title order }
           }
         }
@@ -51,7 +51,7 @@ const LIST_LESSON_TEMPLATES = /* GraphQL */ `
 const LIST_STUDENTS = /* GraphQL */ `
   query ListStudents($filter: ModelStudentProfileFilterInput) {
     listStudentProfiles(filter: $filter, limit: 200) {
-      items { id userId email firstName lastName courseId status enrolledAt }
+      items { id userId email firstName lastName courseId status enrolledAt createdAt }
     }
   }
 `
@@ -93,6 +93,7 @@ type Semester = {
 type PlanItem = {
   id: string
   dayOfWeek: string
+  dueTime?: string | null
   lessonTemplateId: string | null
   isPublished: boolean | null
   isInClass: boolean | null
@@ -122,6 +123,7 @@ type StudentProfile = {
   courseId: string | null
   status: string | null
   enrolledAt: string | null
+  createdAt?: string | null
 }
 
 type Submission = {
@@ -147,6 +149,8 @@ type StudentRow = {
   avg: number | null
   letter: string
   assignedLessonIds: Set<string>
+  /** In-class attendance: present = participation credits, held = in-class days already past */
+  attendance: { present: number; held: number }
 }
 
 function categoryLabel(cat: string | null | undefined): string {
@@ -241,16 +245,46 @@ export default function GradebookPage() {
       const plansRes = await (client.graphql({ query: LIST_WEEKLY_PLANS }) as any)
       const allPlans: WeeklyPlan[] = plansRes.data.listWeeklyPlans.items
 
-      // 2. Filter to this course + date range (quarter or full semester)
+      // 2. Load students first — the term floor below depends on when they enrolled
+      const studentsRes = await (client.graphql({
+        query: LIST_STUDENTS,
+        variables: { filter: { courseId: { eq: sem.courseId } } },
+      }) as any)
+      // Exclude removed, archived, pending, and declined students — only currently-active
+      // students belong in the live gradebook. Past students have their own transcript view.
+      const students: StudentProfile[] = studentsRes.data.listStudentProfiles.items.filter(
+        (s: StudentProfile) => s.status === 'active'
+      )
+
+      // 3. Filter to this course + date range (quarter or full semester).
+      // The full-semester floor extends to the earliest active student's
+      // enrollment when that predates the semester start: work assigned
+      // pre-season (early starts, demo weeks) is still this term's work, and a
+      // hard floor at startDate rendered the whole gradebook empty before the
+      // season began. Last year's plans stay out — nobody currently active was
+      // enrolled back then. Explicit quarter selections keep their exact range.
       const quarters = [...(sem.academicYear?.quarters?.items || [])].sort((a, b) => a.order - b.order)
       const selectedQ = quarters.find(q => q.id === selectedQuarterId)
-      const filterStart = selectedQ ? selectedQ.startDate : sem.startDate
       const filterEnd = selectedQ ? selectedQ.endDate : sem.endDate
+      let floorMs: number
+      if (selectedQ) {
+        floorMs = new Date(selectedQ.startDate + 'T00:00:00').getTime()
+      } else {
+        const semStartMs = new Date(sem.startDate + 'T00:00:00').getTime()
+        const stamps = students
+          .map(st => st.enrolledAt || st.createdAt)
+          .filter(Boolean)
+          .map(d => new Date(d as string).getTime())
+          .filter(n => !isNaN(n))
+        floorMs = stamps.length ? Math.min(semStartMs, Math.min(...stamps)) : semStartMs
+      }
 
       const plansInRange = allPlans.filter(p => {
-        const inRange = p.weekStartDate >= filterStart && p.weekStartDate <= filterEnd
-        const courseMatch = !sem.courseId || p.courseWeeklyPlansId === sem.courseId
-        return inRange && courseMatch
+        if (p.weekStartDate > filterEnd) return false
+        const ws = new Date(p.weekStartDate + 'T00:00:00')
+        const we = new Date(ws); we.setDate(ws.getDate() + 7)
+        if (we.getTime() < floorMs) return false
+        return !sem.courseId || p.courseWeeklyPlansId === sem.courseId
       })
 
       // 3. Collect all plan items with lessons + track assigned students per lesson
@@ -326,27 +360,26 @@ export default function GradebookPage() {
         } while (tmplNextToken)
       }
 
-      // 6. Build sorted columns
+      // 6. Build sorted columns; track in-class lessons and whether each
+      // class day has already happened (due datetime passed, else week over) —
+      // the attendance ratio only counts classes that have been held.
       const cols: LessonColumn[] = []
+      const inClassLessons = new Map<string, boolean>() // lessonId → held
+      const nowMs = Date.now()
       for (const [lessonId, item] of lessonMap.entries()) {
         const lesson = item.lesson!
         const tmpl = item.lessonTemplateId ? templateMap.get(item.lessonTemplateId) : null
-        const cat = isInClassItem(item) ? 'quiz' : categoryLabel(tmpl?.lessonCategory)
+        const inClass = isInClassItem(item)
+        const cat = inClass ? 'quiz' : categoryLabel(tmpl?.lessonCategory)
         const order = lesson.order ?? tmpl?.lessonNumber ?? 9999
+        if (inClass) {
+          const dueMs = item.dueTime ? new Date(item.dueTime).getTime() : NaN
+          const held = !isNaN(dueMs) ? dueMs <= nowMs : (lessonWeekEndMs.get(lessonId) ?? Infinity) <= nowMs
+          inClassLessons.set(lessonId, held)
+        }
         cols.push({ lessonId, title: lesson.title, order, category: cat, templateId: item.lessonTemplateId || null })
       }
       cols.sort((a, b) => a.order - b.order)
-
-      // 7. Load students
-      const studentsRes = await (client.graphql({
-        query: LIST_STUDENTS,
-        variables: { filter: { courseId: { eq: sem.courseId } } },
-      }) as any)
-      // Exclude removed, archived, pending, and declined students — only currently-active
-      // students belong in the live gradebook. Past students have their own transcript view.
-      const students: StudentProfile[] = studentsRes.data.listStudentProfiles.items.filter(
-        (s: StudentProfile) => s.status === 'active'
-      )
 
       // 8. Load all submissions
       const subsRes = await (client.graphql({ query: LIST_ALL_SUBMISSIONS }) as any)
@@ -354,19 +387,21 @@ export default function GradebookPage() {
 
       // 9. Match submissions to lessons
       const lessonIdSet = new Set(cols.map(c => c.lessonId))
-      type SubMatch = { lessonId: string; grade: string | null; status: string | null }
+      type SubMatch = { lessonId: string; grade: string | null; status: string | null; participationCredit: boolean }
       const subsByStudent = new Map<string, SubMatch[]>()
 
       for (const sub of allSubs) {
         if (sub.isArchived) continue
         let parsedLessonId: string | null = null
+        let participationCredit = false
         try {
           const content = JSON.parse(sub.content || '{}')
           parsedLessonId = content.lessonId || null
+          participationCredit = content.participationCredit === true
         } catch { continue }
         if (!parsedLessonId || !lessonIdSet.has(parsedLessonId)) continue
         if (!subsByStudent.has(sub.studentId)) subsByStudent.set(sub.studentId, [])
-        subsByStudent.get(sub.studentId)!.push({ lessonId: parsedLessonId, grade: sub.grade, status: sub.status })
+        subsByStudent.get(sub.studentId)!.push({ lessonId: parsedLessonId, grade: sub.grade, status: sub.status, participationCredit })
       }
 
       // 10. Build rows
@@ -432,7 +467,19 @@ export default function GradebookPage() {
 
         const avg = weightedTotal > 0 ? weightedSum / weightedTotal : null
         const letter = avg !== null ? letterGrade(avg, gradeA, gradeB, gradeC, gradeD) : '—'
-        studentRows.push({ student, grades, avg, letter, assignedLessonIds })
+
+        // Attendance: of the in-class days already held (and assigned to this
+        // student), how many did they attend? Present = Melinda's participation
+        // credit. A student who was absent but submitted the lesson online has
+        // done the WORK, but was not in class — that's the metric's point.
+        let held = 0, present = 0
+        for (const [lessonId, wasHeld] of inClassLessons) {
+          if (!wasHeld) continue
+          if (!isStudentAssigned(student.userId, student.enrolledAt, lessonId)) continue
+          held++
+          if (studentSubs.some(sm => sm.lessonId === lessonId && sm.participationCredit)) present++
+        }
+        studentRows.push({ student, grades, avg, letter, assignedLessonIds, attendance: { present, held } })
       }
 
       studentRows.sort((a, b) => {
@@ -619,8 +666,21 @@ export default function GradebookPage() {
                           <div style={{ fontWeight: 600, fontSize: '15px', color: 'var(--foreground)' }}>
                             {row.student.lastName}, {row.student.firstName}
                           </div>
-                          <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginTop: '2px' }}>
-                            {gradedCount} graded · {totalAssigned - gradedCount} pending · {studentColumns.length - totalAssigned} not started
+                          <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            <span>{gradedCount} graded · {totalAssigned - gradedCount} pending · {studentColumns.length - totalAssigned} not started</span>
+                            {row.attendance.held > 0 && (
+                              row.attendance.present === row.attendance.held ? (
+                                <span title={`Present for all ${row.attendance.held} in-class day${row.attendance.held !== 1 ? 's' : ''} so far`}
+                                  style={{ fontSize: '11px', fontWeight: 700, padding: '1px 8px', borderRadius: '10px', background: '#dcfce7', color: '#15803d', border: '1px solid #86efac' }}>
+                                  ⭐ Perfect attendance
+                                </span>
+                              ) : (
+                                <span title={`Present for ${row.attendance.present} of ${row.attendance.held} in-class days held so far`}
+                                  style={{ fontSize: '11px', fontWeight: 600, padding: '1px 8px', borderRadius: '10px', background: 'var(--plum-light)', color: 'var(--plum)', border: '1px solid var(--plum-mid)' }}>
+                                  🏫 {row.attendance.present}/{row.attendance.held} in class
+                                </span>
+                              )
+                            )}
                           </div>
                         </div>
 
