@@ -1001,8 +1001,11 @@ function LessonPageInner() {
         .diagram{margin:8px 0 12px;max-width:320px}
         .diagram-img{width:100%;border:1px solid #ccc;border-radius:4px;display:block}
         .work-item{margin-bottom:18px;page-break-inside:avoid}
-        .work-label{display:flex;gap:8px;align-items:baseline;margin-bottom:6px;line-height:1.4}
-        .qnum{font-weight:bold;font-size:15px;min-width:22px;flex-shrink:0}
+        /* Normal inline flow, NOT flex: the body is raw text nodes mixed with
+           KaTeX spans, and flex promotes each fragment to its own column —
+           long questions with inline math shattered into a broken grid. */
+        .work-label{margin-bottom:6px;line-height:1.6}
+        .qnum{font-weight:bold;font-size:15px;margin-right:6px}
         .work-box{border:1px solid #bbb;border-radius:4px;height:120px}
         @media print{body{padding:20px}@page{margin:.6in}}
       </style>
