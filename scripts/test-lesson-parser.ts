@@ -225,6 +225,32 @@ test('Diagram fenced JSON survives parsing', () => {
   assertEq(spec.lines[0].slope, -3, 'slope preserved')
 })
 
+test('Question text containing its own answer warns; true/false and short answers do not', () => {
+  const md = `# Lesson 7 — Test
+**Course:** Algebra 1
+**Assignment type:** questions
+
+## Assignment
+
+### Q1 — short_text
+**Express algebraically: the quotient of a number and five. (Use $n$. Write it as a fraction, like n/5.)**
+- Answer: n/5
+
+### Q2 — short_text
+**True or false: subtraction is commutative.**
+- Answer: false
+
+### Q3 — short_text
+**What is $3 + 4$?**
+- Answer: 7
+`
+  const r = parseLessonMarkdown(md)
+  assertEq(r.errors.length, 0, 'no errors')
+  const leakWarnings = r.warnings.filter(w => /contains its own answer/i.test(w))
+  assertEq(leakWarnings.length, 1, 'exactly one leak warning')
+  assert(/Q1/.test(leakWarnings[0]), 'flags Q1, not the true/false or short-answer questions')
+})
+
 console.log('─'.repeat(48))
 console.log(`${passed} passed, ${failed} failed`)
 process.exit(failed > 0 ? 1 : 0)

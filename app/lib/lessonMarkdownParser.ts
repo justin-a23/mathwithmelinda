@@ -349,6 +349,22 @@ export function parseLessonMarkdown(raw: string): ParsedLesson {
       if (type !== 'show_work' && !correctAnswer) {
         warnings.push(`${idLabel}: no "Answer:" provided — auto-grading will be limited.`)
       }
+
+      // Answer-leak check: lesson-creator drafts sometimes write a format
+      // hint whose example IS the answer ("Write it as a fraction, like
+      // n/5." with answer n/5) — the student reads the answer off the
+      // question. Compared with whitespace/$/backslash stripped so LaTeX
+      // wrapping can't hide a match. Guards: trivially short answers match
+      // everywhere, and true/false answers always appear in a "True or
+      // false:" prompt — both skipped.
+      if (text && correctAnswer) {
+        const norm = (s: string) => s.toLowerCase().replace(/[\s$\\]/g, '')
+        const ans = norm(correctAnswer)
+        const isTrueFalse = ans === 'true' || ans === 'false'
+        if (ans.length >= 3 && !isTrueFalse && norm(text).includes(ans)) {
+          warnings.push(`${idLabel}: the question text contains its own answer ("${correctAnswer}") — students will see it. Reword the hint/example before importing.`)
+        }
+      }
     }
 
     questions.push({
