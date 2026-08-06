@@ -114,7 +114,7 @@ const listActiveSemestersQuery = /* GraphQL */`
 
 const listMySubmissionsQuery = /* GraphQL */`
   query ListMySubmissions($studentId: String!) {
-    listSubmissions(filter: { studentId: { eq: $studentId } }, limit: 500) {
+    listSubmissionsByStudentId(studentId: $studentId, limit: 500) {
       items {
         id
         content
@@ -129,7 +129,7 @@ const listMySubmissionsQuery = /* GraphQL */`
 
 const getStudentProfileQuery = /* GraphQL */`
   query GetStudentProfileByUser($userId: String!) {
-    listStudentProfiles(filter: { userId: { eq: $userId } }, limit: 500) {
+    listStudentProfilesByUserId(userId: $userId, limit: 10) {
       items {
         id
         firstName
@@ -304,7 +304,7 @@ export default function Dashboard() {
       try {
         // 1. Fetch profile first — we need courseId before we can filter plans
         const profileResult = await client.graphql({ query: getStudentProfileQuery, variables: { userId } }) as any
-        let profileItems = profileResult.data.listStudentProfiles.items
+        let profileItems = profileResult.data.listStudentProfilesByUserId.items
         let studentCourseId = ''
         let studentEnrolledAt: string | null = null
 
@@ -422,7 +422,7 @@ export default function Dashboard() {
 
         // Build submitted lesson IDs — include returned ones so they stay hidden from the
         // weekly schedule (students reach them via the "Needs Revision" banner button)
-        const subItems = subsResult.data.listSubmissions.items as { id: string; content: string | null; status?: string | null; returnReason?: string | null; returnDueDate?: string | null; submittedAt?: string | null }[]
+        const subItems = subsResult.data.listSubmissionsByStudentId.items as { id: string; content: string | null; status?: string | null; returnReason?: string | null; returnDueDate?: string | null; submittedAt?: string | null }[]
         const lessonIds = new Set<string>()
         for (const sub of subItems) {
           try {

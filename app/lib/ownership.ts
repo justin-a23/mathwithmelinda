@@ -41,23 +41,19 @@ function makeGql(token: string) {
 
 /** The signed-in student's own email, or null if they have no profile. */
 export async function resolveStudentEmail(token: string, userId: string): Promise<string | null> {
-  // NOTE on limits: AppSync list resolvers apply `limit` to the underlying
-  // table scan BEFORE the filter runs. `limit: 1` here scanned one arbitrary
-  // row, filtered it against this userId, and returned empty for nearly every
-  // student — which cascaded into /api/submit 403s ("no student profile") and
-  // blank /api/view-submission previews. Keep limits comfortably above the
-  // table's row count.
-  const data = await makeGql(token)<{ listStudentProfiles: { items: { email: string }[] } }>(
+  // Index-backed lookup (userId GSI) — a direct key query, not a scan, so the
+  // scan-limit-before-filter trap that once broke this resolver can't recur.
+  const data = await makeGql(token)<{ listStudentProfilesByUserId: { items: { email: string }[] } }>(
     /* GraphQL */`
       query StudentEmail($userId: String!) {
-        listStudentProfiles(filter: { userId: { eq: $userId } }, limit: 1000) {
+        listStudentProfilesByUserId(userId: $userId, limit: 10) {
           items { email }
         }
       }
     `,
     { userId }
   )
-  return data?.listStudentProfiles?.items?.[0]?.email ?? null
+  return data?.listStudentProfilesByUserId?.items?.[0]?.email ?? null
 }
 
 /** Emails of every student a parent is linked to. Empty if none. */

@@ -336,6 +336,11 @@ const schema = a.schema({
       assignment: a.belongsTo('Assignment', 'assignmentSubmissionsId'),
       messages: a.hasMany('SubmissionMessage', 'submissionMessagesId'),
     })
+    // "This student's submissions" is the hottest query in the app (dashboard,
+    // grades, parent portal, report card) and was a full-table scan + filter.
+    // The index turns it into a direct key lookup that stays fast as the table
+    // grows. Query field name is pinned so client code never guesses.
+    .secondaryIndexes(index => [index('studentId').queryField('listSubmissionsByStudentId')])
     // Students must be able to turn work in and read it back; parents to see it.
     // authenticated() rather than group('student') — see the note at the top.
     .authorization(studentWritable),
@@ -399,6 +404,11 @@ const schema = a.schema({
       archivedAt: a.string(),
       parentLinks: a.hasMany('ParentStudentLink', 'studentProfileId'),
     })
+    // Identity resolution (sub → profile) runs on nearly every authenticated
+    // request, client and server (app/lib/ownership.ts). Direct lookup instead
+    // of scan+filter. NOTE: one GSI per table per deploy is a CloudFormation
+    // limit — an email index here must wait for a later deploy.
+    .secondaryIndexes(index => [index('userId').queryField('listStudentProfilesByUserId')])
     // Self-setup at /profile/setup requires a student to create their own row
     // BEFORE any group is assigned, so this must be authenticated(), not a group.
     .authorization(studentWritable),
@@ -544,6 +554,9 @@ const schema = a.schema({
       isDeletedByStudent: a.boolean(),
       isTeacherInitiated: a.boolean(),
     })
+    // Same scan-to-lookup upgrade as Submission — the student messages page
+    // and the nav's unread badge both query by studentId on every page load.
+    .secondaryIndexes(index => [index('studentId').queryField('listMessagesByStudentId')])
     .authorization(studentWritable),
 
   Announcement: a

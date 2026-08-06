@@ -12,7 +12,7 @@ const client = generateClient()
 
 const LIST_MY_MESSAGES = /* GraphQL */ `
   query ListMyMessages($studentId: String!) {
-    listMessages(filter: { studentId: { eq: $studentId } }, limit: 200) {
+    listMessagesByStudentId(studentId: $studentId, limit: 500) {
       items { id teacherReply repliedAt }
     }
   }
@@ -20,7 +20,7 @@ const LIST_MY_MESSAGES = /* GraphQL */ `
 
 const GET_STUDENT_PROFILE = /* GraphQL */ `
   query GetStudentProfile($userId: String!) {
-    listStudentProfiles(filter: { userId: { eq: $userId } }, limit: 500) {
+    listStudentProfilesByUserId(userId: $userId, limit: 10) {
       items { firstName profilePictureKey }
     }
   }
@@ -54,7 +54,7 @@ export default function StudentNav({ unreadCount: propUnread }: Props = {}) {
         query: LIST_MY_MESSAGES,
         variables: { studentId },
       }) as any)
-      const msgs = result.data.listMessages.items
+      const msgs = result.data.listMessagesByStudentId.items
       const lastVisited = parseInt(
         (typeof window !== 'undefined' && localStorage.getItem('mwm:messagesLastVisited')) || '0'
       )
@@ -73,7 +73,7 @@ export default function StudentNav({ unreadCount: propUnread }: Props = {}) {
         query: GET_STUDENT_PROFILE,
         variables: { userId },
       }) as any)
-      const p = result.data.listStudentProfiles.items[0]
+      const p = result.data.listStudentProfilesByUserId.items[0]
       if (!p) return
       if (p.firstName) setFirstName(p.firstName)
       // profilePictureKey is a base64 data URL for students

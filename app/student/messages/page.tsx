@@ -12,8 +12,8 @@ import { useRoleGuard } from '@/app/hooks/useRoleGuard'
 const client = generateClient()
 
 const LIST_MESSAGES = /* GraphQL */ `
-  query ListMessages($filter: ModelMessageFilterInput) {
-    listMessages(filter: $filter, limit: 500) {
+  query ListMessages($studentId: String!) {
+    listMessagesByStudentId(studentId: $studentId, limit: 500) {
       items {
         id studentId studentName content sentAt isRead teacherReply repliedAt isDeletedByStudent isTeacherInitiated
       }
@@ -41,7 +41,7 @@ const UPDATE_MESSAGE = /* GraphQL */ `
 // back to showing the raw Cognito sub.
 const GET_MY_PROFILE = /* GraphQL */ `
   query GetMyProfile($userId: String!) {
-    listStudentProfiles(filter: { userId: { eq: $userId } }, limit: 1000) {
+    listStudentProfilesByUserId(userId: $userId, limit: 10) {
       items { id firstName lastName preferredName }
     }
   }
@@ -127,7 +127,7 @@ function StudentMessagesPageInner() {
         query: GET_MY_PROFILE,
         variables: { userId: studentId },
       })
-      const p = result.data?.listStudentProfiles?.items?.[0]
+      const p = result.data?.listStudentProfilesByUserId?.items?.[0]
       if (p) {
         const name = p.preferredName || `${p.firstName || ''} ${p.lastName || ''}`.trim()
         if (name) setProfileName(name)
@@ -142,9 +142,9 @@ function StudentMessagesPageInner() {
     try {
       const result: any = await client.graphql({
         query: LIST_MESSAGES,
-        variables: { filter: { studentId: { eq: studentId } } }
+        variables: { studentId }
       })
-      const items: Message[] = result.data.listMessages.items
+      const items: Message[] = result.data.listMessagesByStudentId.items
         .filter((m: Message) => !m.isDeletedByStudent)
       items.sort((a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime())
       setMessages(items)

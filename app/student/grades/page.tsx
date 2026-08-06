@@ -12,7 +12,7 @@ const client = generateClient()
 
 const GET_STUDENT_PROFILE = /* GraphQL */ `
   query GetStudentProfile($userId: String!) {
-    listStudentProfiles(filter: { userId: { eq: $userId } }, limit: 500) {
+    listStudentProfilesByUserId(userId: $userId, limit: 10) {
       items { id firstName lastName email courseId enrolledAt createdAt }
     }
   }
@@ -58,7 +58,7 @@ const LIST_LESSON_TEMPLATES = /* GraphQL */ `
 
 const LIST_MY_SUBMISSIONS = /* GraphQL */ `
   query ListMySubmissions($studentId: String!) {
-    listSubmissions(filter: { studentId: { eq: $studentId } }, limit: 500) {
+    listSubmissionsByStudentId(studentId: $studentId, limit: 500) {
       items { id studentId content grade status isArchived teacherComment submittedAt }
     }
   }
@@ -186,7 +186,7 @@ export default function StudentGradesPage() {
         query: GET_STUDENT_PROFILE,
         variables: { userId },
       }) as any)
-      const items = res.data.listStudentProfiles.items
+      const items = res.data.listStudentProfilesByUserId.items
       if (items.length === 0) { setLoading(false); return }
       const p: StudentProfile = items[0]
       setProfile(p)
@@ -307,7 +307,7 @@ export default function StudentGradesPage() {
         query: LIST_MY_SUBMISSIONS,
         variables: { studentId },
       }) as any)
-      const subs = subsRes.data.listSubmissions.items.filter((s: any) => !s.isArchived)
+      const subs = subsRes.data.listSubmissionsByStudentId.items.filter((s: any) => !s.isArchived)
 
       // 6. Match submissions to lessons
       const lessonIdSet = new Set(cols.map(c => c.lessonId))

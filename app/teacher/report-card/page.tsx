@@ -62,7 +62,7 @@ const LIST_STUDENT_PROFILE = /* GraphQL */ `
 
 const LIST_SUBMISSIONS_FOR_STUDENT = /* GraphQL */ `
   query ListSubmissionsForStudent($filter: ModelSubmissionFilterInput) {
-    listSubmissions(filter: $filter, limit: 1000) {
+    listSubmissionsByStudentId(studentId: $studentId, limit: 1000) {
       items { id studentId content grade status isArchived }
     }
   }
@@ -518,9 +518,9 @@ function ReportCardInner() {
       for (const sid of studentIds) {
         const subsRes = await (client.graphql({
           query: LIST_SUBMISSIONS_FOR_STUDENT,
-          variables: { filter: { studentId: { eq: sid } } },
+          variables: { studentId: sid },
         }) as any)
-        const items = subsRes.data.listSubmissions.items
+        const items = subsRes.data.listSubmissionsByStudentId.items
         if (items.length > 0) { allSubs = items; break }
       }
 

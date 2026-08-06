@@ -66,8 +66,8 @@ const listParentStudents = /* GraphQL */`
 `
 
 const listSubmissionsByStudent = /* GraphQL */`
-  query ListSubmissions($filter: ModelSubmissionFilterInput) {
-    listSubmissions(filter: $filter, limit: 200) {
+  query ListSubmissions($studentId: String!) {
+    listSubmissionsByStudentId(studentId: $studentId, limit: 500) {
       items {
         id
         studentId
@@ -207,7 +207,7 @@ export default function ParentDashboard() {
 
       const result = await client.graphql({
         query: listSubmissionsByStudent,
-        variables: { filter: { studentId: { eq: studentSub } } }
+        variables: { studentId: studentSub }
       }) as any
       const items = (result.data as { listSubmissions: { items: Submission[] } }).listSubmissions.items
       const sorted = items.sort((a, b) => {
