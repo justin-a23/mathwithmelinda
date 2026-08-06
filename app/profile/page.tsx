@@ -4,6 +4,7 @@ import { useAuthenticator } from '@aws-amplify/ui-react'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState, useRef } from 'react'
 import { generateClient } from 'aws-amplify/api'
+import { getCurrentUser } from 'aws-amplify/auth'
 import ImageCropper from '../components/ImageCropper'
 import StudentNav from '../components/StudentNav'
 import { apiFetch } from '@/app/lib/apiFetch'
@@ -120,11 +121,21 @@ export default function ProfilePage() {
     if (!checking && user === null) router.replace('/login')
   }, [checking, user, router])
 
+  // getCurrentUser() rather than useAuthenticator's user — the event-driven
+  // user object intermittently never arrives on a fresh load, which left this
+  // page's spinner running forever. getCurrentUser resolves from storage.
   useEffect(() => {
-    const userId = user?.userId || user?.username || ''
-    if (!userId) return
-    const loginId = user?.signInDetails?.loginId || ''
-    async function load() {
+    let cancelled = false
+    getCurrentUser()
+      .then(u => {
+        if (cancelled) return
+        const userId = u.userId || u.username || ''
+        const loginId = u.signInDetails?.loginId || ''
+        load(userId, loginId)
+      })
+      .catch(() => router.replace('/login'))
+    return () => { cancelled = true }
+    async function load(userId: string, loginId: string) {
       try {
         const [profileRes, courseRes] = await Promise.all([
           client.graphql({ query: getProfileQuery, variables: { userId } }) as any,
@@ -175,8 +186,7 @@ export default function ProfilePage() {
         setLoading(false)
       }
     }
-    load()
-  }, [user?.userId, user?.username])
+  }, [])
 
   async function savePreferredName() {
     if (!profile) return

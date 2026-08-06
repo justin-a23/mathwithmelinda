@@ -7,6 +7,7 @@ import { studentKey } from '@/app/lib/identity'
 import { useRoleGuard } from '@/app/hooks/useRoleGuard'
 import { useEffect, useState } from 'react'
 import { generateClient } from 'aws-amplify/api'
+import { getCurrentUser } from 'aws-amplify/auth'
 
 const client = generateClient()
 
@@ -172,13 +173,17 @@ export default function StudentGradesPage() {
   const [dataLoading, setDataLoading] = useState(false)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [selectedQuarterId, setSelectedQuarterId] = useState('')  // '' = whole term
+  const [resolvedUserId, setResolvedUserId] = useState('')
   const [openWeeks, setOpenWeeks] = useState<Set<string>>(new Set())
 
+  // getCurrentUser() rather than useAuthenticator's user — see /profile
   useEffect(() => {
-    const userId = user?.userId || user?.username || ''
-    if (!userId) return
-    loadProfile(userId)
-  }, [user?.userId])
+    let cancelled = false
+    getCurrentUser()
+      .then(u => { if (!cancelled) { setResolvedUserId(u.userId); loadProfile(u.userId) } })
+      .catch(() => router.replace('/login'))
+    return () => { cancelled = true }
+  }, [])
 
   useEffect(() => {
     if (selectedSemesterId && profile) {
@@ -230,7 +235,7 @@ export default function StudentGradesPage() {
       const allPlans = plansRes.data.listWeeklyPlans.items
 
       // Filter by date range, course, enrollment cutoff, AND assignedStudentIds
-      const studentUserId = user?.userId || ''
+      const studentUserId = resolvedUserId || user?.userId || ''
       // Enrollment cutoff — hide plans whose week ended before student enrolled.
       // Compare against end of week so enrolling mid-week still shows that week.
       // enrolledAt is stamped at invite-redemption and teacher approval, but

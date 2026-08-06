@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { useRoleGuard } from '@/app/hooks/useRoleGuard'
 import { generateClient } from 'aws-amplify/api'
+import { getCurrentUser } from 'aws-amplify/auth'
 import StudentNav from '../../components/StudentNav'
 import { apiFetch } from '@/app/lib/apiFetch'
 
@@ -71,11 +72,14 @@ export default function StudentSyllabusPage() {
   const [noSyllabus, setNoSyllabus] = useState(false)
 
 
+  // getCurrentUser() rather than useAuthenticator's user — see parent/syllabus
   useEffect(() => {
-    const userId = user?.userId || user?.username || ''
-    if (!userId) return
-    loadSyllabus(userId)
-  }, [user?.userId])
+    let cancelled = false
+    getCurrentUser()
+      .then(u => { if (!cancelled) loadSyllabus(u.userId) })
+      .catch(() => router.replace('/login'))
+    return () => { cancelled = true }
+  }, [])
 
   async function loadSyllabus(userId: string) {
     setLoading(true)

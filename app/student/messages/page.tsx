@@ -4,6 +4,7 @@ import { useAuthenticator } from '@aws-amplify/ui-react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useRef, useState, Suspense } from 'react'
 import { generateClient } from 'aws-amplify/api'
+import { getCurrentUser } from 'aws-amplify/auth'
 import StudentNav from '../../components/StudentNav'
 import { apiFetch } from '@/app/lib/apiFetch'
 import { studentKey } from '@/app/lib/identity'
@@ -91,7 +92,18 @@ function StudentMessagesPageInner() {
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  const studentId = studentKey(user)
+  // Resolved via getCurrentUser() (deterministic) with useAuthenticator's user
+  // as a live fallback — gating on the event-driven user object alone left the
+  // page loading forever whenever the event never fired on a fresh load.
+  const [resolvedId, setResolvedId] = useState('')
+  useEffect(() => {
+    let cancelled = false
+    getCurrentUser()
+      .then(u => { if (!cancelled) setResolvedId(studentKey(u) || '') })
+      .catch(() => router.replace('/login'))
+    return () => { cancelled = true }
+  }, [])
+  const studentId = resolvedId || studentKey(user)
 
   useEffect(() => {
     if (!studentId) return

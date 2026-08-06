@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import MwmLogo from '../../components/MwmLogo'
 import { useEffect, useState } from 'react'
 import { generateClient } from 'aws-amplify/api'
+import { getCurrentUser } from 'aws-amplify/auth'
 import { useTheme } from '../../ThemeProvider'
 import { apiFetch } from '@/app/lib/apiFetch'
 import { useRoleGuard } from '../../hooks/useRoleGuard'
@@ -86,21 +87,28 @@ export default function ParentSyllabusPage() {
     if (user === null) router.replace('/login')
   }, [user, router])
 
+  // Resolve identity with getCurrentUser() — deterministic, storage-backed —
+  // rather than gating on useAuthenticator's user object, which arrives via an
+  // event machine and intermittently never fires on a fresh page load. When
+  // that happened this effect never ran and the page spun forever.
   useEffect(() => {
-    if (!user) return
-    fetchChildren()
-  }, [user])
+    let cancelled = false
+    getCurrentUser()
+      .then(u => { if (!cancelled) fetchChildren(u.userId) })
+      .catch(() => router.replace('/login'))
+    return () => { cancelled = true }
+  }, [])
 
   useEffect(() => {
     if (!selectedChildEmail) return
     loadSyllabusForChild(selectedChildEmail)
   }, [selectedChildEmail])
 
-  async function fetchChildren() {
+  async function fetchChildren(parentId: string) {
     try {
       const result = await (client.graphql({
         query: LIST_PARENT_STUDENTS,
-        variables: { filter: { parentId: { eq: user?.userId } } },
+        variables: { filter: { parentId: { eq: parentId } } },
       }) as any)
       const items: Child[] = result.data.listParentStudents.items
       setChildren(items)
