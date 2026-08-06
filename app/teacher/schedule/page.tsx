@@ -323,6 +323,7 @@ function ScheduleWeekInner() {
             dayOfWeek: day.day,
             dueTime: `${day.dueDate}T${day.dueTime}`,
             isPublished: day.isPublished,
+            isInClass: day.isInClass,
             weeklyPlanItemsId: planId,
             lessonWeeklyPlanItemsId: lessonId,
             lessonTemplateId: day.lessonTemplateId || null

@@ -92,6 +92,7 @@ type WeeklyPlanItem @model {
   dayOfWeek: String!
   dueTime: String
   isPublished: Boolean
+  isInClass: Boolean
   lesson: Lesson @belongsTo
   lessonTemplateId: ID
   weeklyPlan: WeeklyPlan @belongsTo

@@ -923,6 +923,27 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
 
       <main style={{ maxWidth: '1100px', margin: '0 auto', padding: '40px 24px' }}>
 
+        {/* ── FRIDAY PARTICIPATION SHORTCUT ── */}
+        {new Date().getDay() === 5 && (
+          <div
+            onClick={() => router.push('/teacher/participation')}
+            style={{ background: 'var(--plum-light)', border: '1px solid var(--plum-mid)', borderRadius: '12px', padding: '16px 20px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '14px', cursor: 'pointer' }}
+          >
+            <div style={{ width: '36px', height: '36px', background: 'var(--background)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <span style={{ fontSize: '18px' }}>✏️</span>
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 700, fontSize: '14px', color: 'var(--plum)' }}>It&apos;s Friday — take class participation</div>
+              <div style={{ fontSize: '12px', color: 'var(--gray-dark)', marginTop: '2px' }}>
+                Check off who&apos;s in class to give credit for today&apos;s in-class assignment
+              </div>
+            </div>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--plum)" strokeWidth="2">
+              <path d="M9 18l6-6-6-6"/>
+            </svg>
+          </div>
+        )}
+
         {/* ── AI BRIEFING + LIVE STATS + TODAY'S MEETINGS ── */}
         <div style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', padding: '22px 28px', marginBottom: '24px' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px', width: '100%' }}>

@@ -282,6 +282,10 @@ const schema = a.schema({
       dayOfWeek: a.string().required(),
       dueTime: a.string(),
       isPublished: a.boolean(),
+      // In-class (participation) day — typically Friday. Present students get
+      // bulk credit from /teacher/participation instead of submitting; grading
+      // views count this item in the Participation bucket, not Lessons.
+      isInClass: a.boolean(),
       lessonWeeklyPlanItemsId: a.id(),
       lesson: a.belongsTo('Lesson', 'lessonWeeklyPlanItemsId'),
       // Plain scalar in Gen 1, not a modelled relationship. Left as-is.

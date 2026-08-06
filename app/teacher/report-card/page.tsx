@@ -34,7 +34,7 @@ const LIST_WEEKLY_PLANS = /* GraphQL */ `
         id weekStartDate courseWeeklyPlansId assignedStudentIds
         items {
           items {
-            id dayOfWeek lessonTemplateId isPublished
+            id dayOfWeek lessonTemplateId isPublished isInClass
             lesson { id title order }
           }
         }
@@ -135,6 +135,7 @@ type PlanItem = {
   dayOfWeek: string
   lessonTemplateId: string | null
   isPublished: boolean | null
+  isInClass: boolean | null
   lesson: { id: string; title: string; order: number | null } | null
 }
 
@@ -224,6 +225,14 @@ function categoryLabel(cat: string | null | undefined): string {
   if (c.includes('quiz')) return 'quiz'
   if (c.includes('test') || c.includes('exam')) return 'test'
   return 'lesson'
+}
+
+// In-class (participation) days count in the Participation bucket regardless
+// of the lesson's own category. Items saved before the isInClass flag existed
+// have it null — Friday defaulted to in-class on the schedule page, so legacy
+// Fridays count too.
+function isInClassItem(item: { isInClass?: boolean | null; dayOfWeek: string }): boolean {
+  return item.isInClass === true || (item.isInClass == null && item.dayOfWeek === 'Friday')
 }
 
 function letterGrade(avg: number, a: number, b: number, c: number, d: number): string {
@@ -486,7 +495,7 @@ function ReportCardInner() {
       for (const [lessonId, item] of lessonMap.entries()) {
         const lesson = item.lesson!
         const tmpl = item.lessonTemplateId ? templateMap.get(item.lessonTemplateId) : null
-        const cat = categoryLabel(tmpl?.lessonCategory)
+        const cat = isInClassItem(item) ? 'quiz' : categoryLabel(tmpl?.lessonCategory)
         const order = lesson.order ?? tmpl?.lessonNumber ?? 9999
         cols.push({ lessonId, title: lesson.title, order, category: cat, templateId: item.lessonTemplateId || null })
       }
@@ -598,7 +607,7 @@ function ReportCardInner() {
           for (const [lessonId, item] of qLessonMap.entries()) {
             const lesson = item.lesson!
             const tmpl = item.lessonTemplateId ? templateMap.get(item.lessonTemplateId) : null
-            const cat = categoryLabel(tmpl?.lessonCategory)
+            const cat = isInClassItem(item) ? 'quiz' : categoryLabel(tmpl?.lessonCategory)
             const order = lesson.order ?? tmpl?.lessonNumber ?? 9999
             qCols.push({ lessonId, title: lesson.title, order, category: cat, templateId: item.lessonTemplateId || null })
           }

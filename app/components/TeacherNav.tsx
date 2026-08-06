@@ -130,6 +130,7 @@ export default function TeacherNav({ ungradedCount: propUngraded, unreadCount: p
   const isImport = pathname.startsWith('/teacher/lessons/import')
   // "More" items
   const isGradebook = pathname === '/teacher/gradebook'
+  const isParticipation = pathname === '/teacher/participation'
   const isTerms = pathname === '/teacher/semesters'
   const isPlans = pathname === '/teacher/plans'
   const isSyllabi = pathname === '/teacher/syllabus'
@@ -138,10 +139,10 @@ export default function TeacherNav({ ungradedCount: propUngraded, unreadCount: p
   const isPayments = pathname === '/teacher/payments'
   const isProfile = pathname === '/teacher/profile'
 
-  const moreIsActive = isGradebook || isTerms || isPlans || isSyllabi || isZoom || isReportCard || isPayments || isImport
+  const moreIsActive = isGradebook || isParticipation || isTerms || isPlans || isSyllabi || isZoom || isReportCard || isPayments || isImport
 
   // Label for "More" button when a sub-item is active
-  const moreActiveLabel = isGradebook ? 'Gradebook' : isReportCard ? 'Report Card' : isPlans ? 'Assigned Work' : isTerms ? 'Academic Year' : isSyllabi ? 'Syllabi' : isZoom ? 'Meetings' : isPayments ? 'Payments' : isImport ? 'Import Lesson' : null
+  const moreActiveLabel = isGradebook ? 'Gradebook' : isParticipation ? 'Participation' : isReportCard ? 'Report Card' : isPlans ? 'Assigned Work' : isTerms ? 'Academic Year' : isSyllabi ? 'Syllabi' : isZoom ? 'Meetings' : isPayments ? 'Payments' : isImport ? 'Import Lesson' : null
 
   function primaryBtn(label: string, path: string, active: boolean, badge?: number) {
     return (
@@ -295,6 +296,7 @@ export default function TeacherNav({ ungradedCount: propUngraded, unreadCount: p
           }}>
             {dropdownItem('Assigned Work', '/teacher/plans', isPlans)}
             {dropdownItem('Gradebook', '/teacher/gradebook', isGradebook)}
+            {dropdownItem('Participation', '/teacher/participation', isParticipation)}
             {dropdownItem('Import Lesson', '/teacher/lessons/import', isImport)}
             <div style={{ height: '1px', background: 'var(--gray-light)', margin: '4px 8px' }} />
             {dropdownItem('Meetings', '/teacher/zoom', isZoom)}

@@ -43,7 +43,7 @@ const LIST_ALL_PLANS = /* GraphQL */ `
         id weekStartDate courseWeeklyPlansId assignedStudentIds
         items {
           items {
-            id dayOfWeek lessonTemplateId isPublished
+            id dayOfWeek lessonTemplateId isPublished isInClass
             lesson { id title order }
           }
         }
@@ -135,6 +135,14 @@ type SemesterSummary = {
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+// In-class (participation) days count in the Participation bucket regardless
+// of the lesson's own category. Items saved before the isInClass flag existed
+// have it null — Friday defaulted to in-class on the schedule page, so legacy
+// Fridays count too.
+function isInClassItem(item: { isInClass?: boolean | null; dayOfWeek: string }): boolean {
+  return item.isInClass === true || (item.isInClass == null && item.dayOfWeek === 'Friday')
+}
 
 function categoryLabel(cat: string | null | undefined): string {
   const c = (cat || '').toLowerCase()
@@ -270,11 +278,13 @@ export default function TranscriptPage() {
         const lessonIds = new Set<string>()
         const templateIds = new Set<string>()
         const lessonTemplateMap: Record<string, string | null> = {}
+        const lessonInClass: Record<string, boolean> = {}
         for (const plan of plansInSem) {
           for (const it of plan.items?.items || []) {
             if (!it.lesson) continue
             if (it.isPublished === false) continue
             lessonIds.add(it.lesson.id)
+            if (isInClassItem(it)) lessonInClass[it.lesson.id] = true
             if (it.lessonTemplateId) {
               templateIds.add(it.lessonTemplateId)
               lessonTemplateMap[it.lesson.id] = it.lessonTemplateId
@@ -309,7 +319,7 @@ export default function TranscriptPage() {
             const n = parseFloat(g)
             if (!isNaN(n)) {
               const tplId = lessonTemplateMap[lid]
-              const cat = tplId ? (catMap[tplId] || 'lesson') : 'lesson'
+              const cat = lessonInClass[lid] ? 'quiz' : tplId ? (catMap[tplId] || 'lesson') : 'lesson'
               byCat[cat].push(n)
               lessonsGraded++
             }
