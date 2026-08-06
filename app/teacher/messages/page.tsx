@@ -152,6 +152,9 @@ export default function TeacherMessagesPage() {
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'active' | 'archived' | 'announcements'>('active')
   const [expandedMessageId, setExpandedMessageId] = useState<string | null>(null)
+  const [expandedThreadId, setExpandedThreadId] = useState<string | null>(null)
+  const [threadSearch, setThreadSearch] = useState('')
+  const [showAllInThread, setShowAllInThread] = useState<Set<string>>(new Set())
   const [replyText, setReplyText] = useState<Record<string, string>>({})
   const [sending, setSending] = useState<Record<string, boolean>>({})
   const [archiving, setArchiving] = useState<Record<string, boolean>>({})
@@ -526,7 +529,19 @@ export default function TeacherMessagesPage() {
   const studentNameById = Object.fromEntries(students.map(s => [s.userId, s.name]))
   const activeGroups = groupByStudent(activeMessages, studentNameById)
   const archivedGroups = groupByStudent(archivedMessages, studentNameById)
-  const currentGroups = tab === 'active' ? activeGroups : archivedGroups
+  // One line per thread: unread first, then most recent activity. Search
+  // filters by name so the list stays usable once it holds every student
+  // Melinda has ever taught.
+  const currentGroups = (tab === 'active' ? activeGroups : archivedGroups)
+    .filter(g => !threadSearch.trim() || g.studentName.toLowerCase().includes(threadSearch.trim().toLowerCase()))
+    .sort((a, b) => {
+      const ua = a.messages.some(m => !m.isRead) ? 1 : 0
+      const ub = b.messages.some(m => !m.isRead) ? 1 : 0
+      if (ua !== ub) return ub - ua
+      const ta = new Date(a.messages[0]?.sentAt || 0).getTime()
+      const tb = new Date(b.messages[0]?.sentAt || 0).getTime()
+      return tb - ta
+    })
   const totalUnread = activeMessages.filter(m => !m.isRead).length
 
   if (checking) return null
@@ -843,15 +858,25 @@ export default function TeacherMessagesPage() {
             </p>
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {(activeGroups.length + archivedGroups.length) > 5 && (
+              <input
+                type="text"
+                value={threadSearch}
+                onChange={e => setThreadSearch(e.target.value)}
+                placeholder="Search by student or parent name…"
+                style={{ padding: '10px 14px', border: '1px solid var(--gray-light)', borderRadius: '8px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)', marginBottom: '8px' }}
+              />
+            )}
             {currentGroups.map(group => {
               const unreadCount = group.messages.filter(m => !m.isRead).length
               const isArchiving = archiving[group.studentId]
 
               return (
-                <div key={group.studentId}>
-                  {/* Student group header */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+                <div key={group.studentId} style={{ border: '1px solid var(--gray-light)', borderRadius: '10px', padding: '10px 14px', background: 'var(--background)' }}>
+                  {/* Thread row — click to open/close */}
+                  <div onClick={() => setExpandedThreadId(prev => prev === group.studentId ? null : group.studentId)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: expandedThreadId === group.studentId ? '12px' : 0, cursor: 'pointer' }}>
                     <div style={{ width: '34px', height: '34px', borderRadius: '50%', background: group.studentId.startsWith('parent:') ? '#0369a1' : 'var(--plum)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: 700, flexShrink: 0 }}>
                       {group.studentId.startsWith('parent:') ? 'P' : group.studentName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
                     </div>
@@ -864,13 +889,18 @@ export default function TeacherMessagesPage() {
                         {unreadCount} new
                       </span>
                     )}
-                    <span style={{ fontSize: '12px', color: 'var(--gray-mid)', marginLeft: 'auto' }}>
-                      {group.messages.length} message{group.messages.length !== 1 ? 's' : ''}
+                    {expandedThreadId !== group.studentId && group.messages[0] && (
+                      <span style={{ fontSize: '12px', color: 'var(--gray-mid)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {(group.messages[0].teacherReply && new Date(group.messages[0].repliedAt || 0) > new Date(group.messages[0].sentAt) ? 'You: ' + group.messages[0].teacherReply : group.messages[0].content).replace(/^\[ref:sub=[^\]]+\]\n?/, '').slice(0, 90)}
+                      </span>
+                    )}
+                    <span style={{ fontSize: '12px', color: 'var(--gray-mid)', marginLeft: 'auto', whiteSpace: 'nowrap' }}>
+                      {group.messages.length} message{group.messages.length !== 1 ? 's' : ''} · {new Date(group.messages[0]?.sentAt || 0).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                     </span>
 
                     {/* Archive / Unarchive button */}
                     <button
-                      onClick={() => setConversationArchived(group.studentId, tab === 'active')}
+                      onClick={e => { e.stopPropagation(); setConversationArchived(group.studentId, tab === 'active') }}
                       disabled={isArchiving}
                       title={tab === 'active' ? 'Archive this conversation' : 'Restore to active'}
                       style={{
@@ -901,7 +931,7 @@ export default function TeacherMessagesPage() {
                     </button>
                     {tab === 'archived' && (
                       <button
-                        onClick={() => deleteConversation(group.studentId)}
+                        onClick={e => { e.stopPropagation(); deleteConversation(group.studentId) }}
                         style={{ background: 'transparent', border: '1px solid #fca5a5', color: '#dc2626', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 500 }}
                       >
                         Delete
@@ -909,9 +939,12 @@ export default function TeacherMessagesPage() {
                     )}
                   </div>
 
-                  {/* Messages */}
+                  {/* Messages — only for the open thread; newest-first list capped
+                      at 10 until "Show earlier" (a year with one chatty student
+                      shouldn't render hundreds of cards) */}
+                  {expandedThreadId === group.studentId && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {group.messages.map(msg => {
+                    {(showAllInThread.has(group.studentId) ? group.messages : group.messages.slice(0, 10)).map(msg => {
                       const isExpanded = expandedMessageId === msg.id
                       const isUnread = !msg.isRead
 
@@ -1026,7 +1059,15 @@ export default function TeacherMessagesPage() {
                         </div>
                       )
                     })}
+                    {group.messages.length > 10 && !showAllInThread.has(group.studentId) && (
+                      <button
+                        onClick={() => setShowAllInThread(prev => new Set(prev).add(group.studentId))}
+                        style={{ alignSelf: 'center', background: 'transparent', border: '1px solid var(--gray-light)', color: 'var(--gray-mid)', padding: '6px 16px', borderRadius: '20px', cursor: 'pointer', fontSize: '12px', fontWeight: 600, fontFamily: 'var(--font-body)' }}>
+                        Show {group.messages.length - 10} earlier message{group.messages.length - 10 !== 1 ? 's' : ''}
+                      </button>
+                    )}
                   </div>
+                  )}
                 </div>
               )
             })}
