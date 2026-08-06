@@ -34,7 +34,7 @@ const LIST_WEEKLY_PLANS = /* GraphQL */ `
         id weekStartDate courseWeeklyPlansId assignedStudentIds
         items {
           items {
-            id dayOfWeek lessonTemplateId isPublished isInClass
+            id dayOfWeek dueTime lessonTemplateId isPublished isInClass
             lesson { id title order }
           }
         }
@@ -136,6 +136,7 @@ type PlanItem = {
   lessonTemplateId: string | null
   isPublished: boolean | null
   isInClass: boolean | null
+  dueTime?: string | null
   lesson: { id: string; title: string; order: number | null } | null
 }
 
@@ -199,6 +200,8 @@ type ReportData = {
   // Quarter-based report card data
   quarterBreakdown: QuarterGrades[] | null
   reportTitle: string  // e.g. "Q3 Report Card" or "Report Card"
+  /** In-class attendance: present = participation credits, held = in-class days already past */
+  attendance: { present: number; held: number }
 }
 
 type ReportCardRecord = {
@@ -490,13 +493,21 @@ function ReportCardInner() {
         } while (tmplNextToken)
       }
 
-      // 7. Build columns
+      // 7. Build columns; track in-class lessons and whether each class day
+      // has already been held (due datetime passed) for the attendance stat
       const cols: LessonColumn[] = []
+      const heldInClassLessonIds = new Set<string>()
+      const nowMs = Date.now()
       for (const [lessonId, item] of lessonMap.entries()) {
         const lesson = item.lesson!
         const tmpl = item.lessonTemplateId ? templateMap.get(item.lessonTemplateId) : null
-        const cat = isInClassItem(item) ? 'quiz' : categoryLabel(tmpl?.lessonCategory)
+        const inClass = isInClassItem(item)
+        const cat = inClass ? 'quiz' : categoryLabel(tmpl?.lessonCategory)
         const order = lesson.order ?? tmpl?.lessonNumber ?? 9999
+        if (inClass && item.dueTime) {
+          const dueMs = new Date(item.dueTime).getTime()
+          if (!isNaN(dueMs) && dueMs <= nowMs) heldInClassLessonIds.add(lessonId)
+        }
         cols.push({ lessonId, title: lesson.title, order, category: cat, templateId: item.lessonTemplateId || null })
       }
       cols.sort((a, b) => a.order - b.order)
@@ -516,6 +527,7 @@ function ReportCardInner() {
       // 9. Build grade map
       const lessonIdSet = new Set(cols.map(c => c.lessonId))
       const gradeMap: Record<string, string | null> = {}
+      const creditedLessonIds = new Set<string>()
       for (const sub of allSubs) {
         if (sub.isArchived) continue
         try {
@@ -523,8 +535,18 @@ function ReportCardInner() {
           const lid = content.lessonId
           if (lid && lessonIdSet.has(lid)) {
             gradeMap[lid] = sub.grade || 'pending'
+            if (content.participationCredit === true) creditedLessonIds.add(lid)
           }
         } catch { continue }
+      }
+
+      // Attendance: of in-class days already held, how many was this student
+      // marked present for? (Doing the lesson online while absent counts for
+      // the GRADE, but not for attendance.)
+      let attHeld = 0, attPresent = 0
+      for (const lid of heldInClassLessonIds) {
+        attHeld++
+        if (creditedLessonIds.has(lid)) attPresent++
       }
 
       // 10. Build assignment results
@@ -665,6 +687,7 @@ function ReportCardInner() {
         assignments,
         quarterBreakdown,
         reportTitle,
+        attendance: { present: attPresent, held: attHeld },
       })
     } catch (err: any) {
       console.error('Error loading report card:', err)
@@ -751,6 +774,12 @@ function ReportCardInner() {
       report.testAvg !== null  ? `<tr><td style="padding:8px 12px;color:#555;">Tests</td><td style="padding:8px 12px;text-align:center;color:#555;">${report.testWeight}%</td><td style="padding:8px 12px;text-align:center;font-weight:700;color:#111;">${report.testAvg.toFixed(1)}%</td></tr>` : '',
     ].filter(Boolean).join('')
 
+    const attendanceHtml = report.attendance.held > 0
+      ? (report.attendance.present === report.attendance.held
+          ? `<p style="margin:14px 0 0;font-size:14px;color:#15803d;font-weight:700;">⭐ Perfect attendance — present for all ${report.attendance.held} in-class day${report.attendance.held !== 1 ? 's' : ''}</p>`
+          : `<p style="margin:14px 0 0;font-size:14px;color:#555;"><strong>In-class attendance:</strong> present ${report.attendance.present} of ${report.attendance.held} days</p>`)
+      : ''
+
     const html = `
       <div style="font-family:sans-serif;max-width:600px;margin:0 auto;background:#fff;">
         <div style="background:#1E1E2E;padding:20px 28px;border-radius:10px 10px 0 0;display:flex;align-items:center;gap:12px;">
@@ -795,7 +824,8 @@ function ReportCardInner() {
               </tr>
             </thead>
             <tbody>${categoryRows}</tbody>
-          </table>` : ''}
+          </table>
+        ${attendanceHtml}` : ''}
 
           <a href="https://mathwithmelinda.com/dashboard" style="display:inline-block;background:#7b4fa6;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px;margin-bottom:20px;">
             View Full Grades →
@@ -1040,6 +1070,20 @@ function ReportCardInner() {
                   })}
                 </tbody>
               </table>
+              {report.attendance.held > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '12px', fontSize: '13px', color: '#555' }}>
+                  <span style={{ fontWeight: 600 }}>In-class attendance:</span>
+                  {report.attendance.present === report.attendance.held ? (
+                    <span style={{ fontWeight: 700, padding: '2px 10px', borderRadius: '12px', background: '#dcfce7', color: '#15803d', border: '1px solid #86efac' }}>
+                      ⭐ Perfect — present all {report.attendance.held} day{report.attendance.held !== 1 ? 's' : ''}
+                    </span>
+                  ) : (
+                    <span style={{ fontWeight: 600, padding: '2px 10px', borderRadius: '12px', background: '#f5f3ff', color: '#7b4fa6', border: '1px solid #ddd0f0' }}>
+                      🏫 Present {report.attendance.present} of {report.attendance.held} in-class days
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* ── Quarter Breakdown (if quarters exist) ── */}

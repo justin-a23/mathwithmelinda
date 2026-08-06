@@ -491,6 +491,81 @@ export default function ParticipationPage() {
             </>
           )
         )}
+
+        {/* ── Season attendance summary ─────────────────────────────────── */}
+        {selectedCourseId && !loadingData && options.length > 0 && (() => {
+          const nowMs = Date.now()
+          // In-class days already held (due datetime passed; else week over)
+          const heldOpts = options.filter(o => {
+            if (o.dueTime) {
+              const d = new Date(o.dueTime).getTime()
+              if (!isNaN(d)) return d <= nowMs
+            }
+            const ws = new Date(o.weekStartDate + 'T00:00:00')
+            const we = new Date(ws); we.setDate(ws.getDate() + 7)
+            return we.getTime() <= nowMs
+          })
+          if (heldOpts.length === 0) return null
+
+          const summary = students.map(st => {
+            let held = 0, present = 0
+            const missed: string[] = []
+            for (const o of heldOpts) {
+              // respect per-assignment student targeting
+              if (o.assignedStudentIds) {
+                try {
+                  const ids = JSON.parse(o.assignedStudentIds)
+                  if (Array.isArray(ids) && ids.length > 0 && !ids.includes(st.userId) && !ids.includes(st.email)) continue
+                } catch { /* all students */ }
+              }
+              held++
+              const credited = subs.some(sub => {
+                if (sub.isArchived) return false
+                if (sub.studentId !== st.userId && sub.studentId !== st.email) return false
+                try {
+                  const c = JSON.parse(sub.content || '{}')
+                  return c.lessonId === o.lessonId && c.participationCredit === true
+                } catch { return false }
+              })
+              if (credited) present++
+              else missed.push(weekLabel(o.weekStartDate))
+            }
+            return { st, held, present, missed }
+          }).filter(r => r.held > 0)
+            .sort((a, b) => a.st.lastName.localeCompare(b.st.lastName) || a.st.firstName.localeCompare(b.st.firstName))
+
+          if (summary.length === 0) return null
+          return (
+            <div style={{ marginTop: '40px', background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', padding: '20px 24px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--plum)', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '4px' }}>
+                Season Attendance
+              </div>
+              <p style={{ fontSize: '12px', color: 'var(--gray-mid)', margin: '0 0 14px' }}>
+                In-class days attended, out of the {heldOpts.length} held so far in this class.
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {summary.map(({ st, held, present, missed }) => (
+                  <div key={st.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: '8px 12px', background: 'var(--page-bg)', borderRadius: '8px' }}>
+                    <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--foreground)' }}>
+                      {st.lastName}, {st.preferredName || st.firstName}
+                    </span>
+                    {present === held ? (
+                      <span style={{ fontSize: '12px', fontWeight: 700, padding: '2px 10px', borderRadius: '12px', background: '#dcfce7', color: '#15803d', border: '1px solid #86efac' }}>
+                        ⭐ Perfect · {present}/{held}
+                      </span>
+                    ) : (
+                      <span
+                        title={missed.length > 0 ? `Missed: ${missed.join(', ')}` : undefined}
+                        style={{ fontSize: '12px', fontWeight: 600, padding: '2px 10px', borderRadius: '12px', background: 'var(--plum-light)', color: 'var(--plum)', border: '1px solid var(--plum-mid)', cursor: missed.length > 0 ? 'help' : 'default' }}>
+                        🏫 {present}/{held} in class
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
+        })()}
       </main>
     </div>
   )
