@@ -26,6 +26,7 @@ const LIST_SEMESTERS = /* GraphQL */ `
         lessonWeightPercent quizWeightPercent testWeightPercent
         gradeA gradeB gradeC gradeD
         course { id title }
+        academicYear { id quarters { items { id name startDate endDate order } } }
       }
     }
   }
@@ -89,7 +90,10 @@ type Semester = {
   gradeC: number | null
   gradeD: number | null
   course: { id: string; title: string } | null
+  academicYear?: { id: string; quarters: { items: Quarter[] } } | null
 }
+
+type Quarter = { id: string; name: string; startDate: string; endDate: string; order: number }
 
 type LessonColumn = {
   lessonId: string
@@ -97,6 +101,7 @@ type LessonColumn = {
   order: number
   category: string
   templateId: string | null
+  week: string  // weekStartDate of the plan the lesson belongs to
 }
 
 type GradedQuestion = {
@@ -166,6 +171,8 @@ export default function StudentGradesPage() {
   const [loading, setLoading] = useState(true)
   const [dataLoading, setDataLoading] = useState(false)
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [selectedQuarterId, setSelectedQuarterId] = useState('')  // '' = whole term
+  const [openWeeks, setOpenWeeks] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     const userId = user?.userId || user?.username || ''
@@ -265,7 +272,7 @@ export default function StudentGradesPage() {
       for (const plan of plansInRange) {
         for (const item of plan.items?.items || []) {
           if (item.lesson && !lessonMap.has(item.lesson.id)) {
-            lessonMap.set(item.lesson.id, item)
+            lessonMap.set(item.lesson.id, { ...item, weekStartDate: plan.weekStartDate })
             if (item.lessonTemplateId) templateIds.add(item.lessonTemplateId)
           }
         }
@@ -294,7 +301,7 @@ export default function StudentGradesPage() {
         const tmpl = item.lessonTemplateId ? templateMap.get(item.lessonTemplateId) : null
         const cat = isInClassItem(item) ? 'quiz' : categoryLabel(tmpl?.lessonCategory)
         const order = lesson.order ?? tmpl?.lessonNumber ?? 9999
-        cols.push({ lessonId, title: lesson.title, order, category: cat, templateId: item.lessonTemplateId || null })
+        cols.push({ lessonId, title: lesson.title, order, category: cat, templateId: item.lessonTemplateId || null, week: item.weekStartDate || '' })
       }
       cols.sort((a, b) => a.order - b.order)
 
@@ -347,6 +354,15 @@ export default function StudentGradesPage() {
       })
 
       setAssignments(result)
+
+      // Open only the most recent week; everything older starts collapsed.
+      const weeks = [...new Set(result.map(r => r.col.week).filter(Boolean))].sort()
+      setOpenWeeks(new Set(weeks.length ? [weeks[weeks.length - 1]] : []))
+      // Default the quarter filter to the one we're living in (else whole term)
+      const qs = sem.academicYear?.quarters?.items || []
+      const today = new Date().toISOString().slice(0, 10)
+      const cur = qs.find((q: any) => today >= q.startDate && today <= q.endDate)
+      setSelectedQuarterId(cur?.id || '')
     } catch (err: any) {
       console.error('Error loading grades:', JSON.stringify(err, null, 2), err?.errors || err?.message || err)
     } finally {
@@ -355,6 +371,48 @@ export default function StudentGradesPage() {
   }
 
   const selectedSemester = semesters.find(s => s.id === selectedSemesterId)
+
+  const quarters = [...(selectedSemester?.academicYear?.quarters?.items || [])].sort((a, b) => a.order - b.order)
+  const activeQuarter = quarters.find(q => q.id === selectedQuarterId) || null
+  const visibleAssignments = activeQuarter
+    ? assignments.filter(ag => ag.col.week >= activeQuarter.startDate && ag.col.week <= activeQuarter.endDate)
+    : assignments
+
+  // Group by week, newest first — at 5 lessons/week over 30 weeks a flat list
+  // is unreadable; a collapsed week is one line.
+  const weekGroups = (() => {
+    const m = new Map<string, AssignmentGrade[]>()
+    for (const ag of visibleAssignments) {
+      const k = ag.col.week || 'unknown'
+      if (!m.has(k)) m.set(k, [])
+      m.get(k)!.push(ag)
+    }
+    return [...m.entries()].map(([week, items]) => {
+      const nums = items.filter(x => x.grade && x.grade !== 'pending').map(x => parseFloat(x.grade as string)).filter(n => !isNaN(n))
+      return {
+        week,
+        items,
+        gradedCount: nums.length,
+        pendingCount: items.filter(x => x.grade === 'pending').length,
+        avg: nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : null,
+      }
+    }).sort((a, b) => b.week.localeCompare(a.week))
+  })()
+
+  function weekTitle(week: string): string {
+    const d = new Date(week + 'T00:00:00')
+    if (isNaN(d.getTime())) return 'Other'
+    return 'Week of ' + d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  }
+
+  function toggleWeek(week: string) {
+    setOpenWeeks(prev => {
+      const next = new Set(prev)
+      if (next.has(week)) next.delete(week)
+      else next.add(week)
+      return next
+    })
+  }
 
   // Compute weighted average
   const gradeA = selectedSemester?.gradeA ?? 90
@@ -497,20 +555,47 @@ export default function StudentGradesPage() {
                   </div>
                 )}
 
-                {/* ── ASSIGNMENT LIST ── */}
-                {assignments.length === 0 ? (
+                {/* ── QUARTER FILTER ── */}
+                {quarters.length > 0 && (
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '16px' }}>
+                    <button onClick={() => setSelectedQuarterId('')}
+                      style={{ padding: '6px 16px', borderRadius: '20px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font-body)', border: '1px solid ' + (!selectedQuarterId ? 'var(--plum)' : 'var(--gray-light)'), background: !selectedQuarterId ? 'var(--plum)' : 'var(--background)', color: !selectedQuarterId ? 'white' : 'var(--gray-mid)' }}>
+                      Whole term
+                    </button>
+                    {quarters.map(q => (
+                      <button key={q.id} onClick={() => setSelectedQuarterId(q.id)}
+                        style={{ padding: '6px 16px', borderRadius: '20px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font-body)', border: '1px solid ' + (selectedQuarterId === q.id ? 'var(--plum)' : 'var(--gray-light)'), background: selectedQuarterId === q.id ? 'var(--plum)' : 'var(--background)', color: selectedQuarterId === q.id ? 'white' : 'var(--gray-mid)' }}>
+                        {q.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* ── ASSIGNMENT LIST, grouped by week ── */}
+                {visibleAssignments.length === 0 ? (
                   <p style={{ color: 'var(--gray-mid)', textAlign: 'center', padding: '32px 0' }}>
-                    No assignments found in this academic year's date range.
+                    {activeQuarter ? 'No assignments in this quarter yet.' : "No assignments found in this academic year's date range."}
                   </p>
                 ) : (
-                  <div style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: '12px', overflow: 'hidden' }}>
-                    {/* Header */}
-                    <div style={{ padding: '12px 20px', borderBottom: '2px solid var(--gray-light)', background: 'rgba(123,79,166,0.03)', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <span style={{ flex: 1, fontSize: '11px', fontWeight: 700, color: 'var(--gray-mid)', letterSpacing: '1px', textTransform: 'uppercase' }}>Assignment</span>
-                      <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--gray-mid)', letterSpacing: '1px', textTransform: 'uppercase', minWidth: '80px', textAlign: 'center' }}>Score</span>
-                    </div>
-
-                    {assignments.map((ag, i) => {
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {weekGroups.map(group => (
+                      <div key={group.week} style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: '12px', overflow: 'hidden' }}>
+                        <button onClick={() => toggleWeek(group.week)}
+                          style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 20px', background: 'rgba(123,79,166,0.03)', border: 'none', borderBottom: openWeeks.has(group.week) ? '1px solid var(--gray-light)' : 'none', cursor: 'pointer', fontFamily: 'var(--font-body)', textAlign: 'left' }}>
+                          <span style={{ fontSize: '12px', color: 'var(--plum)', transform: openWeeks.has(group.week) ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s', display: 'inline-block' }}>▶</span>
+                          <span style={{ fontWeight: 700, fontSize: '14px', color: 'var(--foreground)', flex: 1 }}>{weekTitle(group.week)}</span>
+                          <span style={{ fontSize: '12px', color: 'var(--gray-mid)' }}>
+                            {group.gradedCount} graded{group.pendingCount > 0 ? ` · ${group.pendingCount} pending` : ''}
+                          </span>
+                          {group.avg !== null && (
+                            <span style={{ fontSize: '12px', fontWeight: 700, padding: '2px 10px', borderRadius: '12px', background: scoreColor(group.avg, gradeA, gradeB, gradeC, gradeD).bg, color: scoreColor(group.avg, gradeA, gradeB, gradeC, gradeD).text }}>
+                              {group.avg.toFixed(0)} avg
+                            </span>
+                          )}
+                        </button>
+                        {openWeeks.has(group.week) && (
+                          <div>
+                    {group.items.map((ag, i) => {
                       const isEven = i % 2 === 0
                       const catColor = ag.col.category === 'test' ? '#dc2626' : ag.col.category === 'quiz' ? '#d97706' : '#16a34a'
                       const catBg = ag.col.category === 'test' ? '#fef2f2' : ag.col.category === 'quiz' ? '#fffbeb' : '#f0fdf4'
@@ -698,6 +783,10 @@ export default function StudentGradesPage() {
                         </div>
                       )
                     })}
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 )}
               </>
