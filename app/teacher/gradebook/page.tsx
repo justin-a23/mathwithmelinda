@@ -587,10 +587,14 @@ export default function GradebookPage() {
                   <div style={{ fontSize: '11px', color: 'var(--gray-mid)', marginTop: '2px' }}>{stat.label}</div>
                 </div>
               ))}
-              <div style={{ display: 'flex', gap: '6px', alignItems: 'center', paddingBottom: '4px' }}>
-                <span style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '20px', background: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0', fontWeight: 600 }}>📖 {selectedSemester.lessonWeightPercent ?? 60}%</span>
+              <div style={{ display: 'flex', gap: '6px', alignItems: 'center', paddingBottom: '4px', flexWrap: 'wrap' }}
+                title="How this class's final grade is calculated — set on the Academic Years page">
+                <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--gray-mid)', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
+                  Class grade formula:
+                </span>
+                <span style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '20px', background: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0', fontWeight: 600 }}>📖 Lessons {selectedSemester.lessonWeightPercent ?? 60}%</span>
                 <span style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '20px', background: '#fffbeb', color: '#b45309', border: '1px solid #fde68a', fontWeight: 600 }}>✏️ Participation {selectedSemester.quizWeightPercent ?? 20}%</span>
-                <span style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '20px', background: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca', fontWeight: 600 }}>📝 {selectedSemester.testWeightPercent ?? 20}%</span>
+                <span style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '20px', background: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca', fontWeight: 600 }}>📝 Tests {selectedSemester.testWeightPercent ?? 20}%</span>
               </div>
             </div>
           )}
