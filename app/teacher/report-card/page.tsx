@@ -285,7 +285,10 @@ function ReportCardInner() {
   const [aiPolishing, setAiPolishing] = useState(false)
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
+  const [sentTo, setSentTo] = useState('')
   const [sendError, setSendError] = useState('')
+  // null = still resolving; [] = resolved, nobody linked
+  const [parentEmails, setParentEmails] = useState<string[] | null>(null)
 
   // History
   const [history, setHistory] = useState<ReportCardRecord[]>([])
@@ -305,6 +308,27 @@ function ReportCardInner() {
     loadReport()
     loadHistory()
   }, [studentId, semesterId, quarterId])
+
+  // Resolve who would actually receive the email BEFORE the teacher hits send,
+  // so "no parents linked" is a visible warning instead of a silent zero-send.
+  useEffect(() => {
+    if (!studentEmail) { setParentEmails([]); return }
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await apiFetch('/api/notify-parents', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ studentEmail, dryRun: true }),
+        })
+        const json = await res.json()
+        if (!cancelled) setParentEmails(json.emails || [])
+      } catch {
+        if (!cancelled) setParentEmails([])
+      }
+    })()
+    return () => { cancelled = true }
+  }, [studentEmail])
 
   async function loadHistory() {
     setHistoryLoading(true)
@@ -757,12 +781,13 @@ function ReportCardInner() {
     }
   }
 
-  async function sendReportCard() {
-    if (!report || !studentEmail) return
-    setSending(true)
-    setSent(false)
-    setSendError('')
-
+  /**
+   * The email is addressed to PARENTS — per Melinda's policy the student never
+   * receives the report card (they see their grades in the portal, but the
+   * report card itself goes home). Links therefore point at the parent portal.
+   */
+  function buildReportEmail() {
+    if (!report) return { html: '', text: '' }
     const { bg: gradeBg, text: gradeText } = gradeChip(report.finalLetter)
     const commentHtml = comment.trim()
       ? `<div style="background:#f5f3ff;border-left:4px solid #7b4fa6;border-radius:8px;padding:18px 22px;margin:20px 0;font-size:15px;line-height:1.7;color:#2d1b4e;font-style:italic;">"${comment.trim().replace(/\n/g, '<br/>')}"<div style="font-size:12px;color:#9874c8;margin-top:10px;font-style:normal;font-weight:600;">— Melinda</div></div>`
@@ -779,6 +804,36 @@ function ReportCardInner() {
           ? `<p style="margin:14px 0 0;font-size:14px;color:#15803d;font-weight:700;">⭐ Perfect attendance — present for all ${report.attendance.held} in-class day${report.attendance.held !== 1 ? 's' : ''}</p>`
           : `<p style="margin:14px 0 0;font-size:14px;color:#555;"><strong>In-class attendance:</strong> present ${report.attendance.present} of ${report.attendance.held} days</p>`)
       : ''
+
+    // Quarter trend — one row per quarter through the selected one, so parents
+    // see the trajectory, then the cumulative row this report's grade comes from.
+    const qb = report.quarterBreakdown || []
+    const trendHtml = qb.length > 0 ? `
+          <div style="font-size:11px;font-weight:700;color:#7b4fa6;letter-spacing:2px;text-transform:uppercase;margin:4px 0 8px;">Quarter Trend</div>
+          <table style="width:100%;border-collapse:collapse;margin-bottom:24px;font-size:13px;">
+            <thead>
+              <tr style="background:#f0eaf8;">
+                <th style="padding:8px 12px;text-align:left;font-size:11px;font-weight:700;color:#555;letter-spacing:1px;text-transform:uppercase;">Quarter</th>
+                <th style="padding:8px 12px;text-align:center;font-size:11px;font-weight:700;color:#555;letter-spacing:1px;text-transform:uppercase;">Average</th>
+                <th style="padding:8px 12px;text-align:center;font-size:11px;font-weight:700;color:#555;letter-spacing:1px;text-transform:uppercase;">Grade</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${qb.map(q => {
+                const chip = q.letter !== '—' ? gradeChip(q.letter) : { bg: 'transparent', text: '#999' }
+                return `<tr>
+                  <td style="padding:8px 12px;color:#555;">${q.quarterName}</td>
+                  <td style="padding:8px 12px;text-align:center;font-weight:700;color:#111;">${q.weightedAvg !== null ? q.weightedAvg.toFixed(1) + '%' : '—'}</td>
+                  <td style="padding:8px 12px;text-align:center;"><span style="background:${chip.bg};color:${chip.text};font-weight:700;font-size:12px;padding:2px 10px;border-radius:20px;">${q.letter}</span></td>
+                </tr>`
+              }).join('')}
+              <tr style="border-top:2px solid #7b4fa6;background:#f8f6fb;">
+                <td style="padding:8px 12px;font-weight:800;color:#7b4fa6;font-size:12px;">CUMULATIVE</td>
+                <td style="padding:8px 12px;text-align:center;font-weight:800;color:#111;">${report.weightedAvg !== null ? report.weightedAvg.toFixed(1) + '%' : '—'}</td>
+                <td style="padding:8px 12px;text-align:center;"><span style="background:${gradeBg};color:${gradeText};font-weight:800;font-size:12px;padding:2px 10px;border-radius:20px;">${report.finalLetter}</span></td>
+              </tr>
+            </tbody>
+          </table>` : ''
 
     const html = `
       <div style="font-family:sans-serif;max-width:600px;margin:0 auto;background:#fff;">
@@ -827,80 +882,119 @@ function ReportCardInner() {
           </table>
         ${attendanceHtml}` : ''}
 
-          <a href="https://mathwithmelinda.com/dashboard" style="display:inline-block;background:#7b4fa6;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px;margin-bottom:20px;">
-            View Full Grades →
+          ${trendHtml}
+
+          <a href="https://www.mathwithmelinda.com/parent" style="display:inline-block;background:#7b4fa6;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px;margin-bottom:20px;">
+            View ${report.studentName}'s Grades →
           </a>
 
           <p style="font-size:12px;color:#aaa;margin:0;line-height:1.6;">
-            For the full assignment breakdown and teacher comments on individual lessons, sign in to your dashboard at mathwithmelinda.com.
+            For the full assignment breakdown and teacher comments on individual lessons, sign in to the parent portal at mathwithmelinda.com/parent.
           </p>
         </div>
       </div>`
 
-    const text = `${report.semesterName} ${report.reportTitle} — ${report.studentName}\n\nCourse: ${report.courseName}\nGrade: ${report.finalLetter}${report.weightedAvg !== null ? ` (${report.weightedAvg.toFixed(1)}%)` : ''}\n${comment.trim() ? `\nComment from Melinda:\n${comment.trim()}\n` : ''}\nView full grades at: https://mathwithmelinda.com/dashboard`
+    const trendText = qb.length > 0
+      ? `\nQuarter trend:\n${qb.map(q => `  ${q.quarterName}: ${q.weightedAvg !== null ? q.weightedAvg.toFixed(1) + '%' : '—'} (${q.letter})`).join('\n')}\n`
+      : ''
+    const text = `${report.semesterName} ${report.reportTitle} — ${report.studentName}\n\nCourse: ${report.courseName}\nGrade: ${report.finalLetter}${report.weightedAvg !== null ? ` (${report.weightedAvg.toFixed(1)}%)` : ''}\n${trendText}${comment.trim() ? `\nComment from Melinda:\n${comment.trim()}\n` : ''}\nView grades in the parent portal: https://www.mathwithmelinda.com/parent`
+
+    return { html, text }
+  }
+
+  /** Persist the immutable "sent" record with who actually received it. */
+  async function recordSend(recipientEmails: string) {
+    if (!report) return
+    try {
+      await (client.graphql({
+        query: CREATE_REPORT_CARD,
+        variables: {
+          input: {
+            studentId,
+            semesterId,
+            quarterId: quarterId || null,
+            studentName: report.studentName,
+            courseName: report.courseName,
+            semesterName: report.semesterName,
+            reportTitle: report.reportTitle,
+            finalLetter: report.finalLetter !== '—' ? report.finalLetter : null,
+            weightedAvg: report.weightedAvg,
+            comment: comment.trim() || null,
+            sentAt: new Date().toISOString(),
+            recipientEmails,
+            quarterBreakdown: report.quarterBreakdown ? JSON.stringify(report.quarterBreakdown) : null,
+          },
+        },
+      }) as any)
+      setSavedComment(comment.trim())
+      await loadHistory()
+    } catch (err) {
+      console.error('Error saving report card record:', err)
+    }
+  }
+
+  async function sendReportCard() {
+    if (!report || !studentEmail || !parentEmails || parentEmails.length === 0) return
+    setSending(true)
+    setSent(false)
+    setSendError('')
+    const { html, text } = buildReportEmail()
 
     try {
-      // Email the student
-      await apiFetch('/api/send-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          to: studentEmail,
-          subject: `Your ${report.semesterName} ${report.reportTitle} — ${report.courseName}`,
-          html,
-          text,
-        }),
-      })
-
-      // Email linked parents
-      await apiFetch('/api/notify-parents', {
+      const res = await apiFetch('/api/notify-parents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           studentEmail,
           subject: `${report.studentName}'s ${report.semesterName} ${report.reportTitle} — ${report.courseName}`,
-          html: html.replace(
-            `View Full Grades →`,
-            `View ${report.studentName}'s Grades →`
-          ).replace(
-            `href="https://mathwithmelinda.com/dashboard"`,
-            `href="https://mathwithmelinda.com/parent"`
-          ),
-          text: text.replace(
-            'https://mathwithmelinda.com/dashboard',
-            'https://mathwithmelinda.com/parent'
-          ),
+          html,
+          text,
         }),
       })
-
-      // Save report card record to history
-      try {
-        await (client.graphql({
-          query: CREATE_REPORT_CARD,
-          variables: {
-            input: {
-              studentId,
-              semesterId,
-              quarterId: quarterId || null,
-              studentName: report.studentName,
-              courseName: report.courseName,
-              semesterName: report.semesterName,
-              reportTitle: report.reportTitle,
-              finalLetter: report.finalLetter !== '—' ? report.finalLetter : null,
-              weightedAvg: report.weightedAvg,
-              comment: comment.trim() || null,
-              sentAt: new Date().toISOString(),
-              recipientEmails: studentEmail,
-              quarterBreakdown: report.quarterBreakdown ? JSON.stringify(report.quarterBreakdown) : null,
-            },
-          },
-        }) as any)
-        setSavedComment(comment.trim())
-        await loadHistory()
-      } catch (err) {
-        console.error('Error saving report card record:', err)
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error || 'send failed')
+      if (!json.sent) {
+        setSendError('No parent emails could be delivered — nothing was sent.')
+        return
       }
+      await recordSend((json.emails || []).join(', '))
+      setSentTo((json.emails || []).join(', '))
+      setSent(true)
+    } catch {
+      setSendError('Send failed — check your connection and try again.')
+    } finally {
+      setSending(false)
+    }
+  }
 
+  /**
+   * No linked parents: email the report to the signed-in teacher instead,
+   * flagged for printing and hand-delivery, and record it as sent so the
+   * gradebook's progress tracking counts this student as handled.
+   */
+  async function sendToTeacher() {
+    if (!report) return
+    const teacherEmail = (user as any)?.signInDetails?.loginId || 'melinda@mathwithmelinda.com'
+    setSending(true)
+    setSent(false)
+    setSendError('')
+    const { html, text } = buildReportEmail()
+
+    try {
+      const res = await apiFetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: teacherEmail,
+          subject: `[Hand-deliver] ${report.studentName}'s ${report.semesterName} ${report.reportTitle} — ${report.courseName}`,
+          html,
+          text,
+        }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error || 'send failed')
+      await recordSend(`${teacherEmail} (hand-deliver)`)
+      setSentTo(`your inbox (${teacherEmail}) — print & hand-deliver`)
       setSent(true)
     } catch {
       setSendError('Send failed — check your connection and try again.')
@@ -1349,14 +1443,50 @@ function ReportCardInner() {
               </div>
               <div>
                 <div style={{ fontFamily: 'var(--font-display)', fontSize: '18px', fontWeight: 700, color: 'var(--foreground)', lineHeight: 1.2 }}>Send Report Card</div>
-                <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginTop: '2px' }}>Email this report card to {report.studentName} and their linked parents</div>
+                <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginTop: '2px' }}>
+                  {parentEmails === null
+                    ? 'Checking linked parents…'
+                    : parentEmails.length > 0
+                      ? `Will email: ${parentEmails.join(', ')}`
+                      : 'Emails the report card home — students see grades in their portal, but the report card itself goes to parents only'}
+                </div>
               </div>
             </div>
 
+            {parentEmails !== null && parentEmails.length === 0 && (
+              <div style={{ marginBottom: '16px', background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: '10px', padding: '14px 18px', display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2" style={{ flexShrink: 0, marginTop: '1px' }}>
+                  <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+                <div style={{ fontSize: '13px', color: '#92400e', lineHeight: 1.6 }}>
+                  <strong>No parents are linked to this student</strong> — an emailed report card can&apos;t reach home.
+                  Use the button below to email it to yourself instead, then print and hand-deliver it.
+                </div>
+              </div>
+            )}
+
             <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+              {parentEmails !== null && parentEmails.length === 0 ? (
+                <button
+                  onClick={sendToTeacher}
+                  disabled={sending || sent}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '8px',
+                    background: sent ? '#dcfce7' : sending ? 'var(--gray-light)' : 'var(--plum)',
+                    color: sent ? '#15803d' : sending ? 'var(--gray-mid)' : 'white',
+                    border: sent ? '1px solid #bbf7d0' : 'none',
+                    borderRadius: '8px',
+                    padding: '11px 22px',
+                    fontSize: '14px',
+                    fontWeight: 700,
+                    cursor: sending || sent ? 'not-allowed' : 'pointer',
+                  }}>
+                  {sent ? '✓ Sent to your inbox' : sending ? 'Sending…' : '📬 Email Me a Copy to Hand-Deliver'}
+                </button>
+              ) : (
               <button
                 onClick={sendReportCard}
-                disabled={sending || sent}
+                disabled={sending || sent || parentEmails === null}
                 style={{
                   display: 'flex', alignItems: 'center', gap: '8px',
                   background: sent ? '#dcfce7' : sending ? 'var(--gray-light)' : 'var(--plum)',
@@ -1384,14 +1514,15 @@ function ReportCardInner() {
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
                     </svg>
-                    Send to Student &amp; Parents
+                    Send to Parent{parentEmails && parentEmails.length > 1 ? 's' : ''}
                   </>
                 )}
               </button>
+              )}
 
               {sent && (
                 <div style={{ fontSize: '13px', color: '#15803d' }}>
-                  Report card emailed to {report.studentName} and any linked parents.
+                  Report card emailed to {sentTo || 'the linked parents'}.
                 </div>
               )}
 
@@ -1403,12 +1534,6 @@ function ReportCardInner() {
               )}
             </div>
 
-            {!studentEmail && (
-              <div style={{ marginTop: '12px', fontSize: '12px', color: '#d97706', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                No email address found for this student — report card will be sent to parents only.
-              </div>
-            )}
           </div>
         )}
 

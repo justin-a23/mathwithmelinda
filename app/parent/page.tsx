@@ -37,7 +37,21 @@ const getLessonTemplateQuestions = /* GraphQL */`
 const getStudentSubByEmail = /* GraphQL */`
   query GetStudentSubByEmail($email: String!) {
     listStudentProfiles(filter: { email: { eq: $email } }, limit: 1000) {
-      items { userId courseId }
+      items { id userId courseId }
+    }
+  }
+`
+
+// Sent report cards for this child. ReportCardRecord.studentId holds the
+// StudentProfile row id (NOT the Cognito sub the submissions use), which is
+// why the profile lookup above also selects id.
+const listReportCardsForStudent = /* GraphQL */`
+  query ListReportCardsForStudent($filter: ModelReportCardRecordFilterInput) {
+    listReportCardRecords(filter: $filter, limit: 200) {
+      items {
+        id studentId reportTitle semesterName courseName
+        finalLetter weightedAvg comment sentAt recipientEmails quarterBreakdown
+      }
     }
   }
 `
@@ -111,8 +125,31 @@ type Submission = {
   } | null
 }
 
+type ReportCard = {
+  id: string
+  studentId: string
+  reportTitle: string
+  semesterName: string
+  courseName: string
+  finalLetter: string | null
+  weightedAvg: number | null
+  comment: string | null
+  sentAt: string
+  recipientEmails: string | null
+  quarterBreakdown: string | null
+}
+
 type Question = { id: string; order: number; questionText: string; questionType: string }
 type GradedQuestion = { id: string; questionText: string; questionType: string; correct: boolean; studentAnswer: string | null; correctAnswer: string | null }
+
+function letterChip(letter: string | null): { bg: string; text: string } {
+  if (letter === 'A') return { bg: '#dcfce7', text: '#15803d' }
+  if (letter === 'B') return { bg: '#dbeafe', text: '#1d4ed8' }
+  if (letter === 'C') return { bg: '#fef9c3', text: '#a16207' }
+  if (letter === 'D') return { bg: '#ffedd5', text: '#c2410c' }
+  if (letter === 'F') return { bg: '#fee2e2', text: '#dc2626' }
+  return { bg: '#f3f4f6', text: '#374151' }
+}
 
 function fmtDateTime(iso: string): string {
   const d = new Date(iso)
@@ -148,6 +185,8 @@ export default function ParentDashboard() {
   const [imageUrls, setImageUrls] = useState<string[]>([])
   const [questionMap, setQuestionMap] = useState<Record<string, Question[]>>({})
   const [openWeeks, setOpenWeeks] = useState<Set<string>>(new Set())
+  const [reportCards, setReportCards] = useState<ReportCard[]>([])
+  const [openReportCardId, setOpenReportCardId] = useState<string | null>(null)
 
   useEffect(() => {
     if (authStatus === 'unauthenticated') router.replace('/login')
@@ -191,6 +230,24 @@ export default function ParentDashboard() {
       }) as any
       const childProfile = profileRes.data.listStudentProfiles.items[0]
       const studentSub = childProfile?.userId
+
+      // Sent report cards (drafts have null recipientEmails and stay teacher-only).
+      // The truthy check is client-side because DynamoDB stores explicit nulls,
+      // which attributeExists-style filters treat as present.
+      setReportCards([])
+      setOpenReportCardId(null)
+      if (childProfile?.id) {
+        try {
+          const rcRes = await (client.graphql({
+            query: listReportCardsForStudent,
+            variables: { filter: { studentId: { eq: childProfile.id } } },
+          }) as any)
+          const rcs = (rcRes.data.listReportCardRecords.items as ReportCard[])
+            .filter(r => r.recipientEmails)
+            .sort((a, b) => b.sentAt.localeCompare(a.sentAt))
+          setReportCards(rcs)
+        } catch { /* section simply stays hidden */ }
+      }
       // Resolve the child's course's active-semester grade scale (best-effort)
       if (childProfile?.courseId) {
         try {
@@ -427,6 +484,73 @@ export default function ParentDashboard() {
                       </div>
                     )
                   })()}
+                </div>
+              )}
+
+              {/* ── Report Cards ── */}
+              {!loadingSubmissions && reportCards.length > 0 && (
+                <div style={{ marginBottom: '32px' }}>
+                  <div style={{ fontSize: '11px', fontWeight: 500, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--plum)', marginBottom: '10px' }}>
+                    Report Cards ({reportCards.length})
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {reportCards.map(rc => {
+                      const open = openReportCardId === rc.id
+                      const chip = letterChip(rc.finalLetter)
+                      let trend: { quarterName: string; weightedAvg: number | null; letter: string }[] = []
+                      try { trend = JSON.parse(rc.quarterBreakdown || '[]') } catch { /* no trend */ }
+                      return (
+                        <div key={rc.id} style={{ border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', overflow: 'hidden', background: 'var(--background)' }}>
+                          <button
+                            onClick={() => setOpenReportCardId(open ? null : rc.id)}
+                            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '14px', padding: '14px 18px', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left' }}>
+                            <div style={{ width: '44px', height: '44px', borderRadius: '10px', background: chip.bg, color: chip.text, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '20px', fontFamily: 'var(--font-display)', flexShrink: 0, border: `1px solid ${chip.text}33` }}>
+                              {rc.finalLetter || '—'}
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--foreground)' }}>
+                                {rc.reportTitle} · {rc.courseName}
+                              </div>
+                              <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginTop: '2px' }}>
+                                {rc.semesterName} · {new Date(rc.sentAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                                {rc.weightedAvg !== null && ` · ${rc.weightedAvg.toFixed(1)}% weighted average`}
+                              </div>
+                            </div>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--gray-mid)" strokeWidth="2"
+                              style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s', flexShrink: 0 }}>
+                              <polyline points="6 9 12 15 18 9"/>
+                            </svg>
+                          </button>
+                          {open && (
+                            <div style={{ padding: '0 18px 18px', borderTop: '1px solid var(--gray-light)' }}>
+                              {trend.length > 0 && (
+                                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '14px' }}>
+                                  {trend.map(q => {
+                                    const qc = letterChip(q.letter)
+                                    return (
+                                      <div key={q.quarterName} style={{ background: 'var(--plum-light)', border: '1px solid var(--plum-mid)', borderRadius: '8px', padding: '8px 14px', textAlign: 'center' }}>
+                                        <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--plum)', marginBottom: '2px' }}>{q.quarterName}</div>
+                                        <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+                                          <span style={{ fontSize: '15px', fontWeight: 700, color: 'var(--foreground)' }}>{q.weightedAvg !== null ? q.weightedAvg.toFixed(1) + '%' : '—'}</span>
+                                          <span style={{ fontSize: '12px', fontWeight: 700, color: qc.text, background: qc.bg, borderRadius: '6px', padding: '0 7px' }}>{q.letter}</span>
+                                        </div>
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              )}
+                              {rc.comment && (
+                                <div style={{ marginTop: '14px', fontSize: '13px', color: 'var(--foreground)', fontStyle: 'italic', lineHeight: 1.6, background: 'var(--plum-light)', padding: '12px 16px', borderRadius: '8px', borderLeft: '3px solid var(--plum)' }}>
+                                  &ldquo;{rc.comment}&rdquo;
+                                  <div style={{ fontSize: '11px', color: 'var(--plum)', marginTop: '8px', fontStyle: 'normal', fontWeight: 600 }}>— Melinda</div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
                 </div>
               )}
 

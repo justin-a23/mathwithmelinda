@@ -56,6 +56,16 @@ const LIST_STUDENTS = /* GraphQL */ `
   }
 `
 
+// Sent-report-card tracking for the progress banner. studentId here is the
+// StudentProfile row id (same id the Report Card button passes in its URL).
+const LIST_SENT_REPORT_CARDS = /* GraphQL */ `
+  query ListSentReportCards($filter: ModelReportCardRecordFilterInput) {
+    listReportCardRecords(filter: $filter, limit: 500) {
+      items { id studentId quarterId recipientEmails }
+    }
+  }
+`
+
 const LIST_ALL_SUBMISSIONS = /* GraphQL */ `
   query ListAllSubmissions {
     listSubmissions(limit: 1000) {
@@ -203,6 +213,8 @@ export default function GradebookPage() {
   // View state
   const [view, setView] = useState<'students' | 'assignment'>('students')
   const [expandedStudentId, setExpandedStudentId] = useState<string | null>(null)
+  // Profile ids of students whose report card for the selected quarter went out
+  const [sentReportIds, setSentReportIds] = useState<Set<string>>(new Set())
   const [selectedColId, setSelectedColId] = useState<string>('')
 
   useEffect(() => {
@@ -255,6 +267,23 @@ export default function GradebookPage() {
       const students: StudentProfile[] = studentsRes.data.listStudentProfiles.items.filter(
         (s: StudentProfile) => s.status === 'active'
       )
+
+      // 2b. Which of these students already have a SENT report card for this
+      // quarter (drafts have null recipientEmails and don't count).
+      try {
+        const rcRes = await (client.graphql({
+          query: LIST_SENT_REPORT_CARDS,
+          variables: { filter: { semesterId: { eq: semesterId } } },
+        }) as any)
+        const sent = new Set<string>(
+          (rcRes.data.listReportCardRecords.items as { studentId: string; quarterId: string | null; recipientEmails: string | null }[])
+            .filter(r => r.recipientEmails && (r.quarterId || '') === selectedQuarterId)
+            .map(r => r.studentId)
+        )
+        setSentReportIds(sent)
+      } catch {
+        setSentReportIds(new Set())
+      }
 
       // 3. Filter to this course + date range (quarter or full semester).
       // The full-semester floor extends to the earliest active student's
@@ -600,6 +629,48 @@ export default function GradebookPage() {
           )}
         </div>
 
+        {/* ── Report card progress banner — appears once the selected quarter ends ── */}
+        {selectedSemester && !dataLoading && rows.length > 0 && (() => {
+          const q = (selectedSemester.academicYear?.quarters?.items || []).find((x: Quarter) => x.id === selectedQuarterId)
+          if (!q) return null
+          const todayYmd = new Date().toLocaleDateString('en-CA')
+          if (q.endDate >= todayYmd) return null
+          const sentCount = rows.filter(r => sentReportIds.has(r.student.id)).length
+          const waiting = rows.filter(r => !sentReportIds.has(r.student.id))
+          const done = waiting.length === 0
+          return (
+            <div style={{
+              margin: '0 0 20px',
+              background: done ? '#f0fdf4' : '#fffbeb',
+              border: `1px solid ${done ? '#bbf7d0' : '#fcd34d'}`,
+              borderRadius: '12px',
+              padding: '16px 22px',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '15px', fontWeight: 700, color: done ? '#15803d' : '#92400e' }}>
+                  {done ? '🎉' : '📋'} {q.name} is complete — {sentCount} of {rows.length} report card{rows.length !== 1 ? 's' : ''} sent
+                </span>
+                {!done && (
+                  <span style={{ fontSize: '13px', fontWeight: 600, color: '#92400e', background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: '20px', padding: '2px 12px' }}>
+                    {waiting.length} waiting
+                  </span>
+                )}
+              </div>
+              {!done && (
+                <div style={{ fontSize: '13px', color: '#92400e', marginTop: '8px', lineHeight: 1.6 }}>
+                  Still waiting: {waiting.map(r => `${r.student.firstName} ${r.student.lastName}`).join(', ')}.
+                  Expand a student below and use their Report Card button to review and send.
+                </div>
+              )}
+              {done && (
+                <div style={{ fontSize: '13px', color: '#15803d', marginTop: '6px' }}>
+                  Every active student in this class has a sent {q.name} report card.
+                </div>
+              )}
+            </div>
+          )
+        })()}
+
         {/* Loading / empty states */}
         {loading ? (
           <p style={{ color: 'var(--gray-mid)', padding: '48px 0', textAlign: 'center' }}>Loading…</p>
@@ -672,6 +743,12 @@ export default function GradebookPage() {
                           </div>
                           <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                             <span>{gradedCount} graded · {totalAssigned - gradedCount} pending · {studentColumns.length - totalAssigned} not started</span>
+                            {selectedQuarterId && sentReportIds.has(row.student.id) && (
+                              <span title="A report card for the selected quarter has been sent"
+                                style={{ fontSize: '11px', fontWeight: 700, padding: '1px 8px', borderRadius: '10px', background: '#dcfce7', color: '#15803d', border: '1px solid #86efac' }}>
+                                📋 Report card sent
+                              </span>
+                            )}
                             {row.attendance.held > 0 && (
                               row.attendance.present === row.attendance.held ? (
                                 <span title={`Present for all ${row.attendance.held} in-class day${row.attendance.held !== 1 ? 's' : ''} so far`}

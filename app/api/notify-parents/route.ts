@@ -54,8 +54,11 @@ export async function POST(req: NextRequest) {
   const appsync = makeAppsync(auth.token)
 
   try {
-    const { studentEmail, subject, html, text } = await req.json()
-    if (!studentEmail || !subject) {
+    // dryRun resolves the linked parent emails WITHOUT sending — the report
+    // card page uses it to show the teacher who will receive the email (and to
+    // warn when the answer is nobody) before anything goes out.
+    const { studentEmail, subject, html, text, dryRun } = await req.json()
+    if (!studentEmail || (!subject && !dryRun)) {
       return NextResponse.json({ error: 'Missing studentEmail or subject' }, { status: 400 })
     }
 
@@ -96,14 +99,19 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    if (dryRun) {
+      return NextResponse.json({ success: true, emails: parentEmails.map(p => p.email) })
+    }
+
     if (parentEmails.length === 0) {
-      return NextResponse.json({ success: true, sent: 0, note: 'No parent emails found' })
+      return NextResponse.json({ success: true, sent: 0, emails: [], note: 'No parent emails found' })
     }
 
     // 4. Send emails
     const transporter = makeTransporter()
     const fromEmail = process.env.SES_FROM_EMAIL || 'melinda@mathwithmelinda.com'
     let sent = 0
+    const sentEmails: string[] = []
     for (const { email } of parentEmails) {
       try {
         await transporter.sendMail({
@@ -120,12 +128,13 @@ export async function POST(req: NextRequest) {
           },
         })
         sent++
+        sentEmails.push(email)
       } catch (err) {
         console.error('Failed to email parent', email, err)
       }
     }
 
-    return NextResponse.json({ success: true, sent })
+    return NextResponse.json({ success: true, sent, emails: sentEmails })
   } catch (err: any) {
     console.error('notify-parents error:', err)
     return NextResponse.json({ error: err.message }, { status: 500 })
