@@ -61,7 +61,7 @@ const LIST_STUDENT_PROFILE = /* GraphQL */ `
 `
 
 const LIST_SUBMISSIONS_FOR_STUDENT = /* GraphQL */ `
-  query ListSubmissionsForStudent($filter: ModelSubmissionFilterInput) {
+  query ListSubmissionsForStudent($studentId: String!) {
     listSubmissionsByStudentId(studentId: $studentId, limit: 1000) {
       items { id studentId content grade status isArchived }
     }
