@@ -225,6 +225,7 @@ const listWeeklyPlansQuery = /* GraphQL */`
             dayOfWeek
             dueTime
             isPublished
+            isInClass
             lesson { id title videoUrl }
           }
         }
@@ -265,6 +266,21 @@ type Alert = {
   level: 'urgent' | 'warning' | 'info'
   message: string
   href?: string
+  /** Shows an ✕ that hides the alert for the rest of the day (localStorage). */
+  dismissible?: boolean
+}
+
+/** Local-date key so a dismissal expires at midnight, not 24h later. */
+function todayKey(): string {
+  return new Date().toLocaleDateString('en-CA')
+}
+
+function alertDismissed(id: string): boolean {
+  try { return localStorage.getItem(`mwm-alert-dismissed:${id}`) === todayKey() } catch { return false }
+}
+
+function dismissAlertForToday(id: string) {
+  try { localStorage.setItem(`mwm-alert-dismissed:${id}`, todayKey()) } catch { /* private mode */ }
 }
 
 
@@ -274,6 +290,8 @@ export default function TeacherDashboard() {
   const [courses, setCourses] = useState<Course[]>([])
   const [loading, setLoading] = useState(true)
   const [weekStats, setWeekStats] = useState<CourseWeekStats[]>([])
+  // Friday banner: true once every in-class item this week is fully checked off
+  const [participationDone, setParticipationDone] = useState(false)
   const [gradeScales, setGradeScales] = useState<GradeScale[]>([])
   const [attention, setAttention] = useState<AttentionRow[]>([])
   const [overdueStats, setOverdueStats] = useState<{ courseId: string; ungraded: number }[]>([])
@@ -653,16 +671,39 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
         setAttention(attentionRows)
       }
 
-      // 3. Next week's plans not set yet (warn Thu/Fri/weekend)
-      if (dayOfWeek === 4 || dayOfWeek === 5 || dayOfWeek === 0 || dayOfWeek === 6) {
-        const nextWeekPlanned = weeklyPlans.some(p => p.weekStartDate === nextMondayStr)
-        if (!nextWeekPlanned) {
+      // 3. Next week's plans not set yet (warn Thu/Fri/weekend).
+      // "Done" means every class with active students has a plan for next week
+      // — a single planned class no longer silences the reminder. Weeks where
+      // Melinda deliberately runs fewer classes are handled by the ✕: dismissal
+      // hides it for the rest of the day.
+      if ((dayOfWeek === 4 || dayOfWeek === 5 || dayOfWeek === 0 || dayOfWeek === 6)
+          && !alertDismissed('next-week-not-planned')) {
+        const activeCourseIds = [...new Set(activeStudents.map(s => s.courseId).filter(Boolean))] as string[]
+        const plannedCourseIds = new Set(
+          weeklyPlans
+            .filter(p => p.weekStartDate === nextMondayStr)
+            .map(p => p.courseWeeklyPlansId || p.course?.id)
+            .filter(Boolean)
+        )
+        const missingIds = activeCourseIds.filter(id => !plannedCourseIds.has(id))
+        if (missingIds.length > 0) {
+          // Course titles: any week's plan for that course carries them.
+          const titleById = new Map<string, string>()
+          for (const p of weeklyPlans) {
+            const cid = p.courseWeeklyPlansId || p.course?.id
+            if (cid && p.course?.title) titleById.set(cid, p.course.title)
+          }
+          const missingNames = missingIds.map(id => titleById.get(id) || 'a new class')
           const dayName = dayOfWeek === 4 ? 'Thursday' : dayOfWeek === 5 ? 'Friday' : 'the weekend'
+          const allMissing = missingIds.length === activeCourseIds.length
           newAlerts.push({
             id: 'next-week-not-planned',
             level: 'warning',
-            message: `It's ${dayName} — next week's assignments haven't been set yet`,
+            message: allMissing
+              ? `It's ${dayName} — next week's assignments haven't been set yet`
+              : `It's ${dayName} — next week isn't planned yet for ${missingNames.join(', ')}`,
             href: '/teacher/plans',
+            dismissible: true,
           })
         }
       }
@@ -786,6 +827,41 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
 
       // ── Count "assigned" and "late" from the weekly plans for THIS WEEK ──
       const thisWeeksPlans = allPlans.filter((p: any) => p.weekStartDate === mondayDateStr)
+
+      // ── Friday participation completeness (drives the Friday banner) ──
+      // Done = every active student assigned to every in-class item this week
+      // has a submission for its lesson — a real one or a participation credit
+      // (Give Credit writes a normal submission, so one lookup covers both).
+      {
+        const checks: boolean[] = []
+        for (const plan of thisWeeksPlans) {
+          const courseId = plan.courseWeeklyPlansId || plan.course?.id
+          let assignedIds: string[] | null = null
+          if (plan.assignedStudentIds) {
+            try {
+              const parsed = typeof plan.assignedStudentIds === 'string'
+                ? JSON.parse(plan.assignedStudentIds)
+                : plan.assignedStudentIds
+              if (Array.isArray(parsed) && parsed.length > 0) assignedIds = parsed
+            } catch { /* treat as all */ }
+          }
+          const roster = assignedIds
+            ? activeStudents.filter(st => assignedIds!.includes(st.userId) || assignedIds!.includes(st.email))
+            : activeStudents.filter(st => st.courseId === courseId)
+          for (const item of plan.items?.items || []) {
+            if (!item.lesson) continue
+            if (item.isPublished === false) continue
+            const inClass = item.isInClass === true || (item.isInClass == null && item.dayOfWeek === 'Friday')
+            if (!inClass) continue
+            const covered = roster.every(st => {
+              const set = submittedLessonsByStudent.get(st.userId) || submittedLessonsByStudent.get(st.email)
+              return !!set && set.has(item.lesson.id)
+            })
+            checks.push(covered)
+          }
+        }
+        setParticipationDone(checks.length > 0 && checks.every(Boolean))
+      }
       for (const plan of thisWeeksPlans) {
         const courseId = plan.courseWeeklyPlansId || plan.course?.id
         if (!courseId) continue
@@ -924,7 +1000,24 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
       <main style={{ maxWidth: '1100px', margin: '0 auto', padding: '40px 24px' }}>
 
         {/* ── FRIDAY PARTICIPATION SHORTCUT ── */}
-        {new Date().getDay() === 5 && (
+        {/* Flips to a success state once every class is checked off, and stays
+            that way for the rest of the day — done work shouldn't keep nagging. */}
+        {new Date().getDay() === 5 && (participationDone ? (
+          <div
+            onClick={() => router.push('/teacher/participation')}
+            style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '12px', padding: '16px 20px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '14px', cursor: 'pointer' }}
+          >
+            <div style={{ width: '36px', height: '36px', background: '#dcfce7', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <span style={{ fontSize: '18px' }}>🎉</span>
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 700, fontSize: '14px', color: '#15803d' }}>Great job — participation is done for today</div>
+              <div style={{ fontSize: '12px', color: '#166534', marginTop: '2px' }}>
+                Every student in every class has been checked off for this week&apos;s in-class assignments
+              </div>
+            </div>
+          </div>
+        ) : (
           <div
             onClick={() => router.push('/teacher/participation')}
             style={{ background: 'var(--plum-light)', border: '1px solid var(--plum-mid)', borderRadius: '12px', padding: '16px 20px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '14px', cursor: 'pointer' }}
@@ -942,7 +1035,7 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
               <path d="M9 18l6-6-6-6"/>
             </svg>
           </div>
-        )}
+        ))}
 
         {/* ── AI BRIEFING + LIVE STATS + TODAY'S MEETINGS ── */}
         <div style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', padding: '22px 28px', marginBottom: '24px' }}>
@@ -1110,6 +1203,22 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
                   <span style={{ fontSize: '14px', color: colors.text, fontWeight: 500, flex: 1 }}>{alert.message}</span>
                   {alert.href && (
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={colors.sub} strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
+                  )}
+                  {alert.dismissible && (
+                    <button
+                      title="Dismiss for the rest of today"
+                      onClick={e => {
+                        e.stopPropagation()
+                        dismissAlertForToday(alert.id)
+                        setAlerts(prev => prev.filter(a => a.id !== alert.id))
+                      }}
+                      style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px', marginLeft: '2px', display: 'flex', flexShrink: 0, opacity: 0.55 }}
+                      onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+                      onMouseLeave={e => (e.currentTarget.style.opacity = '0.55')}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={colors.text} strokeWidth="2.5">
+                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                      </svg>
+                    </button>
                   )}
                 </div>
               )
