@@ -1121,10 +1121,10 @@ export default function LessonLibraryPage() {
   }
 
   const assignmentTypes = [
-    { value: 'none', label: 'Video Only' },
-    { value: 'questions', label: 'Online Questions' },
-    { value: 'upload', label: 'Photo Submission' },
-    { value: 'both', label: 'Online + Photo' },
+    { value: 'none', label: 'Video Only', hint: 'Watch only — nothing to submit, nothing in the gradebook. For intro or review videos.' },
+    { value: 'questions', label: 'Online Questions', hint: 'Students answer digitally on the platform — instant grading, no paper. For fully digital checks.' },
+    { value: 'upload', label: 'Photo Submission', hint: 'Students photograph paper or book work and upload it. For book lessons and printable worksheets — the standard for Arithmetic 6, MS Math, and Pre-Algebra.' },
+    { value: 'both', label: 'Online + Photo', hint: 'Digital answers plus a photo of written work, so you can check their method. The Algebra 1 style.' },
   ]
 
   // Treat legacy 'worksheet' as 'upload'
@@ -1450,6 +1450,12 @@ export default function LessonLibraryPage() {
                                   </button>
                                 ))}
                               </div>
+                              {(() => {
+                                const hint = assignmentTypes.find(at => at.value === effectiveAssignmentType)?.hint
+                                return hint ? (
+                                  <p style={{ fontSize: '12px', color: 'var(--gray-mid)', margin: '8px 0 0', lineHeight: 1.5 }}>{hint}</p>
+                                ) : null
+                              })()}
                             </div>
 
                             {/* Video */}
