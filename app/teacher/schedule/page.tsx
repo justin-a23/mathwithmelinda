@@ -186,16 +186,39 @@ function ScheduleWeekInner() {
   }
 
   function selectLesson(dayIndex: number, templateId: string) {
+    // Choosing "Select lesson..." clears the day — needed to undo an auto-fill.
+    if (!templateId) {
+      const updated = [...days]
+      updated[dayIndex] = {
+        ...updated[dayIndex],
+        lessonTemplateId: '', lessonNumber: '', lessonTitle: '',
+        instructions: '', videoUrl: '', isPublished: false,
+      }
+      setDays(updated)
+      return
+    }
     const template = lessonTemplates.find(t => t.id === templateId)
     if (!template) return
+    const fill = (row: DayPlan, t: LessonTemplate): DayPlan => ({
+      ...row,
+      lessonTemplateId: t.id,
+      lessonNumber: String(t.lessonNumber),
+      lessonTitle: t.title,
+      instructions: t.instructions || '',
+      videoUrl: t.videoUrl || '',
+      // Auto-publish on selection; the checkbox stays editable for the rare
+      // lesson Melinda wants staged but hidden.
+      isPublished: true,
+    })
     const updated = [...days]
-    updated[dayIndex] = {
-      ...updated[dayIndex],
-      lessonTemplateId: templateId,
-      lessonNumber: String(template.lessonNumber),
-      lessonTitle: template.title,
-      instructions: template.instructions || '',
-      videoUrl: template.videoUrl || '',
+    updated[dayIndex] = fill(updated[dayIndex], template)
+    // Auto-fill the REST of the week: each still-empty later day gets the next
+    // lesson in library order. Days she already chose are never overwritten.
+    let next = lessonTemplates.findIndex(t => t.id === templateId) + 1
+    for (let i = dayIndex + 1; i < updated.length && next < lessonTemplates.length; i++) {
+      if (updated[i].lessonTemplateId) continue
+      updated[i] = fill(updated[i], lessonTemplates[next])
+      next++
     }
     setDays(updated)
   }
@@ -235,6 +258,7 @@ function ScheduleWeekInner() {
       lessonTitle: template.title,
       instructions: template.instructions || '',
       videoUrl: template.videoUrl || '',
+      isPublished: true,
     }))
   }
 
@@ -252,6 +276,29 @@ function ScheduleWeekInner() {
       setSaveError('Each additional assignment needs a due date.')
       savingRef.current = false
       return
+    }
+    // Same lesson on two days is almost always a slip of the dropdown —
+    // confirm before students see it twice.
+    {
+      const chosen = [...days, ...extras].filter(d => d.lessonTemplateId)
+      const byTemplate = new Map<string, DayPlan[]>()
+      for (const d of chosen) {
+        byTemplate.set(d.lessonTemplateId, [...(byTemplate.get(d.lessonTemplateId) || []), d])
+      }
+      const dups = [...byTemplate.values()].filter(rows => rows.length > 1)
+      if (dups.length > 0) {
+        const lines = dups.map(rows =>
+          `• Lesson ${rows[0].lessonNumber} — ${rows[0].lessonTitle} (${rows.map(r => r.day).join(' and ')})`
+        ).join('\n')
+        const proceed = window.confirm(
+          `You've scheduled the same lesson more than once this week:\n\n${lines}\n\n` +
+          `Students would be assigned it twice. Save anyway?`
+        )
+        if (!proceed) {
+          savingRef.current = false
+          return
+        }
+      }
     }
     setSaving(true)
     setSaveError('')
