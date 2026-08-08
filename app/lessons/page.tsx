@@ -186,7 +186,7 @@ function checkImageQuality(file: File): Promise<string | undefined> {
       if (w < 600 || h < 600) {
         resolve('Low resolution — move your camera closer so your writing is easy to read.')
       } else if (w > h * 1.15) {
-        resolve('Photo is sideways (landscape) — rotate your phone upright before taking the photo.')
+        resolve('This photo is wider than it is tall — if your page is portrait, it may show up sideways for grading. Fine to submit if it looks right in the preview.')
       } else {
         resolve(undefined)
       }
