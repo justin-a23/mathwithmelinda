@@ -738,7 +738,7 @@ export default function PaymentsPage() {
                             </td>
                             {columns.map(col => {
                               const p = sp.find(x => x.month === col)
-                              if (!p) return <td key={col} style={{ ...tdStyle, textAlign: 'center', color: 'var(--gray-light)' }}>—</td>
+                              if (!p) return <td key={col} style={{ ...tdStyle, textAlign: 'center', color: 'var(--gray-mid)' }}>—</td>
                               if (p.status === 'waived') return (
                                 <td key={col} style={{ ...tdStyle, textAlign: 'center', cursor: 'pointer' }}
                                   onClick={() => openEditPayment(p)}
@@ -769,7 +769,7 @@ export default function PaymentsPage() {
                                       )}
                                     </div>
                                   ) : (
-                                    <span style={{ color: 'var(--gray-light)', fontSize: '16px' }}>○</span>
+                                    <span style={{ color: 'var(--gray-mid)', fontSize: '16px' }}>○</span>
                                   )}
                                 </td>
                               )

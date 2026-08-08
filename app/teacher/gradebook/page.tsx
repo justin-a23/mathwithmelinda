@@ -821,7 +821,7 @@ export default function GradebookPage() {
 
                             let gradeEl: React.ReactNode
                             if (!g) {
-                              gradeEl = <span style={{ fontSize: '12px', color: 'var(--gray-light)' }}>Not started</span>
+                              gradeEl = <span style={{ fontSize: '12px', color: 'var(--gray-mid)' }}>Not started</span>
                             } else if (g === 'pending') {
                               gradeEl = (
                                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '12px', color: '#b45309', background: '#fef9c3', padding: '3px 10px', borderRadius: '20px', border: '1px solid #fde68a' }}>
@@ -912,8 +912,8 @@ export default function GradebookPage() {
                     let letterEl: React.ReactNode
 
                     if (!g) {
-                      scoreEl = <span style={{ color: 'var(--gray-light)', fontSize: '13px' }}>—</span>
-                      letterEl = <span style={{ color: 'var(--gray-light)', fontSize: '13px' }}>—</span>
+                      scoreEl = <span style={{ color: 'var(--gray-mid)', fontSize: '13px' }}>—</span>
+                      letterEl = <span style={{ color: 'var(--gray-mid)', fontSize: '13px' }}>—</span>
                     } else if (g === 'pending') {
                       scoreEl = (
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#b45309' }}>
@@ -921,7 +921,7 @@ export default function GradebookPage() {
                           Pending
                         </span>
                       )
-                      letterEl = <span style={{ color: 'var(--gray-light)', fontSize: '13px' }}>—</span>
+                      letterEl = <span style={{ color: 'var(--gray-mid)', fontSize: '13px' }}>—</span>
                     } else {
                       const n = parseFloat(g)
                       if (!isNaN(n)) {
@@ -932,7 +932,7 @@ export default function GradebookPage() {
                         letterEl = <span style={{ background: bg, color: text, fontWeight: 800, fontSize: '14px', padding: '3px 12px', borderRadius: '20px' }}>{l}</span>
                       } else {
                         scoreEl = <span style={{ fontSize: '13px', color: 'var(--gray-dark)' }}>{g}</span>
-                        letterEl = <span style={{ color: 'var(--gray-light)', fontSize: '13px' }}>—</span>
+                        letterEl = <span style={{ color: 'var(--gray-mid)', fontSize: '13px' }}>—</span>
                       }
                     }
 

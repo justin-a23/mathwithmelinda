@@ -609,7 +609,7 @@ export default function StudentGradesPage() {
 
                       let scoreEl: React.ReactNode
                       if (!ag.grade) {
-                        scoreEl = <span style={{ fontSize: '12px', color: 'var(--gray-light)' }}>Not started</span>
+                        scoreEl = <span style={{ fontSize: '12px', color: 'var(--gray-mid)' }}>Not started</span>
                       } else if (ag.grade === 'pending') {
                         scoreEl = (
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#b45309', background: '#fef9c3', padding: '3px 10px', borderRadius: '20px', border: '1px solid #fde68a', whiteSpace: 'nowrap' }}>

@@ -774,7 +774,7 @@ export default function ZoomMeetingsPage() {
                         ) : (
                           <button
                             onClick={() => setConfirmDeleteId(meeting.id)}
-                            style={{ background: 'transparent', border: 'none', color: 'var(--gray-light)', fontSize: '11px', cursor: 'pointer', padding: 0, textAlign: 'right' }}
+                            style={{ background: 'transparent', border: 'none', color: 'var(--gray-mid)', fontSize: '11px', cursor: 'pointer', padding: 0, textAlign: 'right' }}
                           >
                             Delete
                           </button>

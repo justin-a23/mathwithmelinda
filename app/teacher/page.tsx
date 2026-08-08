@@ -1405,7 +1405,7 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
                     </div>
 
                     {assigned === 0 && received === 0 ? (
-                      <div style={{ fontSize: '13px', color: 'var(--gray-light)', fontStyle: 'italic', paddingLeft: '4px' }}>
+                      <div style={{ fontSize: '13px', color: 'var(--gray-mid)', fontStyle: 'italic', paddingLeft: '4px' }}>
                         Nothing scheduled this week.
                       </div>
                     ) : (
@@ -1465,7 +1465,7 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
                                 </span>
                               </>
                             ) : (
-                              <span style={{ fontSize: '12px', color: 'var(--gray-light)', fontStyle: 'italic' }}>
+                              <span style={{ fontSize: '12px', color: 'var(--gray-mid)', fontStyle: 'italic' }}>
                                 Nothing to grade yet
                               </span>
                             )}

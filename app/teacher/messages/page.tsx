@@ -824,7 +824,7 @@ export default function TeacherMessagesPage() {
                     </div>
                     <button
                       onClick={() => deleteAnnouncement(a.id)}
-                      style={{ background: 'transparent', border: 'none', color: 'var(--gray-light)', fontSize: '12px', cursor: 'pointer', flexShrink: 0, padding: '2px 4px' }}
+                      style={{ background: 'transparent', border: 'none', color: 'var(--gray-mid)', fontSize: '12px', cursor: 'pointer', flexShrink: 0, padding: '2px 4px' }}
                       onMouseEnter={e => (e.currentTarget.style.color = '#dc2626')}
                       onMouseLeave={e => (e.currentTarget.style.color = 'var(--gray-light)')}
                     >
