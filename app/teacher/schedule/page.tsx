@@ -229,6 +229,35 @@ function ScheduleWeekInner() {
     setDays(updated)
   }
 
+  /** Blank Mon–Fri rows + no extras — the page's initial state. */
+  function emptyWeek(): DayPlan[] {
+    return DAYS.map(day => ({
+      day,
+      lessonTemplateId: '', lessonNumber: '', lessonTitle: '',
+      instructions: '', videoUrl: '',
+      dueDate: '', dueTime: getDefaultDueTime(day),
+      isPublished: false,
+      isInClass: day === 'Friday',
+    }))
+  }
+
+  function resetWeek() {
+    setDays(emptyWeek())
+    setExtras([])
+    setSaveError('')
+    setSaved(false)
+  }
+
+  /**
+   * Switching course must clear the day rows: the chosen lesson ids belong to
+   * the OLD course's library, so the dropdowns went blank but the rows kept
+   * their publish flags, videos and instructions — half a ghost schedule.
+   */
+  function changeCourse(courseId: string) {
+    setSelectedCourseId(courseId)
+    resetWeek()
+  }
+
   function addExtra() {
     setExtras(prev => [...prev, {
       day: 'Additional',
@@ -408,7 +437,7 @@ function ScheduleWeekInner() {
         {!preselectedCourseId && (
           <div style={{ marginBottom: '24px' }}>
             <label style={{ fontSize: '12px', fontWeight: 500, color: 'var(--gray-dark)', display: 'block', marginBottom: '6px' }}>Course</label>
-            <select value={selectedCourseId} onChange={e => setSelectedCourseId(e.target.value)}
+            <select value={selectedCourseId} onChange={e => changeCourse(e.target.value)}
               style={{ width: '320px', padding: '10px 12px', border: '1px solid var(--gray-light)', borderRadius: '6px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)' }}>
               <option value="">Choose a course...</option>
               {courses.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
@@ -605,6 +634,15 @@ function ScheduleWeekInner() {
           <button onClick={saveSchedule} disabled={saving || !selectedCourseId || !weekStartDate}
             style={{ background: saving || !selectedCourseId || !weekStartDate ? 'var(--gray-light)' : 'var(--plum)', color: saving || !selectedCourseId || !weekStartDate ? 'var(--gray-mid)' : 'white', padding: '12px 32px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '15px', fontWeight: 500 }}>
             {saving ? 'Saving...' : 'Save Week Schedule'}
+          </button>
+          <button
+            onClick={() => {
+              const hasWork = [...days, ...extras].some(d => d.lessonTemplateId || d.instructions)
+              if (!hasWork || window.confirm('Clear every day and start this week over?')) resetWeek()
+            }}
+            disabled={saving}
+            style={{ background: 'transparent', color: 'var(--gray-mid)', border: '1px solid var(--gray-light)', borderRadius: '8px', padding: '12px 20px', cursor: 'pointer', fontSize: '14px', fontWeight: 500 }}>
+            Start Over
           </button>
           {saved && <span style={{ color: 'var(--plum)', fontSize: '14px' }}>✓ Saved! Redirecting...</span>}
           {saveError && <span style={{ color: '#dc2626', fontSize: '14px' }}>Error: {saveError}</span>}
