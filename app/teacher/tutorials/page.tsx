@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { generateClient } from 'aws-amplify/api'
 import { listCourses } from '../../../src/graphql/queries'
 import TeacherNav from '../../components/TeacherNav'
@@ -42,8 +41,16 @@ type Tutorial = {
   createdAt?: string
 }
 
+/** One uploaded video = possibly several audience rows; group them for display. */
+type TutorialGroup = {
+  videoUrl: string
+  title: string
+  description: string | null
+  order: number | null
+  rows: Tutorial[]
+}
+
 export default function ManageTutorialsPage() {
-  const router = useRouter()
   const { checking } = useRoleGuard('teacher')
 
   const [courses, setCourses] = useState<Course[]>([])
@@ -53,15 +60,15 @@ export default function ManageTutorialsPage() {
   // Form
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
-  // 'all' = every student, 'parent' = parents, otherwise a courseId
-  const [audienceChoice, setAudienceChoice] = useState('all')
+  const [selectedCourseIds, setSelectedCourseIds] = useState<Set<string>>(new Set())
+  const [forParents, setForParents] = useState(false)
   const [file, setFile] = useState<File | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
   const [progress, setProgress] = useState(0)
   const [error, setError] = useState('')
-  const [deletingId, setDeletingId] = useState<string | null>(null)
-  const [openId, setOpenId] = useState<string | null>(null)
+  const [deletingKey, setDeletingKey] = useState<string | null>(null)
+  const [openUrl, setOpenUrl] = useState<string | null>(null)
 
   useEffect(() => { loadAll() }, [])
 
@@ -82,15 +89,45 @@ export default function ManageTutorialsPage() {
     }
   }
 
-  function audienceLabel(t: Tutorial): string {
+  const allCoursesSelected = courses.length > 0 && courses.every(c => selectedCourseIds.has(c.id))
+
+  function toggleCourse(id: string) {
+    setSelectedCourseIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleAllCourses() {
+    setSelectedCourseIds(allCoursesSelected ? new Set() : new Set(courses.map(c => c.id)))
+  }
+
+  function chipFor(t: Tutorial): string {
     if (t.audience === 'parent') return '👪 Parents'
     if (!t.courseId) return '🎓 All students'
     return '🎓 ' + (courses.find(c => c.id === t.courseId)?.title || 'One class')
   }
 
+  const groups: TutorialGroup[] = (() => {
+    const byUrl = new Map<string, TutorialGroup>()
+    for (const t of tutorials) {
+      const g = byUrl.get(t.videoUrl)
+      if (g) g.rows.push(t)
+      else byUrl.set(t.videoUrl, { videoUrl: t.videoUrl, title: t.title, description: t.description, order: t.order, rows: [t] })
+    }
+    return [...byUrl.values()].sort((a, b) => (a.order ?? 999) - (b.order ?? 999))
+  })()
+
   async function handleUpload() {
+    const wantsStudents = selectedCourseIds.size > 0
     if (!title.trim() || !file) {
       setError('A title and a video file are both required.')
+      return
+    }
+    if (!wantsStudents && !forParents) {
+      setError('Pick at least one audience — a class, All students, or Parents.')
       return
     }
     setError('')
@@ -120,22 +157,27 @@ export default function ManageTutorialsPage() {
         xhr.send(file)
       })
 
-      const isParent = audienceChoice === 'parent'
-      await client.graphql({
-        query: CREATE_TUTORIAL,
-        variables: {
-          input: {
-            title: title.trim(),
-            description: description.trim() || null,
-            videoUrl: `https://dgmfzo1xk5r4e.cloudfront.net/${key}`,
-            order: tutorials.length + 1,
-            courseId: isParent || audienceChoice === 'all' ? null : audienceChoice,
-            audience: isParent ? 'parent' : 'student',
-          },
-        },
-      })
+      // One row per audience, sharing the uploaded file. Every course checked
+      // collapses to a single courseId-null row so future courses are included.
+      const videoUrl = `https://dgmfzo1xk5r4e.cloudfront.net/${key}`
+      const base = {
+        title: title.trim(),
+        description: description.trim() || null,
+        videoUrl,
+        order: groups.length + 1,
+      }
+      const inputs: any[] = []
+      if (wantsStudents) {
+        if (allCoursesSelected) inputs.push({ ...base, courseId: null, audience: 'student' })
+        else for (const cid of selectedCourseIds) inputs.push({ ...base, courseId: cid, audience: 'student' })
+      }
+      if (forParents) inputs.push({ ...base, courseId: null, audience: 'parent' })
+      for (const input of inputs) {
+        await client.graphql({ query: CREATE_TUTORIAL, variables: { input } })
+      }
 
-      setTitle(''); setDescription(''); setFile(null); setAudienceChoice('all')
+      setTitle(''); setDescription(''); setFile(null)
+      setSelectedCourseIds(new Set()); setForParents(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
       await loadAll()
     } catch (err) {
@@ -146,16 +188,18 @@ export default function ManageTutorialsPage() {
     }
   }
 
-  async function handleDelete(t: Tutorial) {
-    if (!confirm(`Delete "${t.title}"? Students will no longer see it under Help.`)) return
-    setDeletingId(t.id)
+  async function handleDeleteGroup(g: TutorialGroup) {
+    if (!confirm(`Delete "${g.title}" for ${g.rows.map(chipFor).join(', ').replace(/🎓 |👪 /g, '')}? It disappears from Help everywhere it's shown.`)) return
+    setDeletingKey(g.videoUrl)
     try {
-      await client.graphql({ query: DELETE_TUTORIAL, variables: { input: { id: t.id } } })
-      setTutorials(prev => prev.filter(x => x.id !== t.id))
+      for (const row of g.rows) {
+        await client.graphql({ query: DELETE_TUTORIAL, variables: { input: { id: row.id } } })
+      }
+      setTutorials(prev => prev.filter(x => x.videoUrl !== g.videoUrl))
     } catch (err) {
       console.error(err)
     } finally {
-      setDeletingId(null)
+      setDeletingKey(null)
     }
   }
 
@@ -165,6 +209,24 @@ export default function ManageTutorialsPage() {
     width: '100%', padding: '10px 12px', border: '1px solid var(--gray-light)', borderRadius: '8px',
     fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)',
     boxSizing: 'border-box',
+  }
+
+  function audienceCheckbox(label: string, checked: boolean, onToggle: () => void, emphasized = false) {
+    return (
+      <label key={label} style={{
+        display: 'inline-flex', alignItems: 'center', gap: '7px', cursor: 'pointer',
+        fontSize: '13px', fontWeight: checked ? 700 : 500,
+        color: checked ? 'var(--plum)' : 'var(--gray-dark)',
+        background: checked ? 'var(--plum-light)' : 'var(--background)',
+        border: `1px solid ${checked ? 'var(--plum-mid)' : 'var(--gray-light)'}`,
+        borderRadius: '20px', padding: '7px 14px',
+        ...(emphasized ? { borderStyle: 'dashed' } : {}),
+      }}>
+        <input type="checkbox" checked={checked} onChange={onToggle} style={{ display: 'none' }} />
+        <span style={{ fontSize: '13px' }}>{checked ? '☑' : '☐'}</span>
+        {label}
+      </label>
+    )
   }
 
   return (
@@ -179,23 +241,24 @@ export default function ManageTutorialsPage() {
         {/* Upload form */}
         <div style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: '12px', padding: '24px 28px', marginBottom: '32px' }}>
           <div style={{ fontSize: '13px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--plum)', marginBottom: '16px' }}>Add a Tutorial</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 220px', gap: '14px', marginBottom: '14px' }}>
-            <div>
-              <label style={{ fontSize: '12px', fontWeight: 500, color: 'var(--gray-dark)', display: 'block', marginBottom: '6px' }}>Title</label>
-              <input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. How to submit your work" style={inputStyle} />
-            </div>
-            <div>
-              <label style={{ fontSize: '12px', fontWeight: 500, color: 'var(--gray-dark)', display: 'block', marginBottom: '6px' }}>Who sees it</label>
-              <select value={audienceChoice} onChange={e => setAudienceChoice(e.target.value)} style={inputStyle}>
-                <option value="all">All students</option>
-                {courses.map(c => <option key={c.id} value={c.id}>{c.title} students only</option>)}
-                <option value="parent">Parents</option>
-              </select>
-            </div>
+          <div style={{ marginBottom: '14px' }}>
+            <label style={{ fontSize: '12px', fontWeight: 500, color: 'var(--gray-dark)', display: 'block', marginBottom: '6px' }}>Title</label>
+            <input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. How to submit your work" style={inputStyle} />
           </div>
           <div style={{ marginBottom: '14px' }}>
             <label style={{ fontSize: '12px', fontWeight: 500, color: 'var(--gray-dark)', display: 'block', marginBottom: '6px' }}>Description <span style={{ fontWeight: 400, color: 'var(--gray-mid)' }}>(optional)</span></label>
             <input value={description} onChange={e => setDescription(e.target.value)} placeholder="One line about what this video covers" style={inputStyle} />
+          </div>
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{ fontSize: '12px', fontWeight: 500, color: 'var(--gray-dark)', display: 'block', marginBottom: '8px' }}>
+              Who sees it <span style={{ fontWeight: 400, color: 'var(--gray-mid)' }}>(check every audience that should)</span>
+            </label>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+              {audienceCheckbox('All students', allCoursesSelected, toggleAllCourses, true)}
+              {courses.map(c => audienceCheckbox(c.title, selectedCourseIds.has(c.id), () => toggleCourse(c.id)))}
+              <span style={{ width: '1px', height: '22px', background: 'var(--gray-light)' }} />
+              {audienceCheckbox('Parents', forParents, () => setForParents(p => !p))}
+            </div>
           </div>
           <div style={{ marginBottom: '18px' }}>
             <label style={{ fontSize: '12px', fontWeight: 500, color: 'var(--gray-dark)', display: 'block', marginBottom: '6px' }}>Video file</label>
@@ -213,39 +276,43 @@ export default function ManageTutorialsPage() {
 
         {/* Existing tutorials */}
         <div style={{ fontSize: '13px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--plum)', marginBottom: '14px' }}>
-          Current Tutorials {tutorials.length > 0 && `(${tutorials.length})`}
+          Current Tutorials {groups.length > 0 && `(${groups.length})`}
         </div>
         {loading ? (
           <p style={{ color: 'var(--gray-mid)' }}>Loading…</p>
-        ) : tutorials.length === 0 ? (
+        ) : groups.length === 0 ? (
           <p style={{ color: 'var(--gray-mid)', fontSize: '14px' }}>No tutorials yet — upload the first one above.</p>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            {tutorials.map(t => {
-              const open = openId === t.id
+            {groups.map(g => {
+              const open = openUrl === g.videoUrl
               return (
-              <div key={t.id} style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: '10px', overflow: 'hidden' }}>
-                <div style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: '14px', cursor: 'pointer' }}
-                  onClick={() => setOpenId(open ? null : t.id)}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--foreground)' }}>{t.title}</div>
-                    {t.description && <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginTop: '2px' }}>{t.description}</div>}
+              <div key={g.videoUrl} style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: '10px', overflow: 'hidden' }}>
+                <div style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: '14px', cursor: 'pointer', flexWrap: 'wrap' }}
+                  onClick={() => setOpenUrl(open ? null : g.videoUrl)}>
+                  <div style={{ flex: 1, minWidth: '180px' }}>
+                    <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--foreground)' }}>{g.title}</div>
+                    {g.description && <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginTop: '2px' }}>{g.description}</div>}
                   </div>
-                  <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--plum)', background: 'var(--plum-light)', border: '1px solid var(--plum-mid)', borderRadius: '20px', padding: '2px 12px', whiteSpace: 'nowrap' }}>
-                    {audienceLabel(t)}
-                  </span>
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                    {g.rows.map(r => (
+                      <span key={r.id} style={{ fontSize: '12px', fontWeight: 600, color: 'var(--plum)', background: 'var(--plum-light)', border: '1px solid var(--plum-mid)', borderRadius: '20px', padding: '2px 12px', whiteSpace: 'nowrap' }}>
+                        {chipFor(r)}
+                      </span>
+                    ))}
+                  </div>
                   <span style={{ fontSize: '12px', color: 'var(--plum)', textDecoration: 'underline', whiteSpace: 'nowrap' }}>
                     {open ? 'Close' : '▶ Watch'}
                   </span>
-                  <button onClick={e => { e.stopPropagation(); handleDelete(t) }} disabled={deletingId === t.id} title="Delete"
-                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px', opacity: deletingId === t.id ? 0.4 : 0.6 }}>
+                  <button onClick={e => { e.stopPropagation(); handleDeleteGroup(g) }} disabled={deletingKey === g.videoUrl} title="Delete everywhere"
+                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px', opacity: deletingKey === g.videoUrl ? 0.4 : 0.6 }}>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2">
                       <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
                     </svg>
                   </button>
                 </div>
                 {open && (
-                  <video controls autoPlay preload="metadata" style={{ width: '100%', display: 'block', background: '#000' }} src={t.videoUrl} />
+                  <video controls autoPlay preload="metadata" style={{ width: '100%', display: 'block', background: '#000' }} src={g.videoUrl} />
                 )}
               </div>
             )})}
