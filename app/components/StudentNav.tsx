@@ -89,6 +89,7 @@ export default function StudentNav({ unreadCount: propUnread }: Props = {}) {
   const isMessages = pathname === '/student/messages'
   const isWork = pathname === '/student/submissions'
   const isSyllabus = pathname === '/student/syllabus'
+  const isHelp = pathname === '/help'
 
   function primaryBtn(label: string, path: string, active: boolean, badge?: number) {
     return (
@@ -196,6 +197,7 @@ export default function StudentNav({ unreadCount: propUnread }: Props = {}) {
       {/* Secondary links */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexShrink: 0 }}>
         {secondaryLink('Syllabus', '/student/syllabus', isSyllabus)}
+        {secondaryLink('Help', '/help', isHelp)}
       </div>
 
       {/* Spacer */}

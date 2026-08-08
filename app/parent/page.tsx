@@ -139,6 +139,15 @@ type ReportCard = {
   quarterBreakdown: string | null
 }
 
+type Tutorial = {
+  id: string
+  title: string
+  description: string | null
+  videoUrl: string
+  order: number | null
+  audience: string
+}
+
 type Question = { id: string; order: number; questionText: string; questionType: string }
 type GradedQuestion = { id: string; questionText: string; questionType: string; correct: boolean; studentAnswer: string | null; correctAnswer: string | null }
 
@@ -187,6 +196,8 @@ export default function ParentDashboard() {
   const [openWeeks, setOpenWeeks] = useState<Set<string>>(new Set())
   const [reportCards, setReportCards] = useState<ReportCard[]>([])
   const [openReportCardId, setOpenReportCardId] = useState<string | null>(null)
+  const [parentTutorials, setParentTutorials] = useState<Tutorial[]>([])
+  const [openTutorialId, setOpenTutorialId] = useState<string | null>(null)
 
   useEffect(() => {
     if (authStatus === 'unauthenticated') router.replace('/login')
@@ -195,6 +206,22 @@ export default function ParentDashboard() {
   useEffect(() => {
     if (authStatus !== 'authenticated') return
     fetchChildren()
+    // Parent help videos — global, not per-child
+    ;(async () => {
+      try {
+        const res = await (client.graphql({
+          query: /* GraphQL */`
+            query ListTutorialVideos {
+              listTutorialVideos(limit: 200) {
+                items { id title description videoUrl order audience }
+              }
+            }
+          `,
+        }) as any)
+        const items: Tutorial[] = res.data.listTutorialVideos.items
+        setParentTutorials(items.filter(t => t.audience === 'parent').sort((a, b) => (a.order ?? 999) - (b.order ?? 999)))
+      } catch { /* section stays hidden */ }
+    })()
   }, [authStatus])
 
   useEffect(() => {
@@ -828,6 +855,40 @@ export default function ParentDashboard() {
                 )}
               </div>
             </>
+          )}
+
+          {/* ── Help Videos (parent tutorials — not child-specific) ── */}
+          {parentTutorials.length > 0 && (
+            <div style={{ marginTop: '48px' }}>
+              <div style={{ fontSize: '11px', fontWeight: 500, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--plum)', marginBottom: '10px' }}>
+                Help Videos
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {parentTutorials.map(t => {
+                  const open = openTutorialId === t.id
+                  return (
+                    <div key={t.id} style={{ border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', overflow: 'hidden', background: 'var(--background)' }}>
+                      <button
+                        onClick={() => setOpenTutorialId(open ? null : t.id)}
+                        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '12px', padding: '13px 18px', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left' }}>
+                        <span style={{ fontSize: '16px' }}>🎥</span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--foreground)' }}>{t.title}</div>
+                          {t.description && <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginTop: '2px' }}>{t.description}</div>}
+                        </div>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--gray-mid)" strokeWidth="2"
+                          style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s', flexShrink: 0 }}>
+                          <polyline points="6 9 12 15 18 9"/>
+                        </svg>
+                      </button>
+                      {open && (
+                        <video controls autoPlay preload="metadata" style={{ width: '100%', display: 'block', background: '#000' }} src={t.videoUrl} />
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
           )}
         </main>
       )}

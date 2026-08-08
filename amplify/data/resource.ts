@@ -408,7 +408,12 @@ const schema = a.schema({
     // request, client and server (app/lib/ownership.ts). Direct lookup instead
     // of scan+filter. NOTE: one GSI per table per deploy is a CloudFormation
     // limit — an email index here must wait for a later deploy.
-    .secondaryIndexes(index => [index('userId').queryField('listStudentProfilesByUserId')])
+    .secondaryIndexes(index => [
+      index('userId').queryField('listStudentProfilesByUserId'),
+      // Parent child-by-email lookups and the profile email fallback were
+      // filtered scans — subject to the scan-limit trap. Query field instead.
+      index('email').queryField('listStudentProfilesByEmail'),
+    ])
     // Self-setup at /profile/setup requires a student to create their own row
     // BEFORE any group is assigned, so this must be authenticated(), not a group.
     .authorization(studentWritable),
@@ -602,6 +607,20 @@ const schema = a.schema({
       pdfKey: a.string(),
       publishedPdfKey: a.string(),
       publishedAt: a.string(),
+    })
+    .authorization(teacherWritesEveryoneReads),
+
+  // Platform how-to videos shown under Help. courseId null = every course;
+  // audience scopes student vs parent tutorials. Files live in the videos
+  // bucket under tutorials/ and stream through the same CloudFront as lessons.
+  TutorialVideo: a
+    .model({
+      title: a.string().required(),
+      description: a.string(),
+      videoUrl: a.string().required(),
+      order: a.float(),
+      courseId: a.string(),
+      audience: a.string().required(), // 'student' | 'parent'
     })
     .authorization(teacherWritesEveryoneReads),
 

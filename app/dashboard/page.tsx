@@ -959,6 +959,12 @@ export default function Dashboard() {
               🎉 Welcome to Math with Melinda! A few things to get you started:
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', fontSize: '14px', color: 'var(--foreground)', lineHeight: 1.5 }}>
+                <span>🎥</span>
+                <span>
+                  New here? <a onClick={e => { e.preventDefault(); router.push('/help') }} href="/help" style={{ color: 'var(--plum)', fontWeight: 600, textDecoration: 'underline', cursor: 'pointer' }}>Watch the quick platform tour</a> under Help
+                </span>
+              </div>
               {!profilePicUrl && (
                 <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', fontSize: '14px', color: 'var(--foreground)', lineHeight: 1.5 }}>
                   <span>📸</span>

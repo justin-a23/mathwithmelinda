@@ -134,15 +134,16 @@ export default function TeacherNav({ ungradedCount: propUngraded, unreadCount: p
   const isTerms = pathname === '/teacher/semesters'
   const isPlans = pathname === '/teacher/plans'
   const isSyllabi = pathname === '/teacher/syllabus'
+  const isTutorials = pathname === '/teacher/tutorials'
   const isZoom = pathname === '/teacher/zoom'
   const isReportCard = pathname.startsWith('/teacher/report-card')
   const isPayments = pathname === '/teacher/payments'
   const isProfile = pathname === '/teacher/profile'
 
-  const moreIsActive = isGradebook || isParticipation || isTerms || isPlans || isSyllabi || isZoom || isReportCard || isPayments || isImport
+  const moreIsActive = isGradebook || isParticipation || isTerms || isPlans || isSyllabi || isZoom || isReportCard || isPayments || isImport || isTutorials
 
   // Label for "More" button when a sub-item is active
-  const moreActiveLabel = isGradebook ? 'Gradebook' : isParticipation ? 'Participation' : isReportCard ? 'Report Card' : isPlans ? 'Assigned Work' : isTerms ? 'Academic Year' : isSyllabi ? 'Syllabi' : isZoom ? 'Meetings' : isPayments ? 'Payments' : isImport ? 'Import Lesson' : null
+  const moreActiveLabel = isGradebook ? 'Gradebook' : isParticipation ? 'Participation' : isReportCard ? 'Report Card' : isPlans ? 'Assigned Work' : isTerms ? 'Academic Year' : isSyllabi ? 'Syllabi' : isZoom ? 'Meetings' : isPayments ? 'Payments' : isImport ? 'Import Lesson' : isTutorials ? 'Help Tutorials' : null
 
   function primaryBtn(label: string, path: string, active: boolean, badge?: number) {
     return (
@@ -302,6 +303,7 @@ export default function TeacherNav({ ungradedCount: propUngraded, unreadCount: p
             {dropdownItem('Meetings', '/teacher/zoom', isZoom)}
             {dropdownItem('Academic Year', '/teacher/semesters', isTerms)}
             {dropdownItem('Syllabi', '/teacher/syllabus', isSyllabi)}
+            {dropdownItem('Help Tutorials', '/teacher/tutorials', isTutorials)}
             <div style={{ height: '1px', background: 'var(--gray-light)', margin: '4px 8px' }} />
             {dropdownItem('Payments', '/teacher/payments', isPayments)}
           </div>

@@ -229,6 +229,7 @@ function renderEmail(name: string, weekHuman: string, rows: { day: string; title
         </p>
         <p style="font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#999;margin:28px 0 0;">
           Questions? Just reply to this email to reach Melinda.
+          New to the platform? Open <strong>Help</strong> after signing in for quick how-to videos.
         </p>
       </div>
     </div>
@@ -244,6 +245,7 @@ function renderEmail(name: string, weekHuman: string, rows: { day: string; title
     `Open your dashboard: https://www.mathwithmelinda.com/dashboard`,
     ``,
     `Questions? Just reply to this email to reach Melinda.`,
+    `New to the platform? Open Help after signing in for quick how-to videos.`,
   ].join('\n')
 
   return { html, text }
