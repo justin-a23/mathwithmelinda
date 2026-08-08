@@ -61,6 +61,7 @@ export default function ManageTutorialsPage() {
   const [progress, setProgress] = useState(0)
   const [error, setError] = useState('')
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [openId, setOpenId] = useState<string | null>(null)
 
   useEffect(() => { loadAll() }, [])
 
@@ -220,27 +221,34 @@ export default function ManageTutorialsPage() {
           <p style={{ color: 'var(--gray-mid)', fontSize: '14px' }}>No tutorials yet — upload the first one above.</p>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            {tutorials.map(t => (
-              <div key={t.id} style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: '10px', padding: '14px 18px', display: 'flex', alignItems: 'center', gap: '14px' }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--foreground)' }}>{t.title}</div>
-                  {t.description && <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginTop: '2px' }}>{t.description}</div>}
+            {tutorials.map(t => {
+              const open = openId === t.id
+              return (
+              <div key={t.id} style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: '10px', overflow: 'hidden' }}>
+                <div style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: '14px', cursor: 'pointer' }}
+                  onClick={() => setOpenId(open ? null : t.id)}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--foreground)' }}>{t.title}</div>
+                    {t.description && <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginTop: '2px' }}>{t.description}</div>}
+                  </div>
+                  <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--plum)', background: 'var(--plum-light)', border: '1px solid var(--plum-mid)', borderRadius: '20px', padding: '2px 12px', whiteSpace: 'nowrap' }}>
+                    {audienceLabel(t)}
+                  </span>
+                  <span style={{ fontSize: '12px', color: 'var(--plum)', textDecoration: 'underline', whiteSpace: 'nowrap' }}>
+                    {open ? 'Close' : '▶ Watch'}
+                  </span>
+                  <button onClick={e => { e.stopPropagation(); handleDelete(t) }} disabled={deletingId === t.id} title="Delete"
+                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px', opacity: deletingId === t.id ? 0.4 : 0.6 }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2">
+                      <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                    </svg>
+                  </button>
                 </div>
-                <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--plum)', background: 'var(--plum-light)', border: '1px solid var(--plum-mid)', borderRadius: '20px', padding: '2px 12px', whiteSpace: 'nowrap' }}>
-                  {audienceLabel(t)}
-                </span>
-                <a href={t.videoUrl} target="_blank" rel="noreferrer"
-                  style={{ fontSize: '12px', color: 'var(--plum)', textDecoration: 'underline', whiteSpace: 'nowrap' }}>
-                  Preview
-                </a>
-                <button onClick={() => handleDelete(t)} disabled={deletingId === t.id} title="Delete"
-                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px', opacity: deletingId === t.id ? 0.4 : 0.6 }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2">
-                    <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
-                  </svg>
-                </button>
+                {open && (
+                  <video controls autoPlay preload="metadata" style={{ width: '100%', display: 'block', background: '#000' }} src={t.videoUrl} />
+                )}
               </div>
-            ))}
+            )})}
           </div>
         )}
       </main>
