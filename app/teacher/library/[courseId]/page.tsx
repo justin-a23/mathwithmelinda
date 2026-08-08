@@ -124,6 +124,9 @@ export default function LessonLibraryPage() {
   const [loading, setLoading] = useState(true)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<EditForm>({ title: '', lessonNumber: '', instructions: '', teachingNotes: '', worksheetUrl: '', videoUrl: '', assignmentType: 'none', lessonCategory: 'lesson' })
+  // Inline player for the attached video — lets Melinda refresh herself on
+  // what a lesson covers without leaving the editor.
+  const [videoPreviewOpen, setVideoPreviewOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [videoUpload, setVideoUpload] = useState<UploadState>({ uploading: false, progress: 0, error: '' })
   const [orphanVideos, setOrphanVideos] = useState<{ key: string; label: string }[] | null>(null)
@@ -301,6 +304,7 @@ export default function LessonLibraryPage() {
       assignmentType: lesson.assignmentType || 'upload',
       lessonCategory: lesson.lessonCategory || 'lesson'
     })
+    setVideoPreviewOpen(false)
     setVideoFile(null)
     setWorksheetFile(null)
     setVideoUpload({ uploading: false, progress: 0, error: '' })
@@ -1461,14 +1465,25 @@ export default function LessonLibraryPage() {
                             {/* Video */}
                             <div style={sectionHeadStyle}>Video</div>
                             {editForm.videoUrl ? (
-                              <div style={{ marginBottom: '12px', padding: '12px 16px', background: 'var(--white)', border: '1px solid var(--gray-light)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                <div>
-                                  <div style={{ fontSize: '12px', fontWeight: 600, color: '#2e7d32', marginBottom: '2px' }}>✓ Video attached</div>
-                                  <div style={{ fontSize: '11px', color: 'var(--gray-mid)', fontFamily: 'monospace' }}>{editForm.videoUrl}</div>
+                              <div style={{ marginBottom: '12px', background: 'var(--white)', border: '1px solid var(--gray-light)', borderRadius: '8px', overflow: 'hidden' }}>
+                                <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                  <div style={{ minWidth: 0 }}>
+                                    <div style={{ fontSize: '12px', fontWeight: 600, color: '#2e7d32', marginBottom: '2px' }}>✓ Video attached</div>
+                                    <div style={{ fontSize: '11px', color: 'var(--gray-mid)', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{editForm.videoUrl}</div>
+                                  </div>
+                                  <div style={{ display: 'flex', gap: '8px', marginLeft: '16px', flexShrink: 0 }}>
+                                    <button onClick={() => setVideoPreviewOpen(prev => !prev)}
+                                      style={{ background: videoPreviewOpen ? 'var(--plum)' : 'none', border: '1px solid var(--plum)', color: videoPreviewOpen ? 'white' : 'var(--plum)', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', padding: '4px 10px', whiteSpace: 'nowrap' }}>
+                                      {videoPreviewOpen ? 'Close' : '▶ Watch'}
+                                    </button>
+                                    <button onClick={() => { if (window.confirm('Are you sure you want to remove this video? This cannot be undone.')) setEditForm(f => ({ ...f, videoUrl: '' })) }} style={{ background: 'none', border: '1px solid #e05252', color: '#e05252', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', padding: '4px 10px', whiteSpace: 'nowrap' }}>
+                                      Remove
+                                    </button>
+                                  </div>
                                 </div>
-                                <button onClick={() => { if (window.confirm('Are you sure you want to remove this video? This cannot be undone.')) setEditForm(f => ({ ...f, videoUrl: '' })) }} style={{ background: 'none', border: '1px solid #e05252', color: '#e05252', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', padding: '4px 10px', whiteSpace: 'nowrap', marginLeft: '16px' }}>
-                                  Remove
-                                </button>
+                                {videoPreviewOpen && (
+                                  <video controls autoPlay preload="metadata" style={{ width: '100%', display: 'block', background: '#000' }} src={editForm.videoUrl} />
+                                )}
                               </div>
                             ) : (
                               <div style={{ marginBottom: '12px', padding: '10px 16px', background: '#fdecea', border: '1px solid #f5c6c6', borderRadius: '8px', fontSize: '13px', color: '#c62828' }}>
