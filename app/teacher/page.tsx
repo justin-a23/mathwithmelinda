@@ -292,6 +292,8 @@ export default function TeacherDashboard() {
   const [weekStats, setWeekStats] = useState<CourseWeekStats[]>([])
   // Friday banner: true once every in-class item this week is fully checked off
   const [participationDone, setParticipationDone] = useState(false)
+  // Next-week planning progress: courseId → lesson count scheduled for next week
+  const [nextWeekPlans, setNextWeekPlans] = useState<Map<string, number>>(new Map())
   const [gradeScales, setGradeScales] = useState<GradeScale[]>([])
   const [attention, setAttention] = useState<AttentionRow[]>([])
   const [overdueStats, setOverdueStats] = useState<{ courseId: string; ungraded: number }[]>([])
@@ -827,6 +829,21 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
 
       // ── Count "assigned" and "late" from the weekly plans for THIS WEEK ──
       const thisWeeksPlans = allPlans.filter((p: any) => p.weekStartDate === mondayDateStr)
+
+      // ── Next week's planning progress (drives the Next Week card) ──
+      {
+        const nextMonday = new Date(monday)
+        nextMonday.setDate(monday.getDate() + 7)
+        const nextMondayStr = `${nextMonday.getFullYear()}-${String(nextMonday.getMonth() + 1).padStart(2, '0')}-${String(nextMonday.getDate()).padStart(2, '0')}`
+        const nw = new Map<string, number>()
+        for (const p of allPlans.filter((x: any) => x.weekStartDate === nextMondayStr)) {
+          const cid = p.courseWeeklyPlansId || p.course?.id
+          if (!cid) continue
+          const lessonCount = (p.items?.items || []).filter((i: any) => i.lesson).length
+          nw.set(cid, (nw.get(cid) || 0) + lessonCount)
+        }
+        setNextWeekPlans(nw)
+      }
 
       // ── Friday participation completeness (drives the Friday banner) ──
       // Done = every active student assigned to every in-class item this week
@@ -1488,6 +1505,68 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
             </div>
           )}
         </div>
+
+        {/* ── NEXT WEEK PLANNING ── */}
+        {/* This page is all about the current week — this card is the one
+            forward-looking piece: which classes are already scheduled for
+            next week, and a one-click jump to schedule the rest. */}
+        {!loading && activeCourses.length > 0 && (() => {
+          const nextMonday = new Date(monday)
+          nextMonday.setDate(monday.getDate() + 7)
+          const plannedCount = activeCourses.filter(c => nextWeekPlans.has(c.id)).length
+          const allPlanned = plannedCount === activeCourses.length
+          return (
+            <div style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', padding: '24px 28px', marginBottom: '40px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                <h2 style={{ fontSize: '13px', fontWeight: 500, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--plum)', margin: 0 }}>
+                  Next Week&apos;s Assignments
+                </h2>
+                <span style={{ fontSize: '13px', color: 'var(--gray-mid)' }}>{formatWeekRange(nextMonday)}</span>
+              </div>
+
+              {allPlanned ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '10px', padding: '12px 16px', marginBottom: '14px' }}>
+                  <span style={{ fontSize: '16px' }}>🎉</span>
+                  <span style={{ fontSize: '14px', fontWeight: 600, color: '#15803d' }}>All {activeCourses.length} classes are scheduled for next week</span>
+                </div>
+              ) : (
+                <div style={{ fontSize: '13px', color: 'var(--gray-mid)', marginBottom: '14px' }}>
+                  {plannedCount} of {activeCourses.length} classes scheduled
+                </div>
+              )}
+
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {activeCourses.map((course, idx) => {
+                  const count = nextWeekPlans.get(course.id)
+                  const planned = count !== undefined
+                  return (
+                    <div key={course.id} style={{
+                      display: 'flex', alignItems: 'center', gap: '14px',
+                      paddingTop: '10px', paddingBottom: '10px',
+                      borderBottom: idx === activeCourses.length - 1 ? 'none' : '1px solid var(--gray-light)',
+                    }}>
+                      <span style={{ fontFamily: 'var(--font-display)', fontSize: '15px', color: 'var(--foreground)', flex: 1 }}>{course.title}</span>
+                      {planned ? (
+                        <span style={{ fontSize: '12px', fontWeight: 700, padding: '3px 12px', borderRadius: '20px', background: '#dcfce7', color: '#15803d', border: '1px solid #86efac' }}>
+                          ✓ Scheduled{count ? ` — ${count} lesson${count !== 1 ? 's' : ''}` : ''}
+                        </span>
+                      ) : (
+                        <>
+                          <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--gray-mid)' }}>Not scheduled yet</span>
+                          <button
+                            onClick={() => router.push('/teacher/schedule?courseId=' + course.id)}
+                            style={{ background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '6px', padding: '6px 14px', cursor: 'pointer', fontSize: '12px', fontWeight: 600 }}>
+                            Schedule →
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })()}
 
       </main>
     </div>
