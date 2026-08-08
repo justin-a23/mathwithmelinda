@@ -4,14 +4,33 @@ import { useAuthenticator } from '@aws-amplify/ui-react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState, useRef, Suspense } from 'react'
 import { generateClient } from 'aws-amplify/api'
-import { listCourses, listLessonTemplates, listStudentProfiles } from '../../../src/graphql/queries'
+import { listCourses, listStudentProfiles } from '../../../src/graphql/queries'
 import TeacherNav from '../../components/TeacherNav'
 import { useRoleGuard } from '../../hooks/useRoleGuard'
 
 const client = generateClient()
 
 type Course = { id: string; title: string; gradeLevel: string | null }
-type LessonTemplate = { id: string; lessonNumber: number; title: string; instructions: string | null; worksheetUrl: string | null; videoUrl: string | null }
+type LessonTemplate = {
+  id: string; lessonNumber: number; title: string; instructions: string | null
+  worksheetUrl: string | null; videoUrl: string | null
+  assignmentType: string | null
+  questions?: { items: { id: string }[] } | null
+}
+
+// Local query instead of the generated one: the mode chip under each day needs
+// the question count, which the generated listLessonTemplates doesn't select.
+const listLessonTemplatesForSchedule = /* GraphQL */ `
+  query ListLessonTemplatesForSchedule($filter: ModelLessonTemplateFilterInput, $limit: Int, $nextToken: String) {
+    listLessonTemplates(filter: $filter, limit: $limit, nextToken: $nextToken) {
+      items {
+        id lessonNumber title instructions worksheetUrl videoUrl assignmentType
+        questions { items { id } }
+      }
+      nextToken
+    }
+  }
+`
 type StudentProfile = { id: string; userId: string; email: string; firstName: string; lastName: string; courseId: string | null }
 
 type DayPlan = {
@@ -41,6 +60,35 @@ function getDefaultDueDate(day: string, weekStartDate: string): string {
 
 function getDefaultDueTime(_day: string): string {
   return '17:00'
+}
+
+/**
+ * What students will actually be asked to do for this lesson — shown under the
+ * dropdown so Melinda catches surprises during her weekly review. The main one:
+ * old-course lessons that still carry leftover test questions from early
+ * experiments would quietly become digital-question assignments.
+ */
+function LessonModeNote({ template, courseId }: { template: LessonTemplate | undefined; courseId: string }) {
+  const router = useRouter()
+  if (!template) return null
+  const qCount = template.questions?.items?.length || 0
+  if (qCount > 0) {
+    return (
+      <div style={{ marginTop: '4px', fontSize: '12px', fontWeight: 500, color: 'var(--plum)', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+        <span>📝 {qCount} digital question{qCount !== 1 ? 's' : ''} — students answer on the platform</span>
+        <a
+          onClick={e => { e.preventDefault(); router.push(`/teacher/library/${courseId}`) }}
+          href={`/teacher/library/${courseId}`}
+          style={{ color: 'var(--plum)', textDecoration: 'underline', cursor: 'pointer', fontWeight: 600 }}>
+          Review lesson →
+        </a>
+      </div>
+    )
+  }
+  if (template.worksheetUrl) {
+    return <div style={{ marginTop: '4px', fontSize: '12px', fontWeight: 500, color: 'var(--gray-dark)' }}>🖨 Printable worksheet — photo upload</div>
+  }
+  return <div style={{ marginTop: '4px', fontSize: '12px', fontWeight: 500, color: 'var(--gray-dark)' }}>📷 Book work — follow the video, photo upload</div>
 }
 
 function ScheduleWeekInner() {
@@ -111,7 +159,7 @@ function ScheduleWeekInner() {
         let nextToken: string | null = null
         do {
           const result: any = await client.graphql({
-            query: listLessonTemplates,
+            query: listLessonTemplatesForSchedule,
             variables: { filter: { courseLessonTemplatesId: { eq: selectedCourseId } }, limit: 500, nextToken }
           })
           allItems = [...allItems, ...result.data.listLessonTemplates.items]
@@ -534,6 +582,9 @@ function ScheduleWeekInner() {
                       {day.videoUrl ? '✓ Video attached' : '⚠ No video for this lesson'}
                     </div>
                   )}
+                  {day.lessonTemplateId && (
+                    <LessonModeNote template={lessonTemplates.find(t => t.id === day.lessonTemplateId)} courseId={selectedCourseId} />
+                  )}
                   <textarea
                     value={day.instructions}
                     onChange={e => updateDay(i, 'instructions', e.target.value)}
@@ -591,6 +642,9 @@ function ScheduleWeekInner() {
                       <div style={{ marginTop: '6px', fontSize: '12px', fontWeight: 500, color: extra.videoUrl ? '#059669' : '#B45309' }}>
                         {extra.videoUrl ? '✓ Video attached' : '⚠ No video for this lesson'}
                       </div>
+                    )}
+                    {extra.lessonTemplateId && (
+                      <LessonModeNote template={lessonTemplates.find(t => t.id === extra.lessonTemplateId)} courseId={selectedCourseId} />
                     )}
                     <textarea
                       value={extra.instructions}

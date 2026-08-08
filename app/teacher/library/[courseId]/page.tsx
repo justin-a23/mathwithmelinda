@@ -1342,18 +1342,37 @@ export default function LessonLibraryPage() {
                               {editForm.assignmentType !== 'none' && (
                                 <div style={{ marginTop: '8px', padding: '10px 14px', background: 'var(--plum-light)', border: '1px solid var(--plum-mid)', borderRadius: '8px' }}>
                                   <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--plum)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Students automatically see:</div>
-                                  {(effectiveAssignmentType === 'upload' ? [
-                                    ...(editForm.videoUrl ? ['Watch the video above'] : []),
-                                    'Click "Print Worksheet" to print — complete all problems on paper',
-                                    'Take a photo of your completed work and upload below',
-                                  ] : effectiveAssignmentType === 'questions' ? [
-                                    ...(editForm.videoUrl ? ['Watch the video above'] : []),
-                                    'Answer the questions below digitally',
-                                  ] : effectiveAssignmentType === 'both' ? [
-                                    ...(editForm.videoUrl ? ['Watch the video above'] : []),
-                                    'Answer the questions below digitally',
-                                    'Click "Print Show Work" to print problems that need work shown — complete on paper, take a photo, and upload below',
-                                  ] : []).map((step, i) => (
+                                  {/* Mirrors the student page's steps box exactly — including the
+                                      book-work detection for photo lessons with no worksheet and no
+                                      questions (the old Arith 6 / MS Math / Pre-Algebra pattern). */}
+                                  {(() => {
+                                    const video = editForm.videoUrl ? ['Watch the video above'] : []
+                                    const hasShowWork = questions.some(q => q.questionType === 'show_work')
+                                    if (effectiveAssignmentType === 'upload') {
+                                      return (editForm.worksheetUrl || questions.length > 0) ? [
+                                        ...video,
+                                        'Click "Print Worksheet" to print — complete all problems on paper',
+                                        'Take a photo of your completed work and upload below',
+                                      ] : [
+                                        ...video,
+                                        'The video tells you which problems to complete — work them out on paper',
+                                        'Take a photo of your completed work and upload it below',
+                                      ]
+                                    }
+                                    if (effectiveAssignmentType === 'questions') return [...video, 'Answer the questions below digitally']
+                                    if (effectiveAssignmentType === 'both') {
+                                      return hasShowWork ? [
+                                        ...video,
+                                        'Answer the questions below digitally',
+                                        'Click "Print Show Work" to print problems that need work shown — complete on paper, take a photo, and upload below',
+                                      ] : [
+                                        ...video,
+                                        'Answer the questions below digitally',
+                                        'If any work is on paper, take a photo and upload it below',
+                                      ]
+                                    }
+                                    return []
+                                  })().map((step, i) => (
                                     <div key={i} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', marginBottom: '3px' }}>
                                       <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--plum)', minWidth: '14px' }}>{i + 1}.</span>
                                       <span style={{ fontSize: '11px', color: 'var(--foreground)', lineHeight: 1.4 }}>{step}</span>

@@ -1231,25 +1231,54 @@ function LessonPageInner() {
                     )}
                   </div>
 
-                  {showQuestions && (hasShowWork || isWorksheet) && (
-                    <div style={{ background: 'var(--plum-light)', border: '1px solid var(--plum-mid)', borderRadius: '8px', padding: '14px 18px', marginBottom: '22px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--plum)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '2px' }}>How to complete this assignment</div>
-                      {(isWorksheet ? [
-                        ...(videoSrc ? ['Watch the video above'] : []),
+                  {/* Steps derive from what the lesson actually contains, and mirror the
+                      editor's "Students automatically see" panel. Book work — a photo
+                      lesson with no worksheet and no questions (most old Arith 6 /
+                      MS Math / Pre-Algebra content) — gets follow-the-video steps
+                      instead of instructions to print a worksheet that doesn't exist. */}
+                  {(() => {
+                    const video = videoSrc ? ['Watch the video above'] : []
+                    let steps: string[] = []
+                    if (isWorksheet && (questions.length > 0 || lessonTemplate?.worksheetUrl)) {
+                      steps = [
+                        ...video,
                         'Click "Print Worksheet" to print — complete all problems on paper',
                         'Take a photo of your completed work and upload below',
-                      ] : [
-                        ...(videoSrc ? ['Watch the video above'] : []),
+                      ]
+                    } else if (showQuestions && hasShowWork) {
+                      steps = [
+                        ...video,
                         'Answer the questions below digitally',
                         'Click "Print Show Work" to print just the problems that need work shown — complete on paper, take a photo, and upload below',
-                      ]).map((step, i) => (
-                        <div key={i} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-                          <span style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'var(--plum)', color: 'white', fontSize: '11px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: '1px' }}>{i + 1}</span>
-                          <span style={{ fontSize: '13px', color: 'var(--foreground)', lineHeight: 1.5 }}>{step}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                      ]
+                    } else if (showQuestions && showUpload) {
+                      steps = [
+                        ...video,
+                        'Answer the questions below digitally',
+                        'If any work is on paper, take a photo and upload it below',
+                      ]
+                    } else if (showQuestions) {
+                      steps = [...video, 'Answer the questions below digitally']
+                    } else if (showUpload) {
+                      steps = [
+                        ...video,
+                        'The video tells you which problems to complete — work them out on paper',
+                        'Take a photo of your completed work and upload it below',
+                      ]
+                    }
+                    if (steps.length === 0) return null
+                    return (
+                      <div style={{ background: 'var(--plum-light)', border: '1px solid var(--plum-mid)', borderRadius: '8px', padding: '14px 18px', marginBottom: '22px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--plum)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '2px' }}>How to complete this assignment</div>
+                        {steps.map((step, i) => (
+                          <div key={i} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                            <span style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'var(--plum)', color: 'white', fontSize: '11px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: '1px' }}>{i + 1}</span>
+                            <span style={{ fontSize: '13px', color: 'var(--foreground)', lineHeight: 1.5 }}>{step}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  })()}
 
                   {showQuestions && (
                     <div style={{ marginBottom: '28px' }}>
