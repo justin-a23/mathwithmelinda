@@ -7,7 +7,7 @@ export async function POST(req: NextRequest) {
   if (auth instanceof NextResponse) return auth
 
   try {
-    const { studentName, dayOfWeek, hourOfDay } = await req.json()
+    const { studentName, dayOfWeek, hourOfDay, isNewStudent } = await req.json()
 
     const encouragement = getStudentDailyEncouragement()
 
@@ -35,7 +35,14 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 80,
-        system: `You are a warm, encouraging assistant for a homeschool math student (grades 6-9).
+        system: isNewStudent
+          ? `You are a warm, encouraging assistant for a homeschool math student (grades 6-9).
+This student just joined Math with Melinda — they may be signing in for the very first time.
+Write a brief 1-2 sentence WELCOME: greet them by time of day ("Good morning/afternoon/evening"), welcome them to Math with Melinda, and say you're glad they're here for the year ahead.
+Do NOT reference the weekly rhythm (no "finish the week strong", no midweek talk) — they haven't started yet.
+Do NOT mention assignments, grades, or anything about their workload — that info is shown separately.
+Use their first name once. Keep it under 30 words. No bullet points or lists.`
+          : `You are a warm, encouraging assistant for a homeschool math student (grades 6-9).
 Write a brief 1-sentence personal greeting appropriate for the time of day (use "Good morning", "Good afternoon", or "Good evening" accordingly).
 Be friendly and upbeat — like a kind teacher greeting them.
 Match the energy to the day (Monday = fresh start, Wednesday = midweek push, Friday = finish strong).

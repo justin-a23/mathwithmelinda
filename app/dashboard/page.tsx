@@ -140,6 +140,7 @@ const getStudentProfileQuery = /* GraphQL */`
         statusReason
         courseId
         enrolledAt
+        createdAt
       }
     }
   }
@@ -158,6 +159,7 @@ const getStudentProfileByEmailQuery = /* GraphQL */`
         statusReason
         courseId
         enrolledAt
+        createdAt
       }
     }
   }
@@ -265,6 +267,7 @@ export default function Dashboard() {
   const { signOut } = useAuthenticator()
   const router = useRouter()
   const [weeklyPlans, setWeeklyPlans] = useState<WeeklyPlan[]>([])
+  const [profileCreatedAt, setProfileCreatedAt] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
 
@@ -331,6 +334,7 @@ export default function Dashboard() {
           setHasProfile(true)
           setProfileId(p.id)
           setProfileName((p.preferredName || p.firstName) + ' ' + p.lastName)
+          setProfileCreatedAt(p.createdAt || null)
           studentCourseId = p.courseId || ''
           studentEnrolledAt = p.enrolledAt || null
           if (p.profilePictureKey) {
@@ -555,8 +559,15 @@ export default function Dashboard() {
     const todayStr = `${nowCT.getFullYear()}-${String(nowCT.getMonth() + 1).padStart(2, '0')}-${String(nowCT.getDate()).padStart(2, '0')}`
     const dayOfWeek = nowCT.toLocaleDateString('en-US', { weekday: 'long' })
 
-    // Check localStorage cache — AI note + verse cached per day (Central Time)
-    const cacheKey = 'mwm:studentBriefing:v2'
+    // First-days welcome vs. daily rhythm: a brand-new student shouldn't hear
+    // "way to finish the week strong" on their very first sign-in.
+    const isNew = !!profileCreatedAt
+      && (Date.now() - new Date(profileCreatedAt).getTime()) / 86400000 <= 14
+      && submittedLessonIds.size === 0
+
+    // Check localStorage cache — AI note + verse cached per day (Central Time).
+    // Keyed on new/regular so the welcome doesn't linger once they've started.
+    const cacheKey = 'mwm:studentBriefing:v3:' + (isNew ? 'new' : 'reg')
     try {
       const cached = JSON.parse(localStorage.getItem(cacheKey) || '{}')
       if (cached.date === todayStr && cached.text) {
@@ -573,6 +584,7 @@ export default function Dashboard() {
         studentName: profileName.split(' ')[0],
         dayOfWeek,
         hourOfDay: nowCT.getHours(),
+        isNewStudent: isNew,
       }),
     })
       .then(r => r.json())
@@ -937,6 +949,33 @@ export default function Dashboard() {
             <p style={{ color: 'var(--gray-mid)', margin: 0 }}>Today is {today}. Here are your lessons.</p>
           </div>
         </div>
+
+        {/* ── Getting Started (first two weeks, until first submission) ── */}
+        {!loading && profileCreatedAt
+          && (Date.now() - new Date(profileCreatedAt).getTime()) / 86400000 <= 14
+          && submittedLessonIds.size === 0 && (
+          <div style={{ background: 'var(--plum-light)', border: '1px solid var(--plum-mid)', borderRadius: 'var(--radius)', padding: '20px 24px', marginBottom: '24px' }}>
+            <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--plum)', marginBottom: '10px' }}>
+              🎉 Welcome to Math with Melinda! A few things to get you started:
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {!profilePicUrl && (
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', fontSize: '14px', color: 'var(--foreground)', lineHeight: 1.5 }}>
+                  <span>📸</span>
+                  <span>Add a profile photo — click the circle next to your name above</span>
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', fontSize: '14px', color: 'var(--foreground)', lineHeight: 1.5 }}>
+                <span>🎬</span>
+                <span>Your lessons appear below each week — watch the video, then submit your work on the lesson page</span>
+              </div>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', fontSize: '14px', color: 'var(--foreground)', lineHeight: 1.5 }}>
+                <span>💬</span>
+                <span>Questions? Scroll down to Messages to send Mrs. Melinda a note any time</span>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ── Daily Encouragement ── */}
         {(briefing || briefingLoading) && (
