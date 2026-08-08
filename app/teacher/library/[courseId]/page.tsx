@@ -294,7 +294,11 @@ export default function LessonLibraryPage() {
       teachingNotes: lesson.teachingNotes || '',
       worksheetUrl: lesson.worksheetUrl || '',
       videoUrl: lesson.videoUrl || '',
-      assignmentType: lesson.assignmentType || 'none',
+      // Legacy lessons have no stored type; the student page treats null as
+      // 'upload' (photo submission). Defaulting the form to 'none' here meant
+      // ANY save — even an instructions tweak — silently converted the lesson
+      // to Video Only and removed the student's upload box.
+      assignmentType: lesson.assignmentType || 'upload',
       lessonCategory: lesson.lessonCategory || 'lesson'
     })
     setVideoFile(null)
@@ -1355,7 +1359,7 @@ export default function LessonLibraryPage() {
                                         'Take a photo of your completed work and upload below',
                                       ] : [
                                         ...video,
-                                        'The video tells you which problems to complete — work them out on paper',
+                                        'The video tells you which problems to complete — work them out on paper or right in your book',
                                         'Take a photo of your completed work and upload it below',
                                       ]
                                     }

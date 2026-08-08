@@ -1262,7 +1262,7 @@ function LessonPageInner() {
                     } else if (showUpload) {
                       steps = [
                         ...video,
-                        'The video tells you which problems to complete — work them out on paper',
+                        'The video tells you which problems to complete — work them out on paper or right in your book',
                         'Take a photo of your completed work and upload it below',
                       ]
                     }
