@@ -13,7 +13,7 @@ const client = generateClient()
 const LIST_MY_MESSAGES = /* GraphQL */ `
   query ListMyMessages($studentId: String!) {
     listMessagesByStudentId(studentId: $studentId, limit: 500) {
-      items { id teacherReply repliedAt }
+      items { id teacherReply repliedAt isDeletedByStudent }
     }
   }
 `
@@ -59,7 +59,7 @@ export default function StudentNav({ unreadCount: propUnread }: Props = {}) {
         (typeof window !== 'undefined' && localStorage.getItem('mwm:messagesLastVisited')) || '0'
       )
       const count = msgs.filter(
-        (m: any) => m.teacherReply && m.repliedAt && new Date(m.repliedAt).getTime() > lastVisited
+        (m: any) => !m.isDeletedByStudent && m.teacherReply && m.repliedAt && new Date(m.repliedAt).getTime() > lastVisited
       ).length
       setUnread(count)
     } catch { /* silent — badge is non-critical */ }

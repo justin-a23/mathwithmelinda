@@ -53,7 +53,7 @@ const client = generateClient()
 const LIST_MESSAGES_FOR_STUDENT = /* GraphQL */ `
   query ListMessages($filter: ModelMessageFilterInput) {
     listMessages(filter: $filter, limit: 200) {
-      items { id studentId studentName content sentAt isRead teacherReply repliedAt }
+      items { id studentId studentName content sentAt isRead teacherReply repliedAt isDeletedByStudent }
     }
   }
 `
@@ -89,6 +89,7 @@ type StudentMessage = {
   isRead: boolean | null
   teacherReply: string | null
   repliedAt: string | null
+  isDeletedByStudent: boolean | null
 }
 
 type ReturnedSubmission = {
@@ -484,7 +485,10 @@ export default function Dashboard() {
             query: LIST_MESSAGES_FOR_STUDENT,
             variables: { filter: { studentId: { eq: msgStudentId } } },
           }) as any)
+          // Same soft-delete filter the messages page applies — a message the
+          // student deleted must not resurface on the dashboard.
           const msgItems: StudentMessage[] = msgRes.data.listMessages.items
+            .filter((m: StudentMessage) => !m.isDeletedByStudent)
           msgItems.sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime())
           setMyMessages(msgItems)
         } catch { /* non-critical */ }
@@ -672,6 +676,7 @@ export default function Dashboard() {
         variables: { filter: { studentId: { eq: studentId } } },
       }) as any)
       const msgItems: StudentMessage[] = msgRes.data.listMessages.items
+        .filter((m: StudentMessage) => !m.isDeletedByStudent)
       msgItems.sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime())
       setMyMessages(msgItems)
     } catch (err) {
