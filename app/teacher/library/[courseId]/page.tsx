@@ -127,6 +127,14 @@ export default function LessonLibraryPage() {
   // Inline player for the attached video — lets Melinda refresh herself on
   // what a lesson covers without leaving the editor.
   const [videoPreviewOpen, setVideoPreviewOpen] = useState(false)
+
+  // Imported templates store a bare S3 key ("algebra1/….mp4"), not a URL —
+  // played raw, the browser treats it as a relative path and 404s. Prefix the
+  // CloudFront host (encoding each segment: spaces, em-dashes) when needed.
+  function playableVideoUrl(v: string): string {
+    if (/^https?:\/\//.test(v)) return v
+    return 'https://dgmfzo1xk5r4e.cloudfront.net/' + v.split('/').map(encodeURIComponent).join('/')
+  }
   const [saving, setSaving] = useState(false)
   const [videoUpload, setVideoUpload] = useState<UploadState>({ uploading: false, progress: 0, error: '' })
   const [orphanVideos, setOrphanVideos] = useState<{ key: string; label: string }[] | null>(null)
@@ -1482,7 +1490,7 @@ export default function LessonLibraryPage() {
                                   </div>
                                 </div>
                                 {videoPreviewOpen && (
-                                  <video controls autoPlay preload="metadata" style={{ width: '100%', display: 'block', background: '#000' }} src={editForm.videoUrl} />
+                                  <video controls autoPlay preload="metadata" style={{ width: '100%', display: 'block', background: '#000' }} src={playableVideoUrl(editForm.videoUrl)} />
                                 )}
                               </div>
                             ) : (
