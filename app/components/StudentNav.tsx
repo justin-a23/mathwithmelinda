@@ -6,7 +6,7 @@ import { useAuthenticator } from '@aws-amplify/ui-react'
 import { generateClient } from 'aws-amplify/api'
 import ThemeToggle from './ThemeToggle'
 import { MwmMark } from './MwmLogo'
-import { studentKey } from '@/app/lib/identity'
+import { useResolvedStudent } from '@/app/hooks/useResolvedStudent'
 
 const client = generateClient()
 
@@ -34,21 +34,23 @@ type Props = {
 export default function StudentNav({ unreadCount: propUnread }: Props = {}) {
   const router = useRouter()
   const pathname = usePathname()
-  const { user, signOut } = useAuthenticator()
+  const { signOut } = useAuthenticator()
+  // Resolved via getCurrentUser — the hook user is empty on fresh/incognito
+  // loads, which left the avatar showing the generic 'S' and no unread badge.
+  const { studentId, loginId } = useResolvedStudent()
 
   const [unread, setUnread] = useState(propUnread ?? 0)
   const [firstName, setFirstName] = useState('')
   const [profilePic, setProfilePic] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!user?.userId && !user?.username) return
+    if (!studentId) return
     if (propUnread === undefined) fetchUnread()
     fetchProfile()
-  }, [user?.userId])
+  }, [studentId])
 
   async function fetchUnread() {
     try {
-      const studentId = studentKey(user)
       if (!studentId) return
       const result = await (client.graphql({
         query: LIST_MY_MESSAGES,
@@ -67,7 +69,7 @@ export default function StudentNav({ unreadCount: propUnread }: Props = {}) {
 
   async function fetchProfile() {
     try {
-      const userId = user?.userId || user?.username || ''
+      const userId = studentId
       if (!userId) return
       const result = await (client.graphql({
         query: GET_STUDENT_PROFILE,
@@ -83,7 +85,7 @@ export default function StudentNav({ unreadCount: propUnread }: Props = {}) {
 
   const initials = firstName
     ? firstName[0].toUpperCase()
-    : (user?.signInDetails?.loginId?.[0] || 'S').toUpperCase()
+    : (loginId?.[0] || 'S').toUpperCase()
 
   const isGrades = pathname === '/student/grades'
   const isMessages = pathname === '/student/messages'

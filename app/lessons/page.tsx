@@ -10,7 +10,7 @@ import MathInput from '../components/MathInput'
 import StudentNav from '../components/StudentNav'
 import SubmissionMethodPicker from '../components/SubmissionMethodPicker'
 import { apiFetch } from '@/app/lib/apiFetch'
-import { studentKey } from '@/app/lib/identity'
+import { useResolvedStudent } from '@/app/hooks/useResolvedStudent'
 import { useRoleGuard } from '@/app/hooks/useRoleGuard'
 
 const CLOUDFRONT_URL = 'https://dgmfzo1xk5r4e.cloudfront.net'
@@ -199,6 +199,10 @@ function checkImageQuality(file: File): Promise<string | undefined> {
 function LessonPageInner() {
   const { checking } = useRoleGuard('student')
   const { user } = useAuthenticator()
+  // Deterministic identity — the hook user above is empty on fresh/incognito
+  // loads, which broke the printed name, access guard, watch tracking, draft
+  // keys, and submission ownership on this page.
+  const { studentId: sid, loginId: resolvedLoginId } = useResolvedStudent()
   const router = useRouter()
   const searchParams = useSearchParams()
   const [notes, setNotes] = useState('')
@@ -240,7 +244,7 @@ function LessonPageInner() {
   const lastPosSaveRef = useRef<number>(Date.now())
   // Stable refs so the interval can always read the latest planItem/user without closure issues
   const planItemRef = useRef(planItem)
-  const userRef = useRef(user)
+  const sidRef = useRef(sid)
 
   // Resume state
   const [resumePosition, setResumePosition] = useState<number | null>(null)
@@ -256,7 +260,7 @@ function LessonPageInner() {
   // In-progress answers/notes survive a refresh or accidental navigation.
   // localStorage only (device-local); keyed by student + plan item so drafts
   // never leak between siblings sharing a computer. Cleared on submit.
-  const draftStudentId = studentKey(user)
+  const draftStudentId = sid
   const draftKey = draftStudentId && itemId ? `mwm:draft:${draftStudentId}:${itemId}` : null
   const draftHydratedRef = useRef(false)
 
@@ -299,7 +303,7 @@ function LessonPageInner() {
 
   // Keep stable refs in sync so the interval can always read current values
   planItemRef.current = planItem
-  userRef.current = user
+  sidRef.current = sid
 
   useEffect(() => {
     if (!checking && user === null) router.replace('/login')
@@ -374,9 +378,9 @@ function LessonPageInner() {
     fetchItem()
   }, [itemId])
 
-  // Fetch student name separately — needs user to be ready
+  // Fetch student name separately — needs identity to be ready
   useEffect(() => {
-    const userId = user?.userId || user?.username || ''
+    const userId = sid
     if (!userId) return
     async function fetchName() {
       try {
@@ -389,15 +393,15 @@ function LessonPageInner() {
       } catch { /* non-critical */ }
     }
     fetchName()
-  }, [user?.userId, user?.username])
+  }, [sid])
 
   // Access guard: once both plan item and student info are loaded, verify the
   // student is allowed to view this lesson. Blocks: stale URL with a lesson
   // they were unassigned from, or a lesson that predates their enrollment.
   useEffect(() => {
-    if (!planItem || !user?.userId) return
-    const userId = user.userId
-    const loginId = user.signInDetails?.loginId || ''
+    if (!planItem || !sid) return
+    const userId = sid
+    const loginId = resolvedLoginId
     const plan = planItem.weeklyPlan
     if (!plan) return
 
@@ -425,11 +429,11 @@ function LessonPageInner() {
     }
 
     setAccessDenied(false)
-  }, [planItem, user?.userId, user?.signInDetails?.loginId, studentEnrolledAt])
+  }, [planItem, sid, resolvedLoginId, studentEnrolledAt])
 
   // Check for existing / returned submission when lesson loads
   useEffect(() => {
-    const studentId = studentKey(user)
+    const studentId = sid
     const lessonId = planItem?.lesson?.id
     if (!studentId || !lessonId) return
 
@@ -474,7 +478,7 @@ function LessonPageInner() {
       } catch { /* non-critical */ }
     }
     checkExistingSubmission()
-  }, [planItem?.lesson?.id, user?.userId, user?.username])
+  }, [planItem?.lesson?.id, sid])
 
   // ── Video watch tracking ──────────────────────────────────────────────────
 
@@ -531,8 +535,7 @@ function LessonPageInner() {
       const now = Date.now()
       if (now - lastSaveTimeRef.current < 10_000) return
       const p = planItemRef.current
-      const u = userRef.current
-      const studentId = studentKey(u)
+      const studentId = sidRef.current
       const lessonId = p?.lesson?.id
       if (!studentId || !lessonId) return
       lastSaveTimeRef.current = now
@@ -576,7 +579,7 @@ function LessonPageInner() {
 
   // Load any existing watch record on mount (resume support)
   useEffect(() => {
-    const studentId = studentKey(user)
+    const studentId = sid
     const lessonId = planItem?.lesson?.id
     if (!studentId || !lessonId) return
     ;(client.graphql({
@@ -596,13 +599,13 @@ function LessonPageInner() {
       // Still mark done on error so watch tracking isn't blocked indefinitely
       watchQueryDoneRef.current = true
     })
-  }, [user?.userId, user?.username, planItem?.lesson?.id])
+  }, [sid, planItem?.lesson?.id])
 
   function saveWatchProgress(video: HTMLVideoElement, force = false) {
     const now = Date.now()
     if (!force && now - lastSaveTimeRef.current < 10_000) return
     lastSaveTimeRef.current = now
-    const studentId = studentKey(user)
+    const studentId = sid
     const lessonId = planItem?.lesson?.id
     if (!studentId || !lessonId) return
     const duration = isFinite(video.duration) ? video.duration : 0
@@ -674,7 +677,7 @@ function LessonPageInner() {
       video.removeEventListener('ended', onEnded)
       video.removeEventListener('timeupdate', onTimeUpdate)
     }
-  }, [videoSrc, planItem?.lesson?.id, user?.userId, user?.username])
+  }, [videoSrc, planItem?.lesson?.id, sid])
 
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -759,7 +762,7 @@ function LessonPageInner() {
     // the student's own grades view and, once the owner rules land, unreadable
     // by anyone but the teacher. The previous fallback here wrote the literal
     // string 'unknown', which is exactly that row. Refuse instead.
-    const ownerId = studentKey(user)
+    const ownerId = sid
     if (!ownerId) {
       setError('Your session has expired. Please refresh the page and sign in again.')
       return

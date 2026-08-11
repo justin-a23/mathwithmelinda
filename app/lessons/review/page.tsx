@@ -17,6 +17,7 @@ import { generateClient } from 'aws-amplify/api'
 import StudentNav from '../../components/StudentNav'
 import { studentKey } from '@/app/lib/identity'
 import { useRoleGuard } from '@/app/hooks/useRoleGuard'
+import { useResolvedStudent } from '@/app/hooks/useResolvedStudent'
 
 const client = generateClient()
 const CLOUDFRONT_URL = 'https://dgmfzo1xk5r4e.cloudfront.net'
@@ -68,7 +69,8 @@ function ReviewInner() {
   const [videoSrc, setVideoSrc] = useState<string | null>(null)
   const [isInClass, setIsInClass] = useState(false)
 
-  const studentId = studentKey(user)
+  const { studentId: resolvedStudentId } = useResolvedStudent()
+  const studentId = resolvedStudentId || studentKey(user)
 
   useEffect(() => {
     if (!itemId || !studentId) return

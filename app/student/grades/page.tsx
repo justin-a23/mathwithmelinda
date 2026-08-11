@@ -314,7 +314,9 @@ export default function StudentGradesPage() {
       // The email-then-userId double query this used to do was working around
       // the two identity conventions Gen 1 mixed. studentId is a Cognito sub
       // everywhere now, so one query is both correct and cheaper.
-      const studentId = studentKey(user)
+      // Same resolved id the plan filtering above uses — the raw hook user is
+      // empty on fresh/incognito loads and would query with studentId ''.
+      const studentId = studentUserId
       const subsRes = await (client.graphql({
         query: LIST_MY_SUBMISSIONS,
         variables: { studentId },

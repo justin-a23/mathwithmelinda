@@ -8,7 +8,7 @@ import { generateClient } from 'aws-amplify/api'
 import StudentNav from '../../components/StudentNav'
 import MathRenderer from '../../components/MathRenderer'
 import { apiFetch } from '@/app/lib/apiFetch'
-import { studentKey } from '@/app/lib/identity'
+import { useResolvedStudent } from '@/app/hooks/useResolvedStudent'
 
 const listStudentSubmissions = /* GraphQL */`
   query ListStudentSubmissions($studentId: String!) {
@@ -109,7 +109,10 @@ const client = generateClient()
 
 export default function StudentSubmissions() {
   const { checking } = useRoleGuard('student')
-  const { user, signOut } = useAuthenticator()
+  const { signOut } = useAuthenticator()
+  // Resolved via getCurrentUser — gating on useAuthenticator's user left this
+  // page loading forever on fresh/incognito loads (the #336 class of bug).
+  const { studentId } = useResolvedStudent()
   const router = useRouter()
   const [submissions, setSubmissions] = useState<StudentSubmission[]>([])
   const [loading, setLoading] = useState(true)
@@ -119,7 +122,6 @@ export default function StudentSubmissions() {
   const [fetchedIds, setFetchedIds] = useState<Set<string>>(new Set())
 
   useEffect(() => {
-    const studentId = studentKey(user)
     if (!studentId) return
 
     async function loadSubmissions() {
@@ -143,7 +145,7 @@ export default function StudentSubmissions() {
     }
 
     loadSubmissions()
-  }, [user?.userId])
+  }, [studentId])
 
   async function handleExpand(sub: StudentSubmission) {
     const id = sub.id
