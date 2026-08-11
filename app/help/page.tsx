@@ -90,7 +90,7 @@ export default function HelpPage() {
                   </div>
                   {t.description && <p style={{ fontSize: '13px', color: 'var(--gray-mid)', margin: '6px 0 0 34px' }}>{t.description}</p>}
                 </div>
-                <video controls preload="metadata" style={{ width: '100%', display: 'block', background: '#000' }} src={t.videoUrl} />
+                <video controls preload="metadata" poster="/video-poster.svg" style={{ width: '100%', display: 'block', background: '#000' }} src={t.videoUrl} />
               </div>
             ))}
           </div>

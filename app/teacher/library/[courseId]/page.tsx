@@ -1490,7 +1490,7 @@ export default function LessonLibraryPage() {
                                   </div>
                                 </div>
                                 {videoPreviewOpen && (
-                                  <video controls autoPlay preload="metadata" style={{ width: '100%', display: 'block', background: '#000' }} src={playableVideoUrl(editForm.videoUrl)} />
+                                  <video controls autoPlay preload="metadata" poster="/video-poster.svg" style={{ width: '100%', display: 'block', background: '#000' }} src={playableVideoUrl(editForm.videoUrl)} />
                                 )}
                               </div>
                             ) : (

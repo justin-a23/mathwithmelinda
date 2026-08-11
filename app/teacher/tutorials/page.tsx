@@ -312,7 +312,7 @@ export default function ManageTutorialsPage() {
                   </button>
                 </div>
                 {open && (
-                  <video controls autoPlay preload="metadata" style={{ width: '100%', display: 'block', background: '#000' }} src={g.videoUrl} />
+                  <video controls autoPlay preload="metadata" poster="/video-poster.svg" style={{ width: '100%', display: 'block', background: '#000' }} src={g.videoUrl} />
                 )}
               </div>
             )})}
