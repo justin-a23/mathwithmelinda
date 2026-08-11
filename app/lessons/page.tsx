@@ -835,7 +835,11 @@ function LessonPageInner() {
               id: existingSubmissionId,
               content: JSON.stringify(contentObject),
               status: 'submitted',
-              returnReason: null,
+              // '' rather than null: the Gen 2 auth resolver denies non-staff
+              // callers any update field explicitly set to null ("Unauthorized
+              // on [returnReason]") while real values pass. Empty string clears
+              // the banner logic identically and stays inside the auth rules.
+              returnReason: '',
               submittedAt: new Date().toISOString(),
             } as any
           }
