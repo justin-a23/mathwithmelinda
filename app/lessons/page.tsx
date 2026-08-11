@@ -1135,6 +1135,7 @@ function LessonPageInner() {
                     controlsList="nodownload"
                     disablePictureInPicture
                     onContextMenu={e => e.preventDefault()}
+                    poster="/video-poster.svg"
                     style={{ width: '100%', height: '100%' }}
                     src={videoSrc}
                   >

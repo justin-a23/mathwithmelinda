@@ -176,7 +176,7 @@ function ReviewInner() {
 
             {videoSrc ? (
               <div style={{ background: '#000', borderRadius: 'var(--radius)', overflow: 'hidden', aspectRatio: '16/9' }}>
-                <video controls playsInline style={{ width: '100%', height: '100%' }} src={videoSrc} />
+                <video controls playsInline poster="/video-poster.svg" style={{ width: '100%', height: '100%' }} src={videoSrc} />
               </div>
             ) : (
               <p style={{ color: 'var(--gray-mid)', textAlign: 'center', padding: '48px 0', background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)' }}>
