@@ -11,7 +11,7 @@
  *
  * Supported types:
  *   - number-line        → labeled number line with optional plotted points
- *   - coord-plane        → x/y plane with optional lines and points
+ *   - coord-plane        → x/y plane with optional lines, points and shaded half-planes
  *   - triangle           → triangle with labeled sides/angles
  *   - rectangle          → rectangle with labeled sides
  *   - circle             → circle with optional labeled radius/diameter
@@ -21,7 +21,7 @@
  * Invalid specs render as a small warning badge — never crash the page.
  */
 
-import React, { useMemo } from 'react'
+import React, { useId, useMemo } from 'react'
 
 type NumberLinePoint = {
   value: number
@@ -66,6 +66,21 @@ type CoordPoint = {
   color?: string
 }
 
+type CoordShade = {
+  /**
+   * Boundary of the shaded half-plane. Same grammar as CoordLine.equation:
+   * "y = mx + b", "y = c" (horizontal), or "x = c" (vertical).
+   */
+  boundary: string
+  /**
+   * Which side of the boundary to fill.
+   * above/below for horizontal and sloped boundaries; left/right for vertical ones.
+   */
+  side: 'above' | 'below' | 'left' | 'right'
+  /** fill color; defaults to plum */
+  color?: string
+}
+
 type CoordPlaneSpec = {
   type: 'coord-plane'
   xRange: [number, number]
@@ -74,6 +89,12 @@ type CoordPlaneSpec = {
   step?: number
   lines?: CoordLine[]
   points?: CoordPoint[]
+  /**
+   * Optional shaded half-plane(s) — for two-variable inequalities.
+   * Draw the boundary itself as a `lines` entry (dashed for strict, solid for
+   * inclusive); this only fills the region.
+   */
+  shade?: CoordShade | CoordShade[]
   caption?: string
 }
 
@@ -281,8 +302,52 @@ function CoordPlane({ spec }: { spec: CoordPlaneSpec }) {
   const yTicks: number[] = []
   for (let y = Math.ceil(yMin / step) * step; y <= yMax + 1e-9; y += step) yTicks.push(Number(y.toFixed(10)))
 
+  // Shaded half-planes. Each becomes a quadrilateral clipped to the plot box:
+  // the boundary supplies one edge and the far edge of the box supplies the other.
+  const clipId = `coordclip-${useId()}`
+  const shades = spec.shade ? (Array.isArray(spec.shade) ? spec.shade : [spec.shade]) : []
+  const shadePolys = shades.map(sh => {
+    const vx = verticalX(sh.boundary)
+    if (vx !== null) {
+      // Vertical boundary — only left/right make sense.
+      if (sh.side !== 'left' && sh.side !== 'right') return null
+      const edgeX = sh.side === 'right' ? xMax : xMin
+      return {
+        points: [
+          `${xFor(vx)},${yFor(yMin)}`, `${xFor(vx)},${yFor(yMax)}`,
+          `${xFor(edgeX)},${yFor(yMax)}`, `${xFor(edgeX)},${yFor(yMin)}`,
+        ].join(' '),
+        color: sh.color || DEFAULT_COLOR,
+      }
+    }
+    // Sloped or horizontal boundary — only above/below make sense.
+    if (sh.side !== 'above' && sh.side !== 'below') return null
+    const yL = evalLine(sh.boundary, xMin)
+    const yR = evalLine(sh.boundary, xMax)
+    if (yL === null || yR === null) return null
+    const edgeY = sh.side === 'above' ? yMax : yMin
+    return {
+      points: [
+        `${xFor(xMin)},${yFor(yL)}`, `${xFor(xMax)},${yFor(yR)}`,
+        `${xFor(xMax)},${yFor(edgeY)}`, `${xFor(xMin)},${yFor(edgeY)}`,
+      ].join(' '),
+      color: sh.color || DEFAULT_COLOR,
+    }
+  }).filter(Boolean) as { points: string; color: string }[]
+
   return (
     <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ maxWidth: '100%', height: 'auto' }}>
+      <defs>
+        <clipPath id={clipId}>
+          <rect x={pad} y={pad} width={usableW} height={usableH} />
+        </clipPath>
+      </defs>
+
+      {/* Shaded regions — drawn first so grid, axes and lines sit on top */}
+      {shadePolys.map((p, i) => (
+        <polygon key={`shade${i}`} points={p.points} fill={p.color} opacity={0.18} clipPath={`url(#${clipId})`} />
+      ))}
+
       {/* Grid lines */}
       {xTicks.map(x => (
         <line key={`vx${x}`} x1={xFor(x)} y1={pad} x2={xFor(x)} y2={H - pad} stroke={GRID_COLOR} strokeWidth={0.5} />
@@ -315,7 +380,9 @@ function CoordPlane({ spec }: { spec: CoordPlaneSpec }) {
         <text x={xFor(0) - 6} y={yFor(0) + 14} fontSize={10} fill={TICK_COLOR} textAnchor="end">0</text>
       )}
 
-      {/* Lines */}
+      {/* Lines — clipped to the plot box so a steep line cannot spill into the
+          axis-label margin or past the edge of the SVG. */}
+      <g clipPath={`url(#${clipId})`}>
       {(spec.lines || []).map((ln, i) => {
         const color = ln.color || DEFAULT_COLOR
         const dash = ln.style === 'dashed' ? '6,4' : ln.style === 'dotted' ? '2,3' : undefined
@@ -344,6 +411,7 @@ function CoordPlane({ spec }: { spec: CoordPlaneSpec }) {
           </g>
         )
       })}
+      </g>
 
       {/* Plotted points */}
       {(spec.points || []).map((p, i) => (
