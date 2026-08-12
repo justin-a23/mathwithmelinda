@@ -619,7 +619,11 @@ export default function StudentsPage() {
       const { updateStudentProfile } = await import('../../../src/graphql/mutations')
       // Preserve existing enrolledAt if student was previously active (reinstate case);
       // otherwise stamp with today's date so they only see plans from now on.
-      const enrolledAt = approveStudent.enrolledAt || new Date().toISOString()
+      // Re-enrolling a PAST student always stamps fresh — their old date (or a
+      // legacy null) would let last year's plans reach into the new year.
+      const enrolledAt = approveStudent.status === 'archived'
+        ? new Date().toISOString()
+        : (approveStudent.enrolledAt || new Date().toISOString())
       await client.graphql({
         query: updateStudentProfile,
         variables: {
@@ -1595,7 +1599,9 @@ export default function StudentsPage() {
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}
             onClick={e => { if (e.target === e.currentTarget) { setApproveStudent(null); setApproveSemesterId('') } }}>
             <div style={{ background: 'var(--background)', borderRadius: '16px', padding: '32px', maxWidth: '460px', width: '100%', boxShadow: '0 24px 64px rgba(0,0,0,0.2)' }}>
-              <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', color: 'var(--foreground)', marginBottom: '6px' }}>Approve Student</h2>
+              <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', color: 'var(--foreground)', marginBottom: '6px' }}>
+                {approveStudent.status === 'archived' ? 'Re-enroll Returning Student' : 'Approve Student'}
+              </h2>
               <p style={{ fontSize: '14px', color: 'var(--gray-mid)', marginBottom: '24px' }}>
                 Set up <strong>{approveStudent.firstName} {approveStudent.lastName}</strong>&apos;s course and plan before granting access.
               </p>
@@ -2305,6 +2311,22 @@ export default function StudentsPage() {
                                     {s.email}{archivedDate ? ` · archived ${archivedDate}` : ''}
                                   </div>
                                 </div>
+                                <button
+                                  onClick={() => {
+                                    // Same modal as pending approval — it already handles
+                                    // course, plan, semester enrollment, payments, and the
+                                    // fresh enrolledAt stamp for returning students.
+                                    setApproveStudent(s)
+                                    // Course intentionally NOT prefilled: returning students
+                                    // usually advance (Pre-Alg → Alg 1) — force a conscious pick.
+                                    setApproveCourseId('')
+                                    setApprovePlanType(s.planType || '')
+                                    setApproveGradeLevel(s.gradeLevel || '')
+                                    setApproveSemesterId('')
+                                  }}
+                                  style={{ background: 'transparent', color: '#16a34a', border: '1px solid #86efac', borderRadius: '6px', padding: '6px 14px', cursor: 'pointer', fontSize: '12px', fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0 }}>
+                                  Re-enroll
+                                </button>
                                 <button
                                   onClick={() => router.push(`/teacher/transcripts/${s.id}`)}
                                   style={{ background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '6px', padding: '6px 14px', cursor: 'pointer', fontSize: '12px', fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0 }}>
