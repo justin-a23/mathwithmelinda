@@ -6,6 +6,7 @@ import {
 import { NextRequest, NextResponse } from 'next/server'
 import { requireTeacher } from '@/app/lib/auth'
 import { appsyncClient } from '@/app/lib/appsync'
+import { isStaffCognitoUser } from '@/app/lib/staffGuard'
 
 function makeCognitoClient() {
   const accessKeyId = process.env.MWM_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID
@@ -81,6 +82,15 @@ export async function POST(request: NextRequest) {
     if (!cognitoUsername) {
       cognitoDeleted = true
       console.log('Cognito parent not found by sub — may already be deleted:', userId)
+    } else if (await isStaffCognitoUser(cognito, USER_POOL_ID, cognitoUsername)) {
+      // This exact route deleted Melinda's teacher login on 2026-08-12 — a
+      // parent link created under her sub made her look like a parent row.
+      // Refuse the Cognito deletion AND the record cleanup: the "parent" being
+      // removed is actually staff, so every one of those rows is miswired and
+      // deleting them hides the evidence of the real problem.
+      return NextResponse.json({
+        error: 'Refused: that account belongs to a teacher/admin. If a staff account appears in the parents list, a parent invite was accepted while signed in as staff — contact support instead of removing it.',
+      }, { status: 409 })
     } else {
       await cognito.send(new AdminDeleteUserCommand({ UserPoolId: USER_POOL_ID, Username: cognitoUsername }))
       cognitoDeleted = true

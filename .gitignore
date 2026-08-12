@@ -68,3 +68,4 @@ amplifytools.xcconfig
 amplify_outputs.json
 amplify_outputs*.json
 .amplify/
+MELINDA-TEMP-PASSWORD.txt

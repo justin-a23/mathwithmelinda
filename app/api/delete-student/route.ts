@@ -5,6 +5,7 @@ import {
 } from '@aws-sdk/client-cognito-identity-provider'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireTeacher } from '@/app/lib/auth'
+import { isStaffCognitoUser } from '@/app/lib/staffGuard'
 import { appsyncClient } from '@/app/lib/appsync'
 
 function makeCognitoClient() {
@@ -225,6 +226,11 @@ export async function POST(request: NextRequest) {
     if (!cognitoUsername) {
       cognitoDeleted = true
       console.log('Cognito user not found by sub — may already be deleted:', userId)
+    } else if (await isStaffCognitoUser(cognito, USER_POOL_ID, cognitoUsername)) {
+      // Never delete a teacher/admin login through a roster route — see
+      // app/lib/staffGuard.ts for the incident this tripwire exists for.
+      cognitoError = 'Refused: that Cognito account belongs to a teacher/admin. Roster deletes cannot remove staff logins.'
+      console.error('delete-student refused for staff account:', cognitoUsername)
     } else {
       await cognito.send(new AdminDeleteUserCommand({ UserPoolId: USER_POOL_ID, Username: cognitoUsername }))
       cognitoDeleted = true

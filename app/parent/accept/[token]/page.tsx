@@ -59,7 +59,7 @@ const createParentProfileMutation = `
 `
 
 type Invite = { id: string; token: string; studentEmail: string; studentName: string; used: boolean | null; parentEmail?: string | null; parentFirstName?: string | null; parentLastName?: string | null }
-type State = 'loading' | 'not-found' | 'already-used' | 'already-linked' | 'auth-fork' | 'confirming' | 'done' | 'error'
+type State = 'loading' | 'not-found' | 'already-used' | 'already-linked' | 'auth-fork' | 'confirming' | 'done' | 'error' | 'staff-blocked'
 
 export default function AcceptInvitePage() {
   const router = useRouter()
@@ -98,6 +98,19 @@ export default function AcceptInvitePage() {
     try {
       const u = await getCurrentUser()
       userId = u.userId
+
+      // A teacher/admin session must NEVER claim a parent invite. Accepting
+      // one while signed in as staff created a ParentStudent link carrying the
+      // TEACHER's sub — the Parents page then showed her as a parent, and
+      // removing that row deleted her real login (2026-08-12).
+      try {
+        const session = await fetchAuthSession()
+        const groups = (session.tokens?.accessToken?.payload?.['cognito:groups'] as string[] | undefined) || []
+        if (groups.includes('teacher') || groups.includes('admin')) {
+          setState('staff-blocked')
+          return
+        }
+      } catch { /* group check best-effort; unauthenticated falls through below */ }
       try { localStorage.removeItem('mwm:parentToken') } catch { /* ignore */ }
     } catch {
       // Not signed in — show fork screen if we have invite data, else redirect to signup
@@ -422,6 +435,22 @@ export default function AcceptInvitePage() {
             <button onClick={() => router.push('/parent')}
               style={{ background: '#7B4FA6', color: 'white', padding: '14px 36px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '15px', fontWeight: 600, width: '100%' }}>
               Go to Parent Portal →
+            </button>
+          </>
+        )}
+
+        {state === 'staff-blocked' && (
+          <>
+            <div style={{ fontSize: '48px', marginBottom: '16px' }}>🛑</div>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: '28px', color: 'var(--foreground)', marginBottom: '12px' }}>You&apos;re signed in as the teacher</div>
+            <p style={{ color: 'var(--gray-mid)', lineHeight: '1.6', marginBottom: '24px' }}>
+              Parent invites can&apos;t be accepted from a teacher or admin account — that would tangle the
+              teacher login into the parent system. Sign out first, then open the invite link again using
+              the parent&apos;s own email and password.
+            </p>
+            <button onClick={() => { window.location.href = '/teacher' }}
+              style={{ background: '#7B4FA6', color: 'white', padding: '12px 28px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '14px', fontWeight: 600 }}>
+              Back to Teacher Dashboard
             </button>
           </>
         )}
