@@ -187,6 +187,12 @@ const listParentProfilesQuery = /* GraphQL */`
   }
 `
 
+const deleteParentStudentLinkMutation = /* GraphQL */`
+  mutation DeleteParentStudent($input: DeleteParentStudentInput!) {
+    deleteParentStudent(input: $input) { id }
+  }
+`
+
 const listAllParentStudentsQuery = /* GraphQL */`
   query ListAllParentStudents {
     listParentStudents(limit: 500) {
@@ -841,20 +847,41 @@ export default function StudentsPage() {
       setYearEndProgress({ done, total: totalWork })
     }
 
-    // Remove parent accounts linked to archived students
+    // Remove parent accounts whose children have ALL graduated.
+    //
+    // A parent with a graduating senior and a continuing 7th-grader must keep
+    // their account: unlink only the archived children and leave the rest. The
+    // previous version passed every link this parent had and deleted the login
+    // outright, so archiving one child silently cut the family off from the
+    // other one — and only a fresh invite could restore it.
     for (const parentId of uniqueParentIds) {
       try {
-        const profile = parentProfiles.find(p => p.userId === parentId) || null
-        const psIds = allParentStudents.filter(p => p.parentId === parentId).map(p => p.id)
-        await apiFetch('/api/delete-parent', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: parentId, profileId: profile?.id || null, parentStudentIds: psIds }),
-        })
-        setParentProfiles(prev => prev.filter(p => p.userId !== parentId))
-        setAllParentStudents(prev => prev.filter(p => p.parentId !== parentId))
+        const parentLinks = allParentStudents.filter(p => p.parentId === parentId)
+        const archivedLinks = parentLinks.filter(p => emailsBeingArchived.has((p.studentEmail || '').toLowerCase()))
+        const keepsChildren = parentLinks.length > archivedLinks.length
+
+        if (keepsChildren) {
+          // Unlink just the graduating children; the account stays.
+          for (const link of archivedLinks) {
+            await (client.graphql({
+              query: deleteParentStudentLinkMutation,
+              variables: { input: { id: link.id } },
+            }) as any)
+          }
+          const removedIds = new Set(archivedLinks.map(l => l.id))
+          setAllParentStudents(prev => prev.filter(p => !removedIds.has(p.id)))
+        } else {
+          const profile = parentProfiles.find(p => p.userId === parentId) || null
+          await apiFetch('/api/delete-parent', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: parentId, profileId: profile?.id || null, parentStudentIds: archivedLinks.map(l => l.id) }),
+          })
+          setParentProfiles(prev => prev.filter(p => p.userId !== parentId))
+          setAllParentStudents(prev => prev.filter(p => p.parentId !== parentId))
+        }
       } catch (err) {
-        console.error('Failed to delete parent', parentId, err)
+        console.error('Failed to remove parent', parentId, err)
       }
       done++
       setYearEndProgress({ done, total: totalWork })
@@ -2528,260 +2555,25 @@ export default function StudentsPage() {
           )}
         </div>
 
-        {/* ── SENT INVITES (Students + Parents) ── */}
-        {(studentInvites.length > 0 || invites.length > 0) && (
-          <div style={{ borderTop: '1px solid var(--gray-light)', paddingTop: '40px', marginBottom: '0' }}>
-            <h3 style={{ fontFamily: 'var(--font-display)', fontSize: '18px', color: 'var(--foreground)', marginBottom: '4px' }}>Sent Invites</h3>
-            <p style={{ color: 'var(--gray-mid)', fontSize: '13px', marginBottom: '20px' }}>
-              All student and parent invites. Pending invites can be copied, resent, or deleted. Claimed ones can be cleared.
-            </p>
-
-            {/* Student invites */}
-            {studentInvites.length > 0 && (
-              <div style={{ marginBottom: '28px' }}>
-                <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--plum)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '10px' }}>
-                  🎓 Student Invites ({studentInvites.length})
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {studentInvites.map(inv => {
-                    const link = `${typeof window !== 'undefined' ? window.location.origin : ''}/join/${inv.token}`
-                    const isUsed = inv.used === true
-                    const sentDate = new Date(inv.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-                    return (
-                      <div key={inv.id} style={{ background: 'var(--background)', border: `1px solid ${isUsed ? '#86EFAC' : 'var(--gray-light)'}`, borderRadius: '10px', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '14px', opacity: isUsed ? 0.75 : 1 }}>
-                        <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: isUsed ? '#22C55E' : '#F59E0B', flexShrink: 0 }} />
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                            <span style={{ fontWeight: 600, fontSize: '14px', color: 'var(--foreground)' }}>{inv.firstName} {inv.lastName}</span>
-                            {inv.courseTitle && <span style={{ fontSize: '11px', background: 'rgba(123,79,166,0.1)', color: 'var(--plum)', padding: '2px 8px', borderRadius: '20px', fontWeight: 600 }}>{inv.courseTitle}</span>}
-                            <span style={{ fontSize: '11px', background: isUsed ? '#D1FAE5' : '#FEF3C7', color: isUsed ? '#065F46' : '#92400E', padding: '2px 8px', borderRadius: '20px', fontWeight: 600 }}>
-                              {isUsed ? '✓ Claimed' : '⏳ Pending'}
-                            </span>
-                          </div>
-                          <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginTop: '2px' }}>{inv.email} · Sent {sentDate}</div>
-                        </div>
-                        <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
-                          {!isUsed && (
-                            <>
-                              <button
-                                onClick={() => {
-                                  navigator.clipboard.writeText(link)
-                                  setCopiedStudentInviteId(inv.id)
-                                  setTimeout(() => setCopiedStudentInviteId(null), 2000)
-                                }}
-                                style={{ background: copiedStudentInviteId === inv.id ? '#D1FAE5' : 'var(--page-bg)', color: copiedStudentInviteId === inv.id ? '#065F46' : 'var(--foreground)', border: '1px solid var(--gray-light)', borderRadius: '6px', padding: '5px 12px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
-                              >
-                                {copiedStudentInviteId === inv.id ? '✓ Copied' : 'Copy Link'}
-                              </button>
-                              <button
-                                onClick={() => resendStudentInviteEmail(inv)}
-                                disabled={resendingInviteId === inv.id}
-                                style={{ background: 'var(--page-bg)', color: 'var(--gray-mid)', border: '1px solid var(--gray-light)', borderRadius: '6px', padding: '5px 12px', fontSize: '12px', cursor: 'pointer', whiteSpace: 'nowrap' }}
-                              >
-                                {resendingInviteId === inv.id ? 'Sending…' : 'Resend'}
-                              </button>
-                            </>
-                          )}
-                          <button
-                            onClick={() => deleteStudentInviteRecord(inv.id)}
-                            disabled={deletingInviteId === inv.id}
-                            style={{ background: 'transparent', color: '#ef4444', border: 'none', borderRadius: '6px', padding: '5px 8px', fontSize: '12px', cursor: 'pointer' }}
-                          >
-                            {deletingInviteId === inv.id ? '…' : '✕'}
-                          </button>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Parent invites */}
-            {invites.length > 0 && (
-              <div>
-                <div style={{ fontSize: '11px', fontWeight: 700, color: '#0369a1', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '10px' }}>
-                  👨‍👩‍👧 Parent Invites ({invites.length})
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {invites.map(inv => {
-                    const link = `${typeof window !== 'undefined' ? window.location.origin : ''}/parent/accept/${inv.token}`
-                    const isUsed = inv.used === true
-                    const sentDate = new Date(inv.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-                    const displayName = inv.parentFirstName
-                      ? `${inv.parentFirstName}${inv.parentLastName ? ' ' + inv.parentLastName : ''}`
-                      : inv.parentEmail || 'Parent'
-                    const canResend = !isUsed && !!inv.parentEmail
-                    return (
-                      <div key={inv.id} style={{ background: 'var(--background)', border: `1px solid ${isUsed ? '#BAE6FD' : 'var(--gray-light)'}`, borderRadius: '10px', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '14px', opacity: isUsed ? 0.75 : 1 }}>
-                        <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: isUsed ? '#0369a1' : '#F59E0B', flexShrink: 0 }} />
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                            <span style={{ fontWeight: 600, fontSize: '14px', color: 'var(--foreground)' }}>{displayName}</span>
-                            <span style={{ fontSize: '11px', background: 'rgba(3,105,161,0.08)', color: '#0369a1', padding: '2px 8px', borderRadius: '20px', fontWeight: 600 }}>
-                              for {inv.studentName}
-                            </span>
-                            <span style={{ fontSize: '11px', background: isUsed ? '#E0F2FE' : '#FEF3C7', color: isUsed ? '#0369a1' : '#92400E', padding: '2px 8px', borderRadius: '20px', fontWeight: 600 }}>
-                              {isUsed ? '✓ Claimed' : '⏳ Pending'}
-                            </span>
-                          </div>
-                          <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginTop: '2px' }}>
-                            {inv.parentEmail ? `${inv.parentEmail} · ` : ''}{`Sent ${sentDate}`}
-                            {!inv.parentEmail && !isUsed && (
-                              <span style={{ color: '#b45309', marginLeft: '6px' }}>⚠ No email stored — use Copy Link to share manually</span>
-                            )}
-                          </div>
-                        </div>
-                        <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
-                          {!isUsed && (
-                            <button
-                              onClick={() => {
-                                navigator.clipboard.writeText(link)
-                                setCopiedParentInviteId(inv.id)
-                                setTimeout(() => setCopiedParentInviteId(null), 2000)
-                              }}
-                              style={{ background: copiedParentInviteId === inv.id ? '#D1FAE5' : 'var(--page-bg)', color: copiedParentInviteId === inv.id ? '#065F46' : 'var(--foreground)', border: '1px solid var(--gray-light)', borderRadius: '6px', padding: '5px 12px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
-                            >
-                              {copiedParentInviteId === inv.id ? '✓ Copied' : 'Copy Link'}
-                            </button>
-                          )}
-                          {canResend && (
-                            <button
-                              onClick={() => resendParentInviteEmail(inv)}
-                              disabled={resendingParentInviteId === inv.id}
-                              style={{ background: 'var(--page-bg)', color: 'var(--gray-mid)', border: '1px solid var(--gray-light)', borderRadius: '6px', padding: '5px 12px', fontSize: '12px', cursor: 'pointer', whiteSpace: 'nowrap' }}
-                            >
-                              {resendingParentInviteId === inv.id ? 'Sending…' : 'Resend'}
-                            </button>
-                          )}
-                          <button
-                            onClick={() => deleteInvite(inv.id)}
-                            disabled={deletingParentInviteId === inv.id}
-                            style={{ background: 'transparent', color: '#ef4444', border: 'none', borderRadius: '6px', padding: '5px 8px', fontSize: '12px', cursor: 'pointer' }}
-                          >
-                            {deletingParentInviteId === inv.id ? '…' : '✕'}
-                          </button>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ── PARENT ACCOUNTS ── */}
-        {(() => {
-          const uniqueParentIds = [...new Set(allParentStudents.map(p => p.parentId))]
-          if (uniqueParentIds.length === 0) return null
-
-          return (
-            <div style={{ borderTop: '1px solid var(--gray-light)', paddingTop: '40px', marginTop: '40px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                <h3 style={{ fontFamily: 'var(--font-display)', fontSize: '18px', color: 'var(--foreground)', margin: 0 }}>Parent Accounts</h3>
-                <span style={{ fontSize: '12px', background: 'rgba(123,79,166,0.1)', color: 'var(--plum)', padding: '3px 10px', borderRadius: '20px', fontWeight: 600 }}>
-                  {uniqueParentIds.length} active
-                </span>
-              </div>
-              <p style={{ color: 'var(--gray-mid)', fontSize: '13px', marginBottom: '20px' }}>
-                Parents who have accepted their invite and created accounts. Delete removes their login from Cognito and unlinks them from all students.
-              </p>
-
-              {deleteParentError && (
-                <div style={{ background: '#FEF2F2', border: '1px solid #fca5a5', borderRadius: '8px', padding: '12px 16px', marginBottom: '16px', fontSize: '13px', color: '#b91c1c' }}>
-                  {deleteParentError}
-                  <button onClick={() => setDeleteParentError(null)} style={{ float: 'right', background: 'none', border: 'none', color: '#b91c1c', cursor: 'pointer' }}>×</button>
-                </div>
-              )}
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {uniqueParentIds.map(parentId => {
-                  const profile = parentProfiles.find(p => p.userId === parentId)
-                  const linkedStudents = allParentStudents.filter(p => p.parentId === parentId)
-
-                  // Try to get name/email from profile, fall back to invite records
-                  let displayName = profile ? `${profile.firstName} ${profile.lastName}` : ''
-                  let displayEmail = profile?.email || ''
-                  if (!displayName || !displayEmail) {
-                    // Look up invite records matched by studentEmail
-                    for (const ps of linkedStudents) {
-                      const matchedInvite = invites.find(
-                        i => i.used && i.studentEmail.toLowerCase() === ps.studentEmail.toLowerCase()
-                      )
-                      if (matchedInvite) {
-                        if (!displayName && matchedInvite.parentFirstName) {
-                          displayName = `${matchedInvite.parentFirstName}${matchedInvite.parentLastName ? ' ' + matchedInvite.parentLastName : ''}`
-                        }
-                        if (!displayEmail && matchedInvite.parentEmail) {
-                          displayEmail = matchedInvite.parentEmail
-                        }
-                        if (displayName && displayEmail) break
-                      }
-                    }
-                  }
-
-                  const isConfirming = deleteParentConfirmId === parentId
-
-                  return (
-                    <div key={parentId} style={{ background: 'var(--background)', border: `1px solid ${isConfirming ? '#fca5a5' : 'var(--gray-light)'}`, borderRadius: '10px', padding: '14px 16px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                        <div style={{ width: '34px', height: '34px', borderRadius: '50%', background: 'rgba(3,105,161,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '16px' }}>
-                          👤
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--foreground)' }}>
-                            {displayName || <span style={{ color: 'var(--gray-mid)', fontStyle: 'italic' }}>Unknown name</span>}
-                          </div>
-                          <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginTop: '1px' }}>
-                            {displayEmail || <span style={{ fontStyle: 'italic' }}>No email on record</span>}
-                          </div>
-                          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>
-                            {linkedStudents.map(ps => (
-                              <span key={ps.id} style={{ fontSize: '11px', background: 'rgba(123,79,166,0.08)', color: 'var(--plum)', padding: '2px 8px', borderRadius: '20px', fontWeight: 500 }}>
-                                {ps.studentName}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                        {!isConfirming ? (
-                          <button
-                            onClick={() => setDeleteParentConfirmId(parentId)}
-                            style={{ background: 'transparent', color: '#ef4444', border: '1px solid #fca5a5', borderRadius: '6px', padding: '5px 12px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
-                          >
-                            Remove
-                          </button>
-                        ) : (
-                          <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
-                            <button
-                              onClick={() => setDeleteParentConfirmId(null)}
-                              disabled={deletingParent}
-                              style={{ background: 'transparent', color: 'var(--gray-mid)', border: '1px solid var(--gray-light)', borderRadius: '6px', padding: '5px 12px', fontSize: '12px', cursor: 'pointer' }}
-                            >
-                              Cancel
-                            </button>
-                            <button
-                              onClick={() => deleteParentCompletely(parentId)}
-                              disabled={deletingParent}
-                              style={{ background: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', padding: '5px 12px', fontSize: '12px', fontWeight: 600, cursor: deletingParent ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}
-                            >
-                              {deletingParent ? 'Removing…' : 'Confirm Remove'}
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                      {isConfirming && (
-                        <div style={{ marginTop: '10px', padding: '10px 12px', background: '#FEF2F2', borderRadius: '6px', fontSize: '12px', color: '#b91c1c' }}>
-                          This will delete their Cognito login and remove all student links. Grades and submissions are not affected.
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
+        {/* ── PARENTS & INVITES moved to their own pages ── */}
+        <div style={{ borderTop: '1px solid var(--gray-light)', paddingTop: '32px', marginTop: '40px', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+          <button
+            onClick={() => router.push('/teacher/parents')}
+            style={{ flex: '1 1 260px', textAlign: 'left', background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: '12px', padding: '18px 20px', cursor: 'pointer', fontFamily: 'var(--font-body)' }}>
+            <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--foreground)', marginBottom: '4px' }}>👤 Parents →</div>
+            <div style={{ fontSize: '12px', color: 'var(--gray-mid)', lineHeight: 1.5 }}>
+              Parent accounts, the children they follow, and linking one parent to several students.
             </div>
-          )
-        })()}
+          </button>
+          <button
+            onClick={() => router.push('/teacher/invites')}
+            style={{ flex: '1 1 260px', textAlign: 'left', background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: '12px', padding: '18px 20px', cursor: 'pointer', fontFamily: 'var(--font-body)' }}>
+            <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--foreground)', marginBottom: '4px' }}>✉️ Invites →</div>
+            <div style={{ fontSize: '12px', color: 'var(--gray-mid)', lineHeight: 1.5 }}>
+              Every student and parent invite, with copy, resend, and delete.
+            </div>
+          </button>
+        </div>
 
       </main>
 

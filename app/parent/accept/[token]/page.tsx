@@ -94,10 +94,13 @@ export default function AcceptInvitePage() {
     } catch {
       // Not signed in — show fork screen if we have invite data, else redirect to signup
       try { localStorage.setItem('mwm:parentToken', token) } catch { /* ignore */ }
-      if (foundInvite && !foundInvite.used) {
+      if (foundInvite) {
+        // Show the sign-in/sign-up fork even for a used invite: whether it is
+        // genuinely claimed or merely orphaned can only be judged once we know
+        // who they are, and the signed-in path above makes that call. Dead-ending
+        // here is what sent an existing parent to "create an account" for an
+        // account they already had.
         setState('auth-fork')
-      } else if (foundInvite?.used) {
-        setState('already-used')
       } else {
         // Couldn't load invite and not logged in — send to signup
         router.replace(`/signup?redirect=${encodeURIComponent(`/parent/accept/${token}`)}`)
@@ -113,16 +116,9 @@ export default function AcceptInvitePage() {
 
     // Invite already used — check if this user is the one who claimed it
     if (foundInvite.used) {
-      try {
-        const linkResult = await client.graphql({
-          query: listParentStudentLinks,
-          variables: { filter: { parentId: { eq: userId }, studentEmail: { eq: foundInvite.studentEmail } } }
-        }) as any
-        const links = linkResult.data.listParentStudents.items
-        setState(links.length > 0 ? 'already-linked' : 'already-used')
-      } catch {
-        setState('already-used')
-      }
+      const outcome = await resolveUsedInvite(userId, foundInvite)
+      if (outcome === 'relink') { await performConfirmLink(userId, foundInvite); return }
+      setState(outcome)
       return
     }
 
@@ -144,16 +140,9 @@ export default function AcceptInvitePage() {
       setInvite(found)
 
       if (found.used) {
-        try {
-          const linkResult = await client.graphql({
-            query: listParentStudentLinks,
-            variables: { filter: { parentId: { eq: userId }, studentEmail: { eq: found.studentEmail } } }
-          }) as any
-          const links = linkResult.data.listParentStudents.items
-          setState(links.length > 0 ? 'already-linked' : 'already-used')
-        } catch {
-          setState('already-used')
-        }
+        const outcome = await resolveUsedInvite(userId, found)
+        if (outcome === 'relink') { await performConfirmLink(userId, found); return }
+        setState(outcome)
         return
       }
 
@@ -161,6 +150,31 @@ export default function AcceptInvitePage() {
     } catch (err) {
       console.error(err)
       setState('error')
+    }
+  }
+
+  /**
+   * Decide what an already-used invite means for this signed-in user.
+   *
+   * 'already-linked' — they hold the link; nothing to do.
+   * 'relink'         — the invite is marked used but NOBODY holds a link to
+   *                    this student, so the claim was orphaned (the parent
+   *                    account was deleted). Re-honor it instead of stranding
+   *                    the family behind a dead token that can never be reused.
+   * 'already-used'   — someone else legitimately holds the claim.
+   */
+  async function resolveUsedInvite(userId: string, inv: Invite): Promise<'already-linked' | 'relink' | 'already-used'> {
+    try {
+      const allForStudent = await client.graphql({
+        query: listParentStudentLinks,
+        variables: { filter: { studentEmail: { eq: inv.studentEmail } } }
+      }) as any
+      const links = allForStudent.data.listParentStudents.items as { parentId: string }[]
+      if (links.some(l => l.parentId === userId)) return 'already-linked'
+      if (links.length === 0) return 'relink'
+      return 'already-used'
+    } catch {
+      return 'already-used'
     }
   }
 

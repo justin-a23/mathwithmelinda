@@ -126,6 +126,8 @@ export default function TeacherNav({ ungradedCount: propUngraded, unreadCount: p
   const isSchedule = pathname === '/teacher/schedule'
   const isMessages = pathname === '/teacher/messages'
   const isStudents = pathname === '/teacher/students'
+  const isParents = pathname === '/teacher/parents'
+  const isInvites = pathname === '/teacher/invites'
   const isLessons = pathname.startsWith('/teacher/library')
   const isImport = pathname.startsWith('/teacher/lessons/import')
   // "More" items
@@ -140,10 +142,10 @@ export default function TeacherNav({ ungradedCount: propUngraded, unreadCount: p
   const isPayments = pathname === '/teacher/payments'
   const isProfile = pathname === '/teacher/profile'
 
-  const moreIsActive = isGradebook || isParticipation || isTerms || isPlans || isSyllabi || isZoom || isReportCard || isPayments || isImport || isTutorials
+  const moreIsActive = isGradebook || isParticipation || isTerms || isPlans || isSyllabi || isZoom || isReportCard || isPayments || isImport || isTutorials || isParents || isInvites
 
   // Label for "More" button when a sub-item is active
-  const moreActiveLabel = isGradebook ? 'Gradebook' : isParticipation ? 'Participation' : isReportCard ? 'Report Card' : isPlans ? 'Assigned Work' : isTerms ? 'Academic Year' : isSyllabi ? 'Syllabi' : isZoom ? 'Meetings' : isPayments ? 'Payments' : isImport ? 'Import Lesson' : isTutorials ? 'Help Tutorials' : null
+  const moreActiveLabel = isGradebook ? 'Gradebook' : isParticipation ? 'Participation' : isReportCard ? 'Report Card' : isPlans ? 'Assigned Work' : isTerms ? 'Academic Year' : isSyllabi ? 'Syllabi' : isZoom ? 'Meetings' : isPayments ? 'Payments' : isImport ? 'Import Lesson' : isTutorials ? 'Help Tutorials' : isParents ? 'Parents' : isInvites ? 'Invites' : null
 
   function primaryBtn(label: string, path: string, active: boolean, badge?: number) {
     return (
@@ -304,6 +306,9 @@ export default function TeacherNav({ ungradedCount: propUngraded, unreadCount: p
             {dropdownItem('Academic Year', '/teacher/semesters', isTerms)}
             {dropdownItem('Syllabi', '/teacher/syllabus', isSyllabi)}
             {dropdownItem('Help Tutorials', '/teacher/tutorials', isTutorials)}
+            <div style={{ height: '1px', background: 'var(--gray-light)', margin: '4px 8px' }} />
+            {dropdownItem('Parents', '/teacher/parents', isParents)}
+            {dropdownItem('Invites', '/teacher/invites', isInvites)}
             <div style={{ height: '1px', background: 'var(--gray-light)', margin: '4px 8px' }} />
             {dropdownItem('Payments', '/teacher/payments', isPayments)}
           </div>
