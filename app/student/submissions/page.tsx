@@ -108,6 +108,14 @@ function SubmissionImage({ url, alt, style }: { url: string; alt: string; style?
   )
 }
 
+const getEnrolledAtQuery = /* GraphQL */`
+  query GetEnrolledAt($userId: String!) {
+    listStudentProfilesByUserId(userId: $userId, limit: 10) {
+      items { enrolledAt }
+    }
+  }
+`
+
 const client = generateClient()
 
 export default function StudentSubmissions() {
@@ -129,11 +137,18 @@ export default function StudentSubmissions() {
 
     async function loadSubmissions() {
       try {
-        const result = await (client.graphql({
-          query: listStudentSubmissions,
-          variables: { studentId }
-        }) as any)
-        const items: StudentSubmission[] = result.data.listSubmissions.items
+        const [result, profRes] = await Promise.all([
+          client.graphql({ query: listStudentSubmissions, variables: { studentId } }) as any,
+          client.graphql({ query: getEnrolledAtQuery, variables: { userId: studentId } }) as any,
+        ])
+        // Returning students (re-enrolled after a year away) get a fresh
+        // enrolledAt — work submitted before it belongs to a previous year and
+        // stays out of this year's view, same cutoff the dashboard and grades
+        // pages apply. Null enrolledAt (legacy profiles) shows everything.
+        const enrolledAt = profRes?.data?.listStudentProfilesByUserId?.items?.[0]?.enrolledAt || null
+        const enrolledMs = enrolledAt ? new Date(enrolledAt).getTime() : null
+        const items: StudentSubmission[] = (result.data.listSubmissions.items as StudentSubmission[])
+          .filter(s => !enrolledMs || !s.submittedAt || new Date(s.submittedAt).getTime() >= enrolledMs)
         items.sort((a, b) => {
           const da = a.submittedAt ? new Date(a.submittedAt).getTime() : 0
           const db = b.submittedAt ? new Date(b.submittedAt).getTime() : 0
