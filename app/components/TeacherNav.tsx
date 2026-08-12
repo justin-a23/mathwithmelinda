@@ -127,6 +127,7 @@ export default function TeacherNav({ ungradedCount: propUngraded, unreadCount: p
   const isMessages = pathname === '/teacher/messages'
   const isStudents = pathname === '/teacher/students'
   const isParents = pathname === '/teacher/parents'
+  const isPastStudents = pathname === '/teacher/students/past'
   const isInvites = pathname === '/teacher/invites'
   const isLessons = pathname.startsWith('/teacher/library')
   const isImport = pathname.startsWith('/teacher/lessons/import')
@@ -142,10 +143,10 @@ export default function TeacherNav({ ungradedCount: propUngraded, unreadCount: p
   const isPayments = pathname === '/teacher/payments'
   const isProfile = pathname === '/teacher/profile'
 
-  const moreIsActive = isGradebook || isParticipation || isTerms || isPlans || isSyllabi || isZoom || isReportCard || isPayments || isImport || isTutorials || isParents || isInvites
+  const moreIsActive = isGradebook || isParticipation || isTerms || isPlans || isSyllabi || isZoom || isReportCard || isPayments || isImport || isTutorials || isParents || isInvites || isPastStudents
 
   // Label for "More" button when a sub-item is active
-  const moreActiveLabel = isGradebook ? 'Gradebook' : isParticipation ? 'Participation' : isReportCard ? 'Report Card' : isPlans ? 'Assigned Work' : isTerms ? 'Academic Year' : isSyllabi ? 'Syllabi' : isZoom ? 'Meetings' : isPayments ? 'Payments' : isImport ? 'Import Lesson' : isTutorials ? 'Help Tutorials' : isParents ? 'Parents' : isInvites ? 'Invites' : null
+  const moreActiveLabel = isGradebook ? 'Gradebook' : isParticipation ? 'Participation' : isReportCard ? 'Report Card' : isPlans ? 'Assigned Work' : isTerms ? 'Academic Year' : isSyllabi ? 'Syllabi' : isZoom ? 'Meetings' : isPayments ? 'Payments' : isImport ? 'Import Lesson' : isTutorials ? 'Help Tutorials' : isParents ? 'Parents' : isInvites ? 'Invites' : isPastStudents ? 'Past Students' : null
 
   function primaryBtn(label: string, path: string, active: boolean, badge?: number) {
     return (
@@ -309,6 +310,7 @@ export default function TeacherNav({ ungradedCount: propUngraded, unreadCount: p
             <div style={{ height: '1px', background: 'var(--gray-light)', margin: '4px 8px' }} />
             {dropdownItem('Parents', '/teacher/parents', isParents)}
             {dropdownItem('Invites', '/teacher/invites', isInvites)}
+            {dropdownItem('Past Students', '/teacher/students/past', isPastStudents)}
             <div style={{ height: '1px', background: 'var(--gray-light)', margin: '4px 8px' }} />
             {dropdownItem('Payments', '/teacher/payments', isPayments)}
           </div>

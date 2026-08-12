@@ -2,7 +2,7 @@
 
 import { useAuthenticator } from '@aws-amplify/ui-react'
 import { useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { generateClient } from 'aws-amplify/api'
 import TeacherNav from '../../components/TeacherNav'
 import { useRoleGuard } from '../../hooks/useRoleGuard'
@@ -281,20 +281,6 @@ type ParentStudentRecord = {
 // Use the Web Crypto API for a cryptographically secure, unguessable token.
 // crypto.randomUUID() returns a 36-char hex UUID with ~122 bits of entropy —
 // adequate as an authorization bearer for student/parent invites.
-/**
- * Derive an academic year label ("2024-2025") from a timestamp. Uses the
- * standard North American academic year convention: Aug–Dec belongs to
- * year starting that summer, Jan–Jul belongs to year starting previous summer.
- */
-function academicYearLabel(ts: string | null | undefined): string {
-  if (!ts) return 'Unknown year'
-  const d = new Date(ts)
-  if (isNaN(d.getTime())) return 'Unknown year'
-  const y = d.getFullYear()
-  const m = d.getMonth() // 0-11
-  const startYear = m >= 7 ? y : y - 1 // Aug (month 7) onwards = new year
-  return `${startYear}-${startYear + 1}`
-}
 
 function formatArchivedDate(ts: string | null | undefined): string {
   if (!ts) return ''
@@ -350,7 +336,6 @@ export default function StudentsPage() {
   const [archiveConfirmId, setArchiveConfirmId] = useState<string | null>(null)
   const [archivingId, setArchivingId] = useState<string | null>(null)
   const [archiveError, setArchiveError] = useState<string | null>(null)
-  const [showArchived, setShowArchived] = useState(false)
   const [yearEndConfirm, setYearEndConfirm] = useState(false)
   const [yearEndRunning, setYearEndRunning] = useState(false)
   const [yearEndProgress, setYearEndProgress] = useState({ done: 0, total: 0 })
@@ -376,10 +361,6 @@ export default function StudentsPage() {
   const [approving, setApproving] = useState(false)
 
   // Student invites (sent, pending/used)
-  const [studentInvites, setStudentInvites] = useState<StudentInviteRecord[]>([])
-  const [copiedStudentInviteId, setCopiedStudentInviteId] = useState<string | null>(null)
-  const [deletingInviteId, setDeletingInviteId] = useState<string | null>(null)
-  const [resendingInviteId, setResendingInviteId] = useState<string | null>(null)
 
   // Per-student parent invite modal
   const [inviteParentStudent, setInviteParentStudent] = useState<Student | null>(null)
@@ -388,18 +369,13 @@ export default function StudentsPage() {
   const [inviteParentEmail, setInviteParentEmail] = useState('')
   const [inviteParentCreating, setInviteParentCreating] = useState(false)
   const [inviteParentCopied, setInviteParentCopied] = useState<string | null>(null)
+  const [revokingInviteId, setRevokingInviteId] = useState<string | null>(null)
 
   // Parent invite list actions
-  const [copiedParentInviteId, setCopiedParentInviteId] = useState<string | null>(null)
-  const [deletingParentInviteId, setDeletingParentInviteId] = useState<string | null>(null)
-  const [resendingParentInviteId, setResendingParentInviteId] = useState<string | null>(null)
 
   // Parent account management
   const [parentProfiles, setParentProfiles] = useState<ParentProfile[]>([])
   const [allParentStudents, setAllParentStudents] = useState<ParentStudentRecord[]>([])
-  const [deleteParentConfirmId, setDeleteParentConfirmId] = useState<string | null>(null)
-  const [deletingParent, setDeletingParent] = useState(false)
-  const [deleteParentError, setDeleteParentError] = useState<string | null>(null)
 
   // Add Co-op Student form
   const [showCoopForm, setShowCoopForm] = useState(false)
@@ -420,9 +396,32 @@ export default function StudentsPage() {
   }, [user, router])
 
   useEffect(() => {
-    Promise.all([fetchStudents(), fetchCourses(), fetchSemesters(), fetchEnrollments(), fetchInvites(), fetchStudentInvites(), fetchParentProfiles(), fetchAllParentStudents()])
+    Promise.all([fetchStudents(), fetchCourses(), fetchSemesters(), fetchEnrollments(), fetchInvites(), fetchParentProfiles(), fetchAllParentStudents()])
       .finally(() => setLoading(false))
   }, [])
+
+  /**
+   * Re-enroll handoff from /teacher/students/past — that page lists archived
+   * students, this page owns the enrollment modal (course, plan, semester,
+   * payments), so it arrives as ?reenroll=<profileId> rather than a second copy
+   * of the modal living over there. Read from location rather than
+   * useSearchParams to keep this route out of a Suspense boundary.
+   */
+  useEffect(() => {
+    if (loading || students.length === 0) return
+    const id = new URLSearchParams(window.location.search).get('reenroll')
+    if (!id) return
+    const target = students.find(s => s.id === id)
+    if (target) {
+      setApproveStudent(target)
+      setApproveCourseId('')            // returning students usually advance a course
+      setApprovePlanType(target.planType || '')
+      setApproveGradeLevel(target.gradeLevel || '')
+      setApproveSemesterId('')
+    }
+    // Clear the param so a refresh doesn't reopen the modal
+    window.history.replaceState({}, '', '/teacher/students')
+  }, [loading, students])
 
   async function fetchStudents() {
     const result = await client.graphql({ query: listStudentProfilesQuery }) as any
@@ -508,11 +507,6 @@ export default function StudentsPage() {
     setInvites(items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()))
   }
 
-  async function fetchStudentInvites() {
-    const result = await client.graphql({ query: listStudentInvitesQuery }) as any
-    const items = result.data.listStudentInvites.items as StudentInviteRecord[]
-    setStudentInvites(items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()))
-  }
 
   async function fetchParentProfiles() {
     try {
@@ -528,37 +522,7 @@ export default function StudentsPage() {
     } catch { /* non-fatal */ }
   }
 
-  async function deleteStudentInviteRecord(id: string) {
-    setDeletingInviteId(id)
-    try {
-      await client.graphql({ query: deleteStudentInvite, variables: { input: { id } } }) as any
-      setStudentInvites(prev => prev.filter(i => i.id !== id))
-    } catch (err) { console.error(err) }
-    finally { setDeletingInviteId(null) }
-  }
 
-  async function resendStudentInviteEmail(inv: StudentInviteRecord) {
-    setResendingInviteId(inv.id)
-    const link = `${window.location.origin}/join/${inv.token}`
-    try {
-      await apiFetch('/api/send-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          to: inv.email,
-          subject: `Reminder: Your Math with Melinda invite is waiting 🎓`,
-          html: `<div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:32px 24px">
-            <h2 style="color:#1E1E2E">Hi ${inv.firstName}!</h2>
-            <p style="color:#555;font-size:15px;line-height:1.6">Just a reminder — Melinda has set up your account for Math with Melinda${inv.courseTitle ? ` in <strong>${inv.courseTitle}</strong>` : ''}. Click the link below to get started.</p>
-            <a href="${link}" style="display:inline-block;background:#7B4FA6;color:white;padding:13px 28px;border-radius:8px;font-size:15px;font-weight:600;text-decoration:none;margin:16px 0">Create My Account →</a>
-            <p style="color:#aaa;font-size:13px;word-break:break-all">${link}</p>
-          </div>`,
-          text: `Hi ${inv.firstName}!\n\nYour invite to Math with Melinda is waiting:\n${link}`,
-        }),
-      })
-    } catch { /* non-fatal */ }
-    finally { setResendingInviteId(null) }
-  }
 
   function startEdit(s: Student) {
     setEditingId(s.id)
@@ -770,32 +734,6 @@ export default function StudentsPage() {
     }
   }
 
-  async function deleteParentCompletely(parentId: string) {
-    setDeletingParent(true)
-    setDeleteParentError(null)
-    try {
-      const profile = parentProfiles.find(p => p.userId === parentId) || null
-      const psIds = allParentStudents.filter(p => p.parentId === parentId).map(p => p.id)
-      const res = await apiFetch('/api/delete-parent', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: parentId, profileId: profile?.id || null, parentStudentIds: psIds }),
-      })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error || 'Delete failed')
-      setParentProfiles(prev => prev.filter(p => p.userId !== parentId))
-      setAllParentStudents(prev => prev.filter(p => p.parentId !== parentId))
-      setDeleteParentConfirmId(null)
-      if (json.cognitoError) {
-        setDeleteParentError(`Parent removed from app. Note: Cognito deletion failed (${json.cognitoError}) — you may need to remove them manually in the AWS console.`)
-      }
-    } catch (err: any) {
-      console.error(err)
-      setDeleteParentError(err.message || 'Something went wrong')
-    } finally {
-      setDeletingParent(false)
-    }
-  }
 
   async function archiveStudent(s: Student) {
     setArchivingId(s.id)
@@ -1006,42 +944,17 @@ export default function StudentsPage() {
     }
   }
 
+  /** Revoke a pending parent invite from the student's own row. Full invite
+   *  management (copy, resend, filters) lives on /teacher/invites. */
   async function deleteInvite(id: string) {
-    setDeletingParentInviteId(id)
+    setRevokingInviteId(id)
     try {
       await client.graphql({ query: deleteParentInvite, variables: { input: { id } } })
       setInvites(prev => prev.filter(i => i.id !== id))
     } catch (err) { console.error(err) }
-    finally { setDeletingParentInviteId(null) }
+    finally { setRevokingInviteId(null) }
   }
 
-  async function resendParentInviteEmail(inv: Invite) {
-    if (!inv.parentEmail) return
-    setResendingParentInviteId(inv.id)
-    const link = `${window.location.origin}/parent/accept/${inv.token}`
-    const parentFirstName = inv.parentFirstName || 'there'
-    try {
-      await apiFetch('/api/send-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          to: inv.parentEmail,
-          subject: `Reminder: Your Math with Melinda parent invite is waiting`,
-          html: `<div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:32px 24px">
-            <div style="background:#1E1E2E;padding:16px 24px;border-radius:8px;margin-bottom:28px">
-              <span style="color:white;font-size:18px;font-weight:600">Math with Melinda</span>
-            </div>
-            <h2 style="color:#1E1E2E">Hi ${parentFirstName}!</h2>
-            <p style="color:#555;font-size:15px;line-height:1.6">Just a reminder — <strong>${inv.studentName}</strong> is enrolled in Math with Melinda. Set up your parent account to track their grades, assignments, and feedback.</p>
-            <a href="${link}" style="display:inline-block;background:#0369a1;color:white;padding:13px 28px;border-radius:8px;font-size:15px;font-weight:600;text-decoration:none;margin:16px 0">Set Up My Parent Account →</a>
-            <p style="color:#aaa;font-size:13px;word-break:break-all">${link}</p>
-          </div>`,
-          text: `Hi ${parentFirstName}!\n\nReminder: ${inv.studentName} is enrolled in Math with Melinda. Set up your parent account:\n${link}`,
-        }),
-      })
-    } catch { /* non-fatal */ }
-    finally { setResendingParentInviteId(null) }
-  }
 
   async function createCoopStudent() {
     if (!coopFirstName.trim() || !coopLastName.trim() || !coopEmail.trim()) return
@@ -1207,7 +1120,6 @@ export default function StudentsPage() {
       })
 
       // Refresh invite lists so new records appear immediately
-      fetchStudentInvites()
       fetchInvites()
 
       // Reset form fields
@@ -1259,10 +1171,14 @@ export default function StudentsPage() {
       }
       return true
     })
+    // Class first, then name: the roster reads as a set of class lists rather
+    // than one long alphabetical run, which is how Melinda thinks about it.
+    // A class heading is emitted in the map wherever the course changes.
     .sort((a, b) => {
-      const nameA = a.firstName + ' ' + a.lastName
-      const nameB = b.firstName + ' ' + b.lastName
-      return nameA.localeCompare(nameB)
+      const courseA = a.courseId ? (courseMap[a.courseId] || 'zzz') : 'zzz~unassigned'
+      const courseB = b.courseId ? (courseMap[b.courseId] || 'zzz') : 'zzz~unassigned'
+      if (courseA !== courseB) return courseA.localeCompare(courseB)
+      return (a.lastName + ' ' + a.firstName).localeCompare(b.lastName + ' ' + b.firstName)
     })
 
   const inputStyle: React.CSSProperties = {
@@ -1802,7 +1718,12 @@ export default function StudentsPage() {
           <p style={{ color: 'var(--gray-mid)', fontSize: '14px', fontStyle: 'italic' }}>No students match your filters.</p>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '56px' }}>
-            {filteredStudents.map(s => {
+            {filteredStudents.map((s, idx) => {
+              // Class heading whenever the course changes (list is sorted by class).
+              const prev = idx > 0 ? filteredStudents[idx - 1] : null
+              const startsClass = !prev || prev.courseId !== s.courseId
+              const classLabel = s.courseId ? (courseMap[s.courseId] || 'Unknown course') : 'No class assigned'
+              const classSize = filteredStudents.filter(x => x.courseId === s.courseId).length
               const isEditing = editingId === s.id
               const isRemoving = removeConfirmId === s.id
               const studentParentInvites = parentInviteMap[s.email.toLowerCase()] || []
@@ -1815,7 +1736,19 @@ export default function StudentsPage() {
               const courseSemesters = semesters.filter(sem => sem.courseId === s.courseId)
 
               return (
-                <div key={s.id} style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
+                <Fragment key={s.id}>
+                {startsClass && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: idx === 0 ? '0 0 2px' : '18px 0 2px', padding: '0 2px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--plum)' }}>
+                      {classLabel}
+                    </span>
+                    <span style={{ fontSize: '11px', color: 'var(--gray-mid)', background: 'var(--gray-light)', padding: '1px 9px', borderRadius: '20px', fontWeight: 600 }}>
+                      {classSize}
+                    </span>
+                    <span style={{ flex: 1, height: '1px', background: 'var(--gray-light)' }} />
+                  </div>
+                )}
+                <div style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
 
                   {/* Main row */}
                   <div style={{ padding: '14px 20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
@@ -2172,6 +2105,7 @@ export default function StudentsPage() {
                     </div>
                   )}
                 </div>
+                </Fragment>
               )
             })}
           </div>
@@ -2284,95 +2218,20 @@ export default function StudentsPage() {
           </div>
         )}
 
-        {/* ── PAST STUDENTS (grouped by academic year) ── */}
-        {archivedStudents.length > 0 && (() => {
-          // Group archived students by the academic year they were archived in
-          const byYear = new Map<string, Student[]>()
-          for (const s of archivedStudents) {
-            const yr = academicYearLabel(s.archivedAt)
-            if (!byYear.has(yr)) byYear.set(yr, [])
-            byYear.get(yr)!.push(s)
-          }
-          const sortedYears = Array.from(byYear.keys()).sort((a, b) => b.localeCompare(a)) // newest first
-          return (
-            <div style={{ marginBottom: '56px' }}>
-              <button
-                onClick={() => setShowArchived(v => !v)}
-                style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'none', border: 'none', cursor: 'pointer', padding: '0 0 12px', fontFamily: 'var(--font-body)' }}
-              >
-                <span style={{ fontSize: '11px', fontWeight: 500, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--gray-mid)' }}>
-                  Past Students ({archivedStudents.length})
-                </span>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--gray-mid)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-                  style={{ transform: showArchived ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
-                  <polyline points="6 9 12 15 18 9"/>
-                </svg>
-              </button>
-              {showArchived && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                  {sortedYears.map(year => (
-                    <div key={year}>
-                      <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--plum)', marginBottom: '8px', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
-                        {year} ({byYear.get(year)!.length} student{byYear.get(year)!.length !== 1 ? 's' : ''})
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {byYear.get(year)!
-                          .slice()
-                          .sort((a, b) => (a.lastName + a.firstName).localeCompare(b.lastName + b.firstName))
-                          .map(s => {
-                            const courseName = s.courseId ? (courseMap[s.courseId] || '') : ''
-                            const archivedDate = formatArchivedDate(s.archivedAt)
-                            return (
-                              <div key={s.id} style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', padding: '12px 20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-                                <div style={{ width: '34px', height: '34px', borderRadius: '50%', background: 'var(--gray-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                  <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--gray-mid)' }}>{s.firstName.charAt(0)}{s.lastName.charAt(0)}</span>
-                                </div>
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                                    <span style={{ fontWeight: 600, fontSize: '14px', color: 'var(--foreground)' }}>{s.firstName} {s.lastName}</span>
-                                    {courseName && (
-                                      <span style={{ background: 'var(--gray-light)', color: 'var(--gray-dark)', fontSize: '11px', padding: '2px 8px', borderRadius: '20px' }}>{courseName}</span>
-                                    )}
-                                  </div>
-                                  <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginTop: '2px' }}>
-                                    {s.email}{archivedDate ? ` · archived ${archivedDate}` : ''}
-                                  </div>
-                                </div>
-                                <button
-                                  onClick={() => {
-                                    // Same modal as pending approval — it already handles
-                                    // course, plan, semester enrollment, payments, and the
-                                    // fresh enrolledAt stamp for returning students.
-                                    setApproveStudent(s)
-                                    // Course intentionally NOT prefilled: returning students
-                                    // usually advance (Pre-Alg → Alg 1) — force a conscious pick.
-                                    setApproveCourseId('')
-                                    setApprovePlanType(s.planType || '')
-                                    setApproveGradeLevel(s.gradeLevel || '')
-                                    setApproveSemesterId('')
-                                  }}
-                                  style={{ background: 'transparent', color: '#16a34a', border: '1px solid #86efac', borderRadius: '6px', padding: '6px 14px', cursor: 'pointer', fontSize: '12px', fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0 }}>
-                                  Re-enroll
-                                </button>
-                                <button
-                                  onClick={() => router.push(`/teacher/transcripts/${s.id}`)}
-                                  style={{ background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '6px', padding: '6px 14px', cursor: 'pointer', fontSize: '12px', fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0 }}>
-                                  View Transcript →
-                                </button>
-                              </div>
-                            )
-                          })}
-                      </div>
-                    </div>
-                  ))}
-                  <p style={{ fontSize: '12px', color: 'var(--gray-mid)', fontStyle: 'italic', marginTop: '4px' }}>
-                    All grades, submissions, and report cards are preserved for past students. Use &ldquo;View Transcript&rdquo; to see a full history for printing or emailing to parents.
-                  </p>
-                </div>
-              )}
-            </div>
-          )
-        })()}
+        {/* ── PAST STUDENTS → own page ── */}
+        {archivedStudents.length > 0 && (
+          <button
+            onClick={() => router.push('/teacher/students/past')}
+            style={{ width: '100%', textAlign: 'left', background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: '12px', padding: '16px 20px', cursor: 'pointer', fontFamily: 'var(--font-body)', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span style={{ fontSize: '15px', fontWeight: 700, color: 'var(--foreground)' }}>🎓 Past Students →</span>
+            <span style={{ fontSize: '11px', color: 'var(--gray-mid)', background: 'var(--gray-light)', padding: '2px 9px', borderRadius: '20px', fontWeight: 600 }}>
+              {archivedStudents.length}
+            </span>
+            <span style={{ fontSize: '12px', color: 'var(--gray-mid)' }}>
+              Transcripts and re-enrollment for students from past years.
+            </span>
+          </button>
+        )}
 
         {/* ── ADD CO-OP STUDENT ── */}
         <div style={{ borderTop: '1px solid var(--gray-light)', paddingTop: '48px', marginBottom: '48px' }}>
