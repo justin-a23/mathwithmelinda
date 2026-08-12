@@ -7,6 +7,7 @@ import { generateClient } from 'aws-amplify/api'
 import ThemeToggle from './ThemeToggle'
 import { MwmMark } from './MwmLogo'
 import { apiFetch } from '@/app/lib/apiFetch'
+import { useResolvedUser } from '@/app/hooks/useResolvedUser'
 
 const client = generateClient()
 
@@ -42,6 +43,7 @@ export default function TeacherNav({ ungradedCount: propUngraded, unreadCount: p
   const router = useRouter()
   const pathname = usePathname()
   const { user, signOut } = useAuthenticator()
+  const { userId: resolvedUserId } = useResolvedUser()
 
   const [ungraded, setUngraded] = useState(propUngraded ?? 0)
   const [unread, setUnread] = useState(propUnread ?? 0)
@@ -57,11 +59,12 @@ export default function TeacherNav({ ungradedCount: propUngraded, unreadCount: p
     }
   }, [])
 
-  // Re-fetch profile whenever user identity becomes available (avoids race where
-  // the auth user wasn't ready on first render and picUrl stays empty)
+  // Re-fetch profile whenever user identity becomes available. Resolved via
+  // getCurrentUser (useResolvedUser) — the raw hook user intermittently never
+  // arrives on fresh sessions, which left the nav nameless/pictureless.
   useEffect(() => {
-    if (user?.userId || user?.username) fetchProfile()
-  }, [user?.userId, user?.username])
+    if (resolvedUserId) fetchProfile()
+  }, [resolvedUserId])
 
   // After signOut(), `user` becomes null — redirect to login. signOut() itself
   // is not truly async, so we can't await it; this effect handles the redirect.
@@ -93,7 +96,7 @@ export default function TeacherNav({ ungradedCount: propUngraded, unreadCount: p
 
   async function fetchProfile() {
     try {
-      const userId = user?.userId || user?.username || ''
+      const userId = resolvedUserId
       if (!userId) return
       const result = await (client.graphql({ query: GET_TEACHER_PROFILE, variables: { userId } }) as any)
       const p = result.data.listTeacherProfiles.items[0]

@@ -8,6 +8,7 @@ import TeacherNav from '../../components/TeacherNav'
 import ImageCropper from '../../components/ImageCropper'
 import { useRoleGuard } from '../../hooks/useRoleGuard'
 import { apiFetch } from '@/app/lib/apiFetch'
+import { useResolvedUser } from '@/app/hooks/useResolvedUser'
 
 const client = generateClient()
 
@@ -77,6 +78,7 @@ const inputStyle: React.CSSProperties = {
 
 export default function TeacherProfilePage() {
   const { user, signOut } = useAuthenticator()
+  const { userId: resolvedUserId, loginId: resolvedLoginId } = useResolvedUser()
   const router = useRouter()
   const { checking } = useRoleGuard('teacher')
 
@@ -108,7 +110,9 @@ export default function TeacherProfilePage() {
   }, [user, router])
 
   useEffect(() => {
-    const userId = user?.userId || user?.username || ''
+    // Resolved identity, not the raw hook user — the hook intermittently never
+    // fires on fresh sessions and this page hung forever on its spinner.
+    const userId = resolvedUserId
     if (!userId) return
     async function load() {
       try {
@@ -166,7 +170,7 @@ export default function TeacherProfilePage() {
       }
     }
     load()
-  }, [user?.userId, user?.username])
+  }, [resolvedUserId])
 
   async function saveInfo() {
     if (!profile) return
@@ -195,8 +199,8 @@ export default function TeacherProfilePage() {
             query: `mutation DeleteTeacherProfile($input: DeleteTeacherProfileInput!) { deleteTeacherProfile(input: $input) { id } }`,
             variables: { input: { id: profile.id } },
           })
-          const userId = user?.userId || user?.username || ''
-          const email = user?.signInDetails?.loginId || userId
+          const userId = resolvedUserId
+          const email = resolvedLoginId || userId
           const created = await client.graphql({
             query: createTeacherProfileMutation,
             variables: { input: { userId, email, displayName: displayName.trim(), bio: bio.trim() } },
