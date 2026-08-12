@@ -16,6 +16,14 @@ const findInviteByToken = /* GraphQL */`
   }
 `
 
+const findInvitesByParentEmail = /* GraphQL */`
+  query ListParentInvitesByParentEmail($filter: ModelParentInviteFilterInput) {
+    listParentInvites(filter: $filter, limit: 500) {
+      items { id token studentEmail studentName used parentEmail parentFirstName parentLastName }
+    }
+  }
+`
+
 const updateParentInvite = /* GraphQL */`
   mutation UpdateParentInvite($input: UpdateParentInviteInput!) {
     updateParentInvite(input: $input) { id used }
@@ -247,6 +255,44 @@ export default function AcceptInvitePage() {
         query: updateParentInvite,
         variables: { input: { id: inv.id, used: true } }
       })
+
+      // Household auto-claim: the teacher may have queued invites for this
+      // parent's OTHER children (same parent email, no email sent). Claim them
+      // all now so one accepted invite links every sibling — the parent never
+      // needs a second email or a second click.
+      if (inv.parentEmail) {
+        try {
+          const siblings = await client.graphql({
+            query: findInvitesByParentEmail,
+            variables: { filter: { parentEmail: { eq: inv.parentEmail.toLowerCase() }, used: { ne: true } } }
+          }) as any
+          for (const sib of (siblings.data.listParentInvites.items as Invite[])) {
+            if (sib.id === inv.id) continue
+            try {
+              const existingLink = await client.graphql({
+                query: listParentStudentLinks,
+                variables: { filter: { parentId: { eq: userId }, studentEmail: { eq: sib.studentEmail } } }
+              }) as any
+              if (existingLink.data.listParentStudents.items.length === 0) {
+                await client.graphql({
+                  query: createParentStudent,
+                  variables: { input: { parentId: userId, studentEmail: sib.studentEmail, studentName: sib.studentName } }
+                })
+              }
+              await client.graphql({
+                query: updateParentInvite,
+                variables: { input: { id: sib.id, used: true } }
+              })
+            } catch (err) {
+              // One sibling failing shouldn't block the rest or the accept itself
+              console.error('Sibling auto-claim failed for', sib.studentName, err)
+            }
+          }
+        } catch (err) {
+          console.error('Sibling invite lookup failed:', err)
+        }
+      }
+
       setState('done')
     } catch (err) {
       console.error(err)

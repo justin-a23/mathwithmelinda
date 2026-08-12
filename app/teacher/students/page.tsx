@@ -7,6 +7,7 @@ import { generateClient } from 'aws-amplify/api'
 import TeacherNav from '../../components/TeacherNav'
 import { useRoleGuard } from '../../hooks/useRoleGuard'
 import { apiFetch } from '@/app/lib/apiFetch'
+import { createParentStudentMutation, resolveParentIdentity } from '@/app/lib/people'
 
 const client = generateClient()
 
@@ -388,7 +389,10 @@ export default function StudentsPage() {
   const [coopParentEmail, setCoopParentEmail] = useState('')
   const [coopSemesterId, setCoopSemesterId] = useState('')
   const [coopCreating, setCoopCreating] = useState(false)
-  const [coopResult, setCoopResult] = useState<{ studentLink: string; parentLink: string; studentName: string; studentEmail: string; parentEmail: string; emailSentToStudent: boolean; emailSentToParent: boolean } | null>(null)
+  const [coopResult, setCoopResult] = useState<{ studentLink: string; parentLink: string; studentName: string; studentEmail: string; parentEmail: string; emailSentToStudent: boolean; emailSentToParent: boolean; parentNote?: string } | null>(null)
+  // 'acct:<parentId>' links an existing account now; 'pend:<email>' queues a
+  // silent invite claimed automatically when that parent accepts their first.
+  const [coopExistingParent, setCoopExistingParent] = useState('')
   const [copiedCoopLink, setCopiedCoopLink] = useState<string | null>(null)
 
   useEffect(() => {
@@ -963,6 +967,22 @@ export default function StudentsPage() {
       const studentToken = randomToken()
       const course = courses.find(c => c.id === coopCourseId)
 
+      // Existing-parent selection: resolve who was picked (if anyone) so the
+      // rest of the flow knows to skip the parent invite email entirely.
+      const existingAcctId = coopExistingParent.startsWith('acct:') ? coopExistingParent.slice(5) : null
+      const existingPendEmail = coopExistingParent.startsWith('pend:') ? coopExistingParent.slice(5) : null
+      const existingIdentity = existingAcctId
+        ? resolveParentIdentity(existingAcctId, parentProfiles, allParentStudents, invites)
+        : null
+      const pendingSource = existingPendEmail
+        ? invites.find(i => !i.used && i.parentEmail?.toLowerCase() === existingPendEmail)
+        : null
+      // Effective parent contact for the invite records (new-parent fields when
+      // typing, resolved values when an existing parent was picked)
+      const effParentEmail = existingIdentity?.email || pendingSource?.parentEmail || (coopExistingParent ? '' : coopParentEmail.trim().toLowerCase())
+      const effParentFirst = (existingIdentity?.name || pendingSource?.parentFirstName || (coopExistingParent ? '' : coopParentFirstName.trim())).split(' ')[0] || ''
+      const effParentLast = pendingSource?.parentLastName || (coopExistingParent ? (existingIdentity?.name || '').split(' ').slice(1).join(' ') : coopParentLastName.trim())
+
       // Create student invite
       await (client.graphql({
         query: createStudentInvite,
@@ -976,26 +996,57 @@ export default function StudentsPage() {
             courseTitle: course?.title || null,
             semesterId: coopSemesterId || null,
             planType: 'coop',
-            parentFirstName: coopParentFirstName.trim() || null,
-            parentLastName: coopParentLastName.trim() || null,
-            parentEmail: coopParentEmail.trim().toLowerCase() || null,
+            parentFirstName: effParentFirst || null,
+            parentLastName: effParentLast || null,
+            parentEmail: effParentEmail || null,
             used: false,
           }
         }
       }) as any)
 
-      // Create parent invite if parent email provided
       let parentLink = ''
-      if (coopParentEmail.trim()) {
+      let parentNote = ''
+      const fullName = `${coopFirstName.trim()} ${coopLastName.trim()}`
+      const studentEmailLower = coopEmail.trim().toLowerCase()
+
+      if (existingAcctId) {
+        // Parent already has an account — a direct link is all a sibling needs.
+        // No invite, no email; the child appears at their next sign-in.
+        await (client.graphql({
+          query: createParentStudentMutation,
+          variables: { input: { parentId: existingAcctId, studentEmail: studentEmailLower, studentName: fullName } }
+        }) as any)
+        fetchAllParentStudents()
+        parentNote = `Linked to ${existingIdentity?.name || existingIdentity?.email || 'the selected parent'} — ${coopFirstName.trim()} will appear next time they sign in. No email sent.`
+      } else if (existingPendEmail) {
+        // Parent was invited but hasn't signed up yet — queue a silent invite.
+        // Accepting their first invite auto-claims this one (household claim on
+        // the accept page), so they still get exactly one email and one click.
+        await (client.graphql({
+          query: createParentInvite,
+          variables: {
+            input: {
+              token: randomToken(),
+              studentName: fullName,
+              studentEmail: studentEmailLower,
+              used: false,
+              parentEmail: existingPendEmail,
+              parentFirstName: pendingSource?.parentFirstName || null,
+              parentLastName: pendingSource?.parentLastName || null,
+            }
+          }
+        }) as any)
+        parentNote = `Queued for ${existingPendEmail} — when they accept their existing invite, both children connect automatically. No additional email sent.`
+      } else if (coopParentEmail.trim()) {
+        // Brand-new parent — the original invite + email flow.
         const parentToken = randomToken()
-        const studentFullName = `${coopFirstName.trim()} ${coopLastName.trim()}`
         await (client.graphql({
           query: createParentInvite,
           variables: {
             input: {
               token: parentToken,
-              studentName: studentFullName,
-              studentEmail: coopEmail.trim().toLowerCase(),
+              studentName: fullName,
+              studentEmail: studentEmailLower,
               used: false,
               parentEmail: coopParentEmail.trim().toLowerCase() || null,
               parentFirstName: coopParentFirstName.trim() || null,
@@ -1114,9 +1165,12 @@ export default function StudentsPage() {
         parentLink,
         studentName: studentFullName,
         studentEmail: coopEmail.trim().toLowerCase(),
-        parentEmail: coopParentEmail.trim().toLowerCase(),
+        // Existing-parent modes surface their outcome via parentNote instead of
+        // the sent/failed email banner, so parentEmail stays empty for them.
+        parentEmail: coopExistingParent ? '' : coopParentEmail.trim().toLowerCase(),
         emailSentToStudent,
         emailSentToParent,
+        parentNote: parentNote || undefined,
       })
 
       // Refresh invite lists so new records appear immediately
@@ -1131,6 +1185,7 @@ export default function StudentsPage() {
       setCoopParentFirstName('')
       setCoopParentLastName('')
       setCoopParentEmail('')
+      setCoopExistingParent('')
     } catch (err) {
       console.error('Error creating co-op student:', err)
     } finally {
@@ -2311,6 +2366,51 @@ export default function StudentsPage() {
 
               <div style={{ borderTop: '1px solid var(--gray-light)', paddingTop: '20px', marginBottom: '20px' }}>
                 <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--gray-mid)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '14px' }}>Parent Info <span style={{ fontWeight: 400, textTransform: 'none' }}>(optional — generates parent invite link)</span></div>
+
+                {/* Existing parent picker — a sibling shouldn't trigger a second
+                    email. Account parents link instantly; invited-but-not-yet-
+                    signed-up parents get a silent invite the accept page claims
+                    together with their first one. */}
+                {(() => {
+                  const acctIds = [...new Set([...parentProfiles.map(p => p.userId), ...allParentStudents.map(l => l.parentId)])]
+                  const acctOptions = acctIds.map(id => {
+                    const { name, email } = resolveParentIdentity(id, parentProfiles, allParentStudents, invites)
+                    return { value: `acct:${id}`, label: `${name || email || 'Unknown parent'}${email && name ? ` (${email})` : ''} — has account` }
+                  })
+                  const acctEmails = new Set(acctIds.map(id => resolveParentIdentity(id, parentProfiles, allParentStudents, invites).email.toLowerCase()).filter(Boolean))
+                  const pendEmails = [...new Set(
+                    invites.filter(i => !i.used && i.parentEmail && !acctEmails.has(i.parentEmail.toLowerCase()))
+                      .map(i => i.parentEmail!.toLowerCase())
+                  )]
+                  const pendOptions = pendEmails.map(email => {
+                    const src = invites.find(i => !i.used && i.parentEmail?.toLowerCase() === email)
+                    const name = src?.parentFirstName ? `${src.parentFirstName}${src.parentLastName ? ' ' + src.parentLastName : ''}` : email
+                    return { value: `pend:${email}`, label: `${name} (${email}) — invite pending` }
+                  })
+                  if (acctOptions.length === 0 && pendOptions.length === 0) return null
+                  return (
+                    <div style={{ marginBottom: '16px' }}>
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--gray-mid)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>Link to Existing Parent</label>
+                      <select
+                        value={coopExistingParent}
+                        onChange={e => setCoopExistingParent(e.target.value)}
+                        style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--gray-light)', borderRadius: '6px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)', boxSizing: 'border-box' }}>
+                        <option value="">No — new parent (or none)</option>
+                        {acctOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                        {pendOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                      {coopExistingParent && (
+                        <div style={{ marginTop: '8px', background: '#F0FDF4', border: '1px solid #bbf7d0', borderRadius: '6px', padding: '10px 12px', fontSize: '12px', color: '#15803d', lineHeight: 1.5 }}>
+                          {coopExistingParent.startsWith('acct:')
+                            ? '✓ This student will be linked to that parent directly — no email sent; they’ll see the new child at their next sign-in.'
+                            : '✓ Queued silently — when this parent accepts the invite they already have, both children connect automatically. No additional email.'}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
+
+                {!coopExistingParent && (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                   <div>
                     <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--gray-mid)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>Parent First Name</label>
@@ -2335,14 +2435,15 @@ export default function StudentsPage() {
                           <span style={{ flexShrink: 0 }}>ℹ️</span>
                           <span>
                             <strong>{emailLower}</strong> already has a parent invite for <strong>{names}</strong>.
-                            When they accept this new invite, they should <strong>sign in</strong> — not create a new account.
-                            The invite email will include sign-in instructions.
+                            Use <strong>Link to Existing Parent</strong> above instead — it connects this student without
+                            sending them another email.
                           </span>
                         </div>
                       )
                     })()}
                   </div>
                 </div>
+                )}
               </div>
 
               <div style={{ display: 'flex', gap: '10px' }}>
@@ -2383,6 +2484,12 @@ export default function StudentsPage() {
                     {coopResult.emailSentToParent
                       ? <span>Parent email sent to <strong>{coopResult.parentEmail}</strong></span>
                       : <span>Email failed for <strong>{coopResult.parentEmail}</strong> — copy link above to send manually</span>}
+                  </div>
+                )}
+                {coopResult.parentNote && (
+                  <div style={{ fontSize: '13px', display: 'flex', alignItems: 'flex-start', gap: '6px', color: '#15803d' }}>
+                    <span>👨‍👩‍👧</span>
+                    <span>{coopResult.parentNote}</span>
                   </div>
                 )}
               </div>
