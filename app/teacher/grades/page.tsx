@@ -80,6 +80,7 @@ const listSubmissionsWithDetails = /* GraphQL */`
         archivedAt
         status
         returnReason
+        returnDueDate
         assignment {
           id
           title
@@ -174,6 +175,7 @@ type Submission = {
   archivedAt?: string | null
   status?: string | null
   returnReason?: string | null
+  returnDueDate?: string | null
   assignment?: {
     id: string
     title: string
@@ -220,8 +222,13 @@ function getSubmissionDueDateTime(s: Submission): Date | null {
 
 function isSubmissionLate(s: Submission): boolean {
   if (!s.submittedAt) return false
-  const due = getSubmissionDueDateTime(s)
-  if (!due) return false
+  // A return-flow due date supersedes the original deadline: work Melinda sent
+  // back and got again by her new date isn't late. returnDueDate is a plain
+  // date — treat it as due by end of that day.
+  const due = s.returnDueDate
+    ? new Date(s.returnDueDate + 'T23:59:59')
+    : getSubmissionDueDateTime(s)
+  if (!due || isNaN(due.getTime())) return false
   return new Date(s.submittedAt) > due
 }
 

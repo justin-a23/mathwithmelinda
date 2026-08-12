@@ -89,6 +89,7 @@ const listSubmissionsByStudent = /* GraphQL */`
         grade
         teacherComment
         submittedAt
+        returnDueDate
         assignment {
           id
           title
@@ -117,6 +118,7 @@ type Submission = {
   grade: string | null
   teacherComment: string | null
   submittedAt: string | null
+  returnDueDate?: string | null
   assignment?: {
     id: string
     title: string
@@ -167,15 +169,18 @@ function fmtDateTime(iso: string): string {
     ' at ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
 }
 
-/** Due date + late flag from a submission's content JSON (best-effort). */
-function dueInfo(sub: { content: string | null; submittedAt: string | null }): { due: string | null; late: boolean } {
+/** Due date + late flag from a submission's content JSON (best-effort).
+ *  A return-flow due date (set when Melinda sends work back) supersedes the
+ *  original deadline — resubmitting by the new date isn't late. */
+function dueInfo(sub: { content: string | null; submittedAt: string | null; returnDueDate?: string | null }): { due: string | null; late: boolean } {
   try {
     const parsed = JSON.parse(sub.content || '{}')
-    if (!parsed.dueDateTime) return { due: null, late: false }
-    const due = new Date(parsed.dueDateTime)
+    const dueRaw = sub.returnDueDate ? sub.returnDueDate + 'T23:59:59' : parsed.dueDateTime
+    if (!dueRaw) return { due: null, late: false }
+    const due = new Date(dueRaw)
     if (isNaN(due.getTime())) return { due: null, late: false }
     const late = !!sub.submittedAt && new Date(sub.submittedAt) > due
-    return { due: parsed.dueDateTime, late }
+    return { due: dueRaw, late }
   } catch { return { due: null, late: false } }
 }
 

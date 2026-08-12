@@ -58,13 +58,16 @@ function fmtDateTime(iso: string): string {
     ' at ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
 }
 
-/** Due date + late flag from the submission's content JSON (best-effort). */
-function dueInfo(parsed: Record<string, any>, submittedAt: string | null): { due: string | null; late: boolean } {
-  if (!parsed.dueDateTime) return { due: null, late: false }
-  const due = new Date(parsed.dueDateTime)
+/** Due date + late flag from the submission's content JSON (best-effort).
+ *  A return-flow due date (set by Melinda when sending work back) supersedes
+ *  the original deadline — resubmitting by the new date isn't late. */
+function dueInfo(parsed: Record<string, any>, submittedAt: string | null, returnDueDate?: string | null): { due: string | null; late: boolean } {
+  const dueRaw = returnDueDate ? returnDueDate + 'T23:59:59' : parsed.dueDateTime
+  if (!dueRaw) return { due: null, late: false }
+  const due = new Date(dueRaw)
   if (isNaN(due.getTime())) return { due: null, late: false }
   const late = !!submittedAt && new Date(submittedAt) > due
-  return { due: parsed.dueDateTime, late }
+  return { due: dueRaw, late }
 }
 
 function SubmissionImage({ url, alt, style }: { url: string; alt: string; style?: React.CSSProperties }) {
@@ -300,7 +303,7 @@ export default function StudentSubmissions() {
                     </div>
                     <div style={{ fontSize: '13px', color: 'var(--gray-mid)', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                       {(() => {
-                        const { due, late } = dueInfo(parsed, sub.submittedAt)
+                        const { due, late } = dueInfo(parsed, sub.submittedAt, sub.returnDueDate)
                         return (
                           <>
                             {due && <span>Due {fmtDateTime(due)}</span>}
