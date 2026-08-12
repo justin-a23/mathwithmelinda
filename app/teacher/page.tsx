@@ -138,9 +138,11 @@ function VideoBar({ watched, assigned }: { watched: number; assigned: number }) 
 
 /**
  * Submission bar — shows how many of the assigned items have been turned in.
- * Late segment (past-due, not turned in) is drawn in red next to the filled plum.
+ * Late segment (past-due, not turned in) sits next to the filled plum but is
+ * STRIPED, not solid — solid red read as additional progress ("1 of 5" looked
+ * like 2 of 5). Stripes read as a problem region, not fill.
  * Layout (stacked):
- *   [  turned-in (plum)  |  late (red)  |  not yet due (gray)  ]
+ *   [  turned-in (plum)  |  late (striped red)  |  not yet due (gray)  ]
  */
 function SubmissionBar({ submitted, late, assigned }: { submitted: number; late: number; assigned: number }) {
   const [ready, setReady] = useState(false)
@@ -169,10 +171,10 @@ function SubmissionBar({ submitted, late, assigned }: { submitted: number; late:
         background: 'var(--plum)',
         transition: 'width 0.8s cubic-bezier(0.4,0,0.2,1)',
       }} />
-      {/* Late portion (red) */}
+      {/* Late portion (striped red — a warning zone, not filled progress) */}
       <div style={{
         width: ready ? latePct + '%' : '0%',
-        background: '#dc2626',
+        background: 'repeating-linear-gradient(45deg, rgba(220,38,38,0.75) 0 5px, rgba(220,38,38,0.25) 5px 10px)',
         transition: 'width 0.8s cubic-bezier(0.4,0,0.2,1)',
       }} />
     </div>
