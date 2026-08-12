@@ -660,6 +660,39 @@ export default function StudentsPage() {
         }
       }
 
+      // Welcome-back email — ONLY for re-enrolled returning students. The
+      // normal approval path is for self-signups who are in the app waiting,
+      // but a Past Student being brought back has no other way to learn
+      // they're enrolled for the new year.
+      if (approveStudent.status === 'archived') {
+        try {
+          const courseName = courseMap[approveCourseId] || 'your class'
+          const semester = semesters.find(s => s.id === approveSemesterId)
+          const yearLabel = semester?.academicYear?.year || 'the new school year'
+          const firstName = approveStudent.firstName
+          await apiFetch('/api/send-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              to: approveStudent.email,
+              subject: `Welcome back! You're enrolled in ${courseName} for ${yearLabel}`,
+              html: `<div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:32px 24px">
+                <div style="background:#1E1E2E;padding:16px 24px;border-radius:8px;margin-bottom:28px">
+                  <span style="color:white;font-size:18px;font-weight:600">Math with Melinda</span>
+                </div>
+                <h2 style="color:#1E1E2E">Welcome back, ${firstName}! 🎉</h2>
+                <p style="color:#555;font-size:15px;line-height:1.6">You're enrolled in <strong>${courseName}</strong> for <strong>${yearLabel}</strong>. Sign in with the same account you used before — your assignments will appear on your dashboard once the year begins.</p>
+                <a href="https://www.mathwithmelinda.com/login" style="display:inline-block;background:#7B4FA6;color:white;padding:13px 28px;border-radius:8px;font-size:15px;font-weight:600;text-decoration:none;margin:16px 0">Sign In →</a>
+                <p style="color:#888;font-size:13px;line-height:1.6">Forgot your password? Use &ldquo;Forgot password&rdquo; on the sign-in page — your email is ${approveStudent.email}.</p>
+              </div>`,
+              text: `Welcome back, ${firstName}!\n\nYou're enrolled in ${courseName} for ${yearLabel}. Sign in with the same account you used before:\nhttps://www.mathwithmelinda.com/login\n\nForgot your password? Use "Forgot password" on the sign-in page.`,
+            }),
+          })
+        } catch (err) {
+          console.error('Non-fatal: welcome-back email failed', err)
+        }
+      }
+
       setStudents(prev => prev.map(s => s.id === approveStudent.id
         ? { ...s, status: 'active', courseId: approveCourseId, planType: approvePlanType, gradeLevel: approveGradeLevel || s.gradeLevel }
         : s
