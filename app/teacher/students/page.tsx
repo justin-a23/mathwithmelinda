@@ -599,8 +599,14 @@ export default function StudentsPage() {
   async function reinstateStudent(id: string) {
     try {
       const { updateStudentProfile } = await import('../../../src/graphql/mutations')
-      await client.graphql({ query: updateStudentProfile, variables: { input: { id, status: 'active' } } })
-      setStudents(prev => prev.map(s => s.id === id ? { ...s, status: 'active' } : s))
+      // Returning students (last year's archived profiles) may predate the
+      // enrolledAt field. Reactivating without stamping it lets the gradebook's
+      // enrollment date floor reach back into last year's plans. Stamp now when
+      // missing; a mid-year un-remove keeps its original date.
+      const existing = students.find(s => s.id === id)
+      const enrolledAt = existing?.enrolledAt || new Date().toISOString()
+      await client.graphql({ query: updateStudentProfile, variables: { input: { id, status: 'active', enrolledAt } as any } })
+      setStudents(prev => prev.map(s => s.id === id ? { ...s, status: 'active', enrolledAt } : s))
     } catch (err) {
       console.error(err)
     }
