@@ -1,6 +1,6 @@
 'use client'
 
-import { signIn, signOut, fetchAuthSession } from 'aws-amplify/auth'
+import { signIn, signOut, fetchAuthSession, resetPassword, confirmResetPassword } from 'aws-amplify/auth'
 import MwmLogo from '../components/MwmLogo'
 import { generateClient } from 'aws-amplify/api'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -51,6 +51,57 @@ function LoginInner() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+
+  // Forgot-password: 'request' emails a 6-digit code, 'confirm' takes
+  // code + new password. Launch day surfaced that no reset existed at all.
+  const [view, setView] = useState<'signin' | 'reset-request' | 'reset-confirm'>('signin')
+  const [resetCode, setResetCode] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [notice, setNotice] = useState('')
+
+  async function handleResetRequest(e: React.FormEvent) {
+    e.preventDefault()
+    setError('')
+    if (!email.trim()) { setError('Enter your email first.'); return }
+    setSubmitting(true)
+    try {
+      await resetPassword({ username: email.trim().toLowerCase() })
+      setNotice(`We emailed a 6-digit code to ${email.trim().toLowerCase()}. Enter it below with your new password.`)
+      setView('reset-confirm')
+    } catch (err: any) {
+      if (err.name === 'UserNotFoundException') setError('No account found with this email.')
+      else if (err.name === 'LimitExceededException') setError('Too many attempts — wait a few minutes and try again.')
+      else setError(err.message || 'Could not start the reset. Try again.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function handleResetConfirm(e: React.FormEvent) {
+    e.preventDefault()
+    setError('')
+    if (!resetCode.trim() || !newPassword) { setError('Enter the code from your email and a new password.'); return }
+    if (newPassword.length < 8) { setError('Password must be at least 8 characters.'); return }
+    setSubmitting(true)
+    try {
+      await confirmResetPassword({
+        username: email.trim().toLowerCase(),
+        confirmationCode: resetCode.trim(),
+        newPassword,
+      })
+      setPassword('')
+      setResetCode('')
+      setNewPassword('')
+      setNotice('Password updated! Sign in with your new password below.')
+      setView('signin')
+    } catch (err: any) {
+      if (err.name === 'CodeMismatchException') setError('That code doesn’t match — check the email and try again.')
+      else if (err.name === 'ExpiredCodeException') setError('That code expired. Go back and request a new one.')
+      else setError(err.message || 'Could not reset the password. Try again.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   async function handleSignin(e: React.FormEvent) {
     e.preventDefault()
@@ -113,6 +164,91 @@ function LoginInner() {
           </p>
         </div>
 
+        {notice && (
+          <div style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: '8px', padding: '10px 14px', fontSize: '13px', color: '#15803D', marginBottom: '16px' }}>
+            {notice}
+          </div>
+        )}
+
+        {view !== 'signin' && (
+          <form onSubmit={view === 'reset-request' ? handleResetRequest : handleResetConfirm} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div>
+              <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--foreground)', display: 'block', marginBottom: '6px' }}>
+                Email address
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                autoComplete="email"
+                disabled={view === 'reset-confirm'}
+                style={{ ...inputStyle, ...(view === 'reset-confirm' ? { background: 'var(--gray-light)', color: 'var(--gray-dark)' } : {}) }}
+              />
+            </div>
+
+            {view === 'reset-confirm' && (
+              <>
+                <div>
+                  <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--foreground)', display: 'block', marginBottom: '6px' }}>
+                    6-digit code from your email
+                  </label>
+                  <input
+                    value={resetCode}
+                    onChange={e => setResetCode(e.target.value)}
+                    placeholder="123456"
+                    inputMode="numeric"
+                    autoFocus
+                    style={inputStyle}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--foreground)', display: 'block', marginBottom: '6px' }}>
+                    New password
+                  </label>
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={e => setNewPassword(e.target.value)}
+                    placeholder="At least 8 characters"
+                    autoComplete="new-password"
+                    style={inputStyle}
+                  />
+                </div>
+              </>
+            )}
+
+            {error && (
+              <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: '8px', padding: '10px 14px', fontSize: '13px', color: '#B91C1C' }}>
+                {error}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={submitting}
+              style={{ background: submitting ? 'var(--gray-mid)' : '#7B4FA6', color: 'white', padding: '13px', borderRadius: '8px', border: 'none', cursor: submitting ? 'not-allowed' : 'pointer', fontSize: '15px', fontWeight: 600, fontFamily: 'var(--font-body)', marginTop: '4px' }}
+            >
+              {submitting ? 'Working…' : view === 'reset-request' ? 'Email Me a Reset Code' : 'Set New Password'}
+            </button>
+
+            <p style={{ textAlign: 'center', fontSize: '13px', color: 'var(--gray-mid)', margin: 0 }}>
+              {view === 'reset-confirm' && (
+                <>
+                  <button type="button" onClick={() => { setView('reset-request'); setError(''); setNotice('') }} style={{ background: 'none', border: 'none', color: '#7B4FA6', cursor: 'pointer', fontWeight: 600, fontSize: '13px', padding: 0, fontFamily: 'var(--font-body)' }}>
+                    Resend code
+                  </button>
+                  {' · '}
+                </>
+              )}
+              <button type="button" onClick={() => { setView('signin'); setError(''); setNotice('') }} style={{ background: 'none', border: 'none', color: '#7B4FA6', cursor: 'pointer', fontWeight: 600, fontSize: '13px', padding: 0, fontFamily: 'var(--font-body)' }}>
+                Back to sign in
+              </button>
+            </p>
+          </form>
+        )}
+
+        {view === 'signin' && (
         <form onSubmit={handleSignin} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div>
             <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--foreground)', display: 'block', marginBottom: '6px' }}>
@@ -167,12 +303,17 @@ function LoginInner() {
           </button>
 
           <p style={{ textAlign: 'center', fontSize: '13px', color: 'var(--gray-mid)', margin: 0 }}>
+            <button type="button" onClick={() => { setView('reset-request'); setError(''); setNotice('') }} style={{ background: 'none', border: 'none', color: '#7B4FA6', cursor: 'pointer', fontWeight: 600, fontSize: '13px', padding: 0, fontFamily: 'var(--font-body)' }}>
+              Forgot password?
+            </button>
+            {' · '}
             New student or parent?{' '}
             <button type="button" onClick={() => router.push('/signup')} style={{ background: 'none', border: 'none', color: '#7B4FA6', cursor: 'pointer', fontWeight: 600, fontSize: '13px', padding: 0, fontFamily: 'var(--font-body)' }}>
               Create an account
             </button>
           </p>
         </form>
+        )}
       </main>
     </div>
   )
