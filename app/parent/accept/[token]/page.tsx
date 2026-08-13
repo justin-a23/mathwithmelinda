@@ -59,7 +59,7 @@ const createParentProfileMutation = `
 `
 
 type Invite = { id: string; token: string; studentEmail: string; studentName: string; used: boolean | null; parentEmail?: string | null; parentFirstName?: string | null; parentLastName?: string | null }
-type State = 'loading' | 'not-found' | 'already-used' | 'already-linked' | 'auth-fork' | 'confirming' | 'done' | 'error' | 'staff-blocked'
+type State = 'loading' | 'not-found' | 'already-used' | 'already-linked' | 'auth-fork' | 'confirming' | 'done' | 'error' | 'staff-blocked' | 'wrong-account' | 'confirm-as'
 
 export default function AcceptInvitePage() {
   const router = useRouter()
@@ -67,6 +67,14 @@ export default function AcceptInvitePage() {
   const token = params?.token as string
 
   const [invite, setInvite] = useState<Invite | null>(null)
+  const [sessionEmail, setSessionEmail] = useState('')
+  // Held for the explicit confirm step on email-less (link-shared) invites
+  const [pendingUserId, setPendingUserId] = useState<string | null>(null)
+
+  async function signOutAndContinue() {
+    try { const { signOut } = await import('aws-amplify/auth'); await signOut() } catch { /* proceed */ }
+    window.location.reload()
+  }
   const [state, setState] = useState<State>('loading')
 
   useEffect(() => {
@@ -110,7 +118,23 @@ export default function AcceptInvitePage() {
           setState('staff-blocked')
           return
         }
+        setSessionEmail(((session.tokens?.idToken?.payload?.email as string | undefined) || '').toLowerCase())
       } catch { /* group check best-effort; unauthenticated falls through below */ }
+
+      // Identity binding: on shared family computers a lingering session (a
+      // sibling, the other parent, a student) silently claimed invites meant
+      // for someone else. When the invite names its parent, only a session
+      // with THAT email may claim it — anyone else gets a sign-out gate.
+      if (foundInvite?.parentEmail) {
+        try {
+          const session = await fetchAuthSession()
+          const email = ((session.tokens?.idToken?.payload?.email as string | undefined) || '').toLowerCase()
+          if (email && email !== foundInvite.parentEmail.toLowerCase()) {
+            setState('wrong-account')
+            return
+          }
+        } catch { /* fall through */ }
+      }
       try { localStorage.removeItem('mwm:parentToken') } catch { /* ignore */ }
     } catch {
       // Not signed in — show fork screen if we have invite data, else redirect to signup
@@ -143,8 +167,16 @@ export default function AcceptInvitePage() {
       return
     }
 
-    // Invite is valid and not used — auto-confirm immediately
-    await performConfirmLink(userId, foundInvite)
+    // Invite valid and unused. When it carries a parent email, the binding
+    // check above already proved this session IS that parent — claim it.
+    // A link-shared invite with no stored email can't be verified, so ask
+    // instead of assuming: silent claims are how wrong-person links happened.
+    if (foundInvite.parentEmail) {
+      await performConfirmLink(userId, foundInvite)
+    } else {
+      setPendingUserId(userId)
+      setState('confirm-as')
+    }
   }
 
   // Fallback invite load using Cognito token (if API key load failed)
@@ -160,6 +192,20 @@ export default function AcceptInvitePage() {
       const found = items[0]
       setInvite(found)
 
+      // Same identity binding as the primary path — this fallback loader runs
+      // for signed-in users when the API-key load failed, and must not become
+      // the unguarded back door.
+      if (found.parentEmail) {
+        try {
+          const session = await fetchAuthSession()
+          const email = ((session.tokens?.idToken?.payload?.email as string | undefined) || '').toLowerCase()
+          if (email && email !== found.parentEmail.toLowerCase()) {
+            setState('wrong-account')
+            return
+          }
+        } catch { /* fall through */ }
+      }
+
       if (found.used) {
         const outcome = await resolveUsedInvite(userId, found)
         if (outcome === 'relink') { await performConfirmLink(userId, found); return }
@@ -167,7 +213,12 @@ export default function AcceptInvitePage() {
         return
       }
 
-      await performConfirmLink(userId, found)
+      if (found.parentEmail) {
+        await performConfirmLink(userId, found)
+      } else {
+        setPendingUserId(userId)
+        setState('confirm-as')
+      }
     } catch (err) {
       console.error(err)
       setState('error')
@@ -314,6 +365,11 @@ export default function AcceptInvitePage() {
   }
 
   const acceptRedirect = encodeURIComponent(`/parent/accept/${token}`)
+  // Invite email prefilled + locked in signup so the parent can't accidentally
+  // create the account under a different (or a child's) address.
+  const inviteEmailParams = invite?.parentEmail
+    ? `&email=${encodeURIComponent(invite.parentEmail)}&lock=1`
+    : ''
   const navStyle: React.CSSProperties = { background: '#1E1E2E', padding: '0 48px', height: '64px', display: 'flex', alignItems: 'center' }
 
   return (
@@ -395,7 +451,7 @@ export default function AcceptInvitePage() {
                   Create a free parent account to access {invite.studentName}&apos;s grades, assignments, and Melinda&apos;s feedback.
                 </p>
                 <button
-                  onClick={() => router.push(`/signup?redirect=${acceptRedirect}`)}
+                  onClick={() => router.push(`/signup?redirect=${acceptRedirect}${inviteEmailParams}`)}
                   style={{ background: '#7B4FA6', color: 'white', padding: '11px 24px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '14px', fontWeight: 600, width: '100%' }}
                 >
                   Create My Parent Account →
@@ -411,7 +467,7 @@ export default function AcceptInvitePage() {
                   Sign in to connect {invite.studentName} to your existing parent portal.
                 </p>
                 <button
-                  onClick={() => router.push(`/signup?mode=signin&redirect=${acceptRedirect}`)}
+                  onClick={() => router.push(`/signup?mode=signin&redirect=${acceptRedirect}${inviteEmailParams}`)}
                   style={{ background: 'transparent', color: '#0369a1', padding: '11px 24px', borderRadius: '8px', border: '2px solid #93C5FD', cursor: 'pointer', fontSize: '14px', fontWeight: 600, width: '100%' }}
                 >
                   Sign In to My Account →
@@ -436,6 +492,48 @@ export default function AcceptInvitePage() {
               style={{ background: '#7B4FA6', color: 'white', padding: '14px 36px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '15px', fontWeight: 600, width: '100%' }}>
               Go to Parent Portal →
             </button>
+          </>
+        )}
+
+        {state === 'wrong-account' && invite && (
+          <>
+            <div style={{ fontSize: '48px', marginBottom: '16px' }}>👥</div>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: '28px', color: 'var(--foreground)', marginBottom: '12px' }}>Someone else is signed in</div>
+            <p style={{ color: 'var(--gray-mid)', lineHeight: '1.7', marginBottom: '8px' }}>
+              This parent invite for <strong style={{ color: 'var(--foreground)' }}>{invite.studentName}</strong> belongs to{' '}
+              <strong style={{ color: 'var(--foreground)' }}>{invite.parentEmail}</strong>, but this browser is signed in as{' '}
+              <strong style={{ color: 'var(--foreground)' }}>{sessionEmail || 'another account'}</strong>.
+            </p>
+            <p style={{ color: 'var(--gray-mid)', fontSize: '13px', lineHeight: '1.6', marginBottom: '28px' }}>
+              This happens on shared computers. Signing out won&apos;t affect the other person&apos;s account.
+            </p>
+            <button onClick={signOutAndContinue}
+              style={{ background: '#0369a1', color: 'white', padding: '12px 28px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '14px', fontWeight: 600 }}>
+              Sign out &amp; continue as {invite.parentEmail}
+            </button>
+          </>
+        )}
+
+        {state === 'confirm-as' && invite && (
+          <>
+            <div style={{ fontSize: '48px', marginBottom: '16px' }}>🤝</div>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: '28px', color: 'var(--foreground)', marginBottom: '12px' }}>Link {invite.studentName} to this account?</div>
+            <p style={{ color: 'var(--gray-mid)', lineHeight: '1.7', marginBottom: '28px' }}>
+              You&apos;re signed in as <strong style={{ color: 'var(--foreground)' }}>{sessionEmail || 'your account'}</strong>.
+              Accepting will make this the parent account that follows{' '}
+              <strong style={{ color: 'var(--foreground)' }}>{invite.studentName}</strong>&apos;s grades and work.
+            </p>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
+              <button
+                onClick={() => { if (pendingUserId) performConfirmLink(pendingUserId, invite) }}
+                style={{ background: '#0369a1', color: 'white', padding: '12px 28px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '14px', fontWeight: 600 }}>
+                Yes — this is my account
+              </button>
+              <button onClick={signOutAndContinue}
+                style={{ background: 'transparent', color: 'var(--gray-mid)', padding: '12px 28px', borderRadius: '8px', border: '1px solid var(--gray-light)', cursor: 'pointer', fontSize: '14px', fontWeight: 600 }}>
+                No — sign out first
+              </button>
+            </div>
           </>
         )}
 

@@ -10,10 +10,15 @@ function SignupInner() {
   const searchParams = useSearchParams()
   const redirect = searchParams.get('redirect') || '/profile/setup'
   const initialMode = searchParams.get('mode') === 'signin' ? 'signin' : 'signup'
+  // Invite flows pass the invitee's email and lock it: the invite is FOR that
+  // person, and freely-typed emails are how a parent's address ended up as a
+  // student account on a shared family computer.
+  const inviteEmail = (searchParams.get('email') || '').toLowerCase()
+  const emailLocked = searchParams.get('lock') === '1' && !!inviteEmail
 
   const [mode, setMode] = useState<'signup' | 'signin'>(initialMode)
   const [step, setStep] = useState<'form' | 'verify'>('form')
-  const [email, setEmail] = useState('')
+  const [email, setEmail] = useState(inviteEmail)
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [code, setCode] = useState('')
@@ -161,9 +166,15 @@ function SignupInner() {
                   onChange={e => setEmail(e.target.value)}
                   placeholder="you@example.com"
                   autoComplete="email"
-                  autoFocus
-                  style={inputStyle}
+                  autoFocus={!emailLocked}
+                  disabled={emailLocked}
+                  style={{ ...inputStyle, ...(emailLocked ? { background: 'var(--gray-light)', color: 'var(--gray-dark)', cursor: 'not-allowed' } : {}) }}
                 />
+                {emailLocked && (
+                  <p style={{ fontSize: '12px', color: 'var(--gray-mid)', margin: '6px 0 0' }}>
+                    🔒 Your invite is tied to this email. Wrong address? Ask Melinda for a corrected invite.
+                  </p>
+                )}
               </div>
 
               <div>
@@ -245,8 +256,14 @@ function SignupInner() {
                   onChange={e => setEmail(e.target.value)}
                   placeholder="you@example.com"
                   autoComplete="email"
-                  style={inputStyle}
+                  disabled={emailLocked}
+                  style={{ ...inputStyle, ...(emailLocked ? { background: 'var(--gray-light)', color: 'var(--gray-dark)', cursor: 'not-allowed' } : {}) }}
                 />
+                {emailLocked && (
+                  <p style={{ fontSize: '12px', color: 'var(--gray-mid)', margin: '6px 0 0' }}>
+                    🔒 Your invite is tied to this email. Wrong address? Ask Melinda for a corrected invite.
+                  </p>
+                )}
               </div>
 
               <div>

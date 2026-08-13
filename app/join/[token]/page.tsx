@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { generateClient } from 'aws-amplify/api'
 import MwmLogo from '../../components/MwmLogo'
 import { useAuthenticator } from '@aws-amplify/ui-react'
+import { fetchAuthSession, signOut } from 'aws-amplify/auth'
 
 const client = generateClient()
 
@@ -35,11 +36,32 @@ export default function JoinPage() {
 
   const [invite, setInvite] = useState<Invite | null>(null)
   const [state, setState] = useState<'loading' | 'ready' | 'used' | 'not-found' | 'error'>('loading')
+  // Email of whoever is ALREADY signed in on this browser ('' = nobody).
+  // Family computers share sessions: a parent's lingering login once claimed a
+  // student invite and became the student account. The invite is bound to
+  // invite.email — any other session must sign out before continuing.
+  const [sessionEmail, setSessionEmail] = useState('')
 
   useEffect(() => {
     if (!token) return
     loadInvite()
+    ;(async () => {
+      try {
+        const session = await fetchAuthSession()
+        const email = (session.tokens?.idToken?.payload?.email as string | undefined) || ''
+        setSessionEmail(email.toLowerCase())
+      } catch { /* not signed in */ }
+    })()
   }, [token])
+
+  const sessionMismatch = !!sessionEmail && !!invite && sessionEmail !== invite.email.toLowerCase()
+
+  async function signOutAndContinue() {
+    try { await signOut() } catch { /* proceed regardless */ }
+    // Full reload: clears every trace of the previous session before the
+    // invite flow re-evaluates who is (not) signed in.
+    window.location.reload()
+  }
 
   async function loadInvite() {
     try {
@@ -61,12 +83,16 @@ export default function JoinPage() {
   }
 
   function handleGetStarted() {
+    if (!invite) return
     // Store token so profile/setup can read it after signup
     try { localStorage.setItem('mwm:joinToken', token) } catch { /* ignore */ }
-    if (authStatus === 'authenticated') {
+    if (authStatus === 'authenticated' && sessionEmail === invite.email.toLowerCase()) {
+      // The right person is already signed in — straight to setup.
       router.push(`/profile/setup?token=${token}`)
     } else {
-      router.push(`/signup?redirect=${encodeURIComponent(`/profile/setup?token=${token}`)}`)
+      // Nobody (or the wrong person, though the mismatch gate handles that
+      // before this button renders) — signup with the invite's email locked in.
+      router.push(`/signup?email=${encodeURIComponent(invite.email)}&lock=1&redirect=${encodeURIComponent(`/profile/setup?token=${token}`)}`)
     }
   }
 
@@ -114,7 +140,28 @@ export default function JoinPage() {
           </>
         )}
 
-        {state === 'ready' && invite && (
+        {state === 'ready' && invite && sessionMismatch && (
+          <>
+            <div style={{ fontSize: '48px', marginBottom: '16px' }}>👥</div>
+            <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '28px', color: 'var(--foreground)', marginBottom: '12px' }}>
+              Someone else is signed in
+            </h1>
+            <p style={{ color: 'var(--gray-mid)', lineHeight: '1.7', marginBottom: '8px' }}>
+              This invite is for <strong style={{ color: 'var(--foreground)' }}>{invite.firstName} {invite.lastName}</strong> ({invite.email}),
+              but this browser is signed in as <strong style={{ color: 'var(--foreground)' }}>{sessionEmail}</strong>.
+            </p>
+            <p style={{ color: 'var(--gray-mid)', fontSize: '13px', lineHeight: '1.6', marginBottom: '28px' }}>
+              This happens on shared computers. Signing out won&apos;t affect the other person&apos;s account —
+              they just sign back in later.
+            </p>
+            <button onClick={signOutAndContinue}
+              style={{ background: '#7B4FA6', color: 'white', border: 'none', borderRadius: '8px', padding: '14px 36px', fontSize: '15px', fontWeight: 600, cursor: 'pointer', width: '100%' }}>
+              Sign out &amp; continue as {invite.firstName}
+            </button>
+          </>
+        )}
+
+        {state === 'ready' && invite && !sessionMismatch && (
           <>
             <div style={{ width: '72px', height: '72px', background: 'rgba(123,79,166,0.1)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px' }}>
               <span style={{ fontSize: '32px' }}>🎓</span>
@@ -147,7 +194,7 @@ export default function JoinPage() {
             </button>
             <p style={{ fontSize: '12px', color: 'var(--gray-mid)' }}>
               Already have an account?{' '}
-              <button onClick={() => router.push(`/signup?mode=signin&redirect=${encodeURIComponent(`/profile/setup?token=${token}`)}`)} style={{ background: 'none', border: 'none', color: '#7B4FA6', cursor: 'pointer', fontSize: '12px', fontWeight: 600, padding: 0 }}>
+              <button onClick={() => router.push(`/signup?mode=signin&email=${encodeURIComponent(invite.email)}&lock=1&redirect=${encodeURIComponent(`/profile/setup?token=${token}`)}`)} style={{ background: 'none', border: 'none', color: '#7B4FA6', cursor: 'pointer', fontSize: '12px', fontWeight: 600, padding: 0 }}>
                 Sign in instead
               </button>
             </p>
