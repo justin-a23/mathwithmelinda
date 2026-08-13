@@ -9,6 +9,7 @@ import { getCurrentUser } from 'aws-amplify/auth'
 import { useTheme } from '../../ThemeProvider'
 import { apiFetch } from '@/app/lib/apiFetch'
 import { useRoleGuard } from '../../hooks/useRoleGuard'
+import { hardSignOut } from '@/app/lib/hardSignOut'
 
 const client = generateClient()
 
@@ -208,7 +209,7 @@ export default function ParentSyllabusPage() {
             Dashboard
           </button>
           <button
-            onClick={() => { signOut(); router.replace('/login') }}
+            onClick={() => hardSignOut()}
             style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'white', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '14px' }}>
             Sign out
           </button>

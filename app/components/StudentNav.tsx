@@ -7,6 +7,7 @@ import { generateClient } from 'aws-amplify/api'
 import ThemeToggle from './ThemeToggle'
 import { MwmMark } from './MwmLogo'
 import { useResolvedStudent } from '@/app/hooks/useResolvedStudent'
+import { hardSignOut } from '@/app/lib/hardSignOut'
 
 const client = generateClient()
 
@@ -229,7 +230,7 @@ export default function StudentNav({ unreadCount: propUnread }: Props = {}) {
         </button>
 
         <button
-          onClick={() => { signOut(); router.replace('/login') }}
+          onClick={() => hardSignOut()}
           style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.7)', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontFamily: 'var(--font-body)', whiteSpace: 'nowrap' }}
         >
           Sign out

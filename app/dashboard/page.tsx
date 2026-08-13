@@ -8,6 +8,7 @@ import { getCurrentUser } from 'aws-amplify/auth'
 import StudentNav from '../components/StudentNav'
 import { apiFetch } from '@/app/lib/apiFetch'
 import { useRoleGuard } from '@/app/hooks/useRoleGuard'
+import { hardSignOut } from '@/app/lib/hardSignOut'
 const findPlanItemByLessonQuery = /* GraphQL */`
   query FindPlanItemByLesson($filter: ModelWeeklyPlanItemFilterInput) {
     listWeeklyPlanItems(filter: $filter, limit: 1000) {
@@ -329,7 +330,7 @@ export default function Dashboard() {
 
         if (profileItems.length > 0) {
           const p = profileItems[0]
-          if (p.status === 'removed') { signOut(); return }
+          if (p.status === 'removed') { hardSignOut(); return }
           if (p.status === 'pending') { setPendingApproval(true); setLoading(false); return }
           if (p.status === 'declined') { setIsDeclined(true); setDeclinedReason(p.statusReason || null); setLoading(false); return }
           setHasProfile(true)
