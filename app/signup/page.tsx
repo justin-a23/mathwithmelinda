@@ -1,9 +1,9 @@
 'use client'
 
-import { signUp, confirmSignUp, signIn, signOut } from 'aws-amplify/auth'
+import { signUp, confirmSignUp, signIn, signOut, resendSignUpCode } from 'aws-amplify/auth'
 import MwmLogo from '../components/MwmLogo'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useState, Suspense } from 'react'
+import { useState, useEffect, useRef, Suspense } from 'react'
 
 function SignupInner() {
   const router = useRouter()
@@ -16,8 +16,12 @@ function SignupInner() {
   const inviteEmail = (searchParams.get('email') || '').toLowerCase()
   const emailLocked = searchParams.get('lock') === '1' && !!inviteEmail
 
+  // Login hands off unconfirmed accounts as ?mode=verify&email=... — they have
+  // a Cognito user but never entered their code, so sign-in rejects them.
+  const initialVerify = searchParams.get('mode') === 'verify' && !!inviteEmail
+
   const [mode, setMode] = useState<'signup' | 'signin'>(initialMode)
-  const [step, setStep] = useState<'form' | 'verify'>('form')
+  const [step, setStep] = useState<'form' | 'verify'>(initialVerify ? 'verify' : 'form')
   const [email, setEmail] = useState(inviteEmail)
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -26,6 +30,33 @@ function SignupInner() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+
+  async function resendCode(arrivedUnconfirmed = false) {
+    setError('')
+    try {
+      await resendSignUpCode({ username: email.trim().toLowerCase() })
+      setNotice(arrivedUnconfirmed
+        ? 'Your account was started but the email was never verified, which is why signing in failed. We just emailed you a fresh code — enter it below to finish.'
+        : 'A new code is on its way. Give it a minute, and check your spam folder too.')
+    } catch (err: any) {
+      // "User is already confirmed" arrives as InvalidParameterException
+      if (err.name === 'InvalidParameterException' || err.name === 'NotAuthorizedException') {
+        switchToSignin(email.trim().toLowerCase(), 'Your email is already verified. Sign in below to continue.')
+      } else {
+        setError(err.message || 'Could not resend the code. Please try again.')
+      }
+    }
+  }
+
+  // The verify handoff's original code is days old and expired — send a fresh
+  // one immediately so the person isn't asked for a code they don't have.
+  const resentOnArrival = useRef(false)
+  useEffect(() => {
+    if (!initialVerify || resentOnArrival.current) return
+    resentOnArrival.current = true
+    resendCode(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   function switchToSignin(prefillEmail?: string, msg?: string) {
     setMode('signin')
@@ -88,6 +119,9 @@ function SignupInner() {
         setError('Incorrect password. Please try again.')
       } else if (err.name === 'UserNotFoundException') {
         switchToSignup(email.trim().toLowerCase(), 'No account found with this email. Create one below.')
+      } else if (err.name === 'UserNotConfirmedException') {
+        setStep('verify')
+        await resendCode(true)
       } else {
         setError(err.message || 'Something went wrong. Please try again.')
       }
@@ -103,9 +137,15 @@ function SignupInner() {
     setSubmitting(true)
     try {
       await confirmSignUp({ username: email.trim().toLowerCase(), confirmationCode: code.trim() })
-      try { await signOut() } catch { /* no existing session */ }
-      await signIn({ username: email.trim().toLowerCase(), password })
-      router.replace(redirect)
+      if (password) {
+        try { await signOut() } catch { /* no existing session */ }
+        await signIn({ username: email.trim().toLowerCase(), password })
+        router.replace(redirect)
+      } else {
+        // Verify handoff never collected a password, so we can't sign them in
+        switchToSignin(email.trim().toLowerCase(), 'Email verified! Sign in with your password to continue.')
+        setSubmitting(false)
+      }
     } catch (err: any) {
       setError(err.message || 'Invalid code. Please try again.')
       setSubmitting(false)
@@ -219,6 +259,10 @@ function SignupInner() {
                 <button type="button" onClick={() => switchToSignup(email)} style={{ background: 'none', border: 'none', color: '#7B4FA6', cursor: 'pointer', fontWeight: 600, fontSize: '13px', padding: 0 }}>
                   Create an account
                 </button>
+                {' · '}
+                <a href={`/login?redirect=${encodeURIComponent(redirect)}`} style={{ color: '#7B4FA6', fontWeight: 600, fontSize: '13px', textDecoration: 'none' }}>
+                  Forgot password?
+                </a>
               </p>
             </form>
           </>
@@ -343,6 +387,12 @@ function SignupInner() {
               </p>
             </div>
 
+            {notice && (
+              <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: '8px', padding: '12px 14px', fontSize: '13px', color: '#1e40af', marginBottom: '20px', lineHeight: '1.5' }}>
+                {notice}
+              </div>
+            )}
+
             <form onSubmit={handleVerify} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div>
                 <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--foreground)', display: 'block', marginBottom: '6px' }}>
@@ -374,9 +424,13 @@ function SignupInner() {
               </button>
 
               <p style={{ textAlign: 'center', fontSize: '13px', color: 'var(--gray-mid)', margin: 0 }}>
-                Didn&apos;t get it? Check your spam folder or{' '}
-                <button type="button" onClick={() => { setStep('form'); setError(''); setCode('') }} style={{ background: 'none', border: 'none', color: '#7B4FA6', cursor: 'pointer', fontWeight: 600, fontSize: '13px', padding: 0 }}>
-                  try again
+                Didn&apos;t get it? Check your spam folder,{' '}
+                <button type="button" onClick={() => { setCode(''); setNotice(''); resendCode() }} style={{ background: 'none', border: 'none', color: '#7B4FA6', cursor: 'pointer', fontWeight: 600, fontSize: '13px', padding: 0 }}>
+                  resend the code
+                </button>
+                , or{' '}
+                <button type="button" onClick={() => { setStep('form'); setError(''); setNotice(''); setCode('') }} style={{ background: 'none', border: 'none', color: '#7B4FA6', cursor: 'pointer', fontWeight: 600, fontSize: '13px', padding: 0 }}>
+                  start over
                 </button>
               </p>
             </form>
