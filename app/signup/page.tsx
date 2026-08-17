@@ -20,6 +20,16 @@ function SignupInner() {
   // a Cognito user but never entered their code, so sign-in rejects them.
   const initialVerify = searchParams.get('mode') === 'verify' && !!inviteEmail
 
+  // Invite flows arrive with the claim destination in `redirect`; the token in
+  // it lets the server skip code verification (the invite email IS the proof).
+  const inviteToken = (() => {
+    const q = redirect.match(/[?&]token=([^&]+)/)
+    if (q) return decodeURIComponent(q[1])
+    const p = redirect.match(/^\/parent\/accept\/([^/?#]+)/)
+    if (p) return decodeURIComponent(p[1])
+    return null
+  })()
+
   const [mode, setMode] = useState<'signup' | 'signin'>(initialMode)
   const [step, setStep] = useState<'form' | 'verify'>(initialVerify ? 'verify' : 'form')
   const [email, setEmail] = useState(inviteEmail)
@@ -92,6 +102,25 @@ function SignupInner() {
         password,
         options: { userAttributes: { email: email.trim().toLowerCase() } },
       })
+      // Invited signup: the server confirms the account instantly (the invite
+      // email is the ownership proof), so no code step. Any failure falls
+      // through to normal code verification — this path can only remove
+      // friction, never add it.
+      if (inviteToken) {
+        try {
+          const res = await fetch('/api/invite-confirm', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: inviteToken, email: email.trim().toLowerCase() }),
+          })
+          if (res.ok && (await res.json())?.ok) {
+            try { await signOut() } catch { /* no existing session */ }
+            await signIn({ username: email.trim().toLowerCase(), password })
+            router.replace(redirect)
+            return
+          }
+        } catch { /* fall through to code verification */ }
+      }
       setStep('verify')
     } catch (err: any) {
       if (err.name === 'UsernameExistsException') {
