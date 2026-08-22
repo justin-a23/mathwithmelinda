@@ -11,7 +11,7 @@ import TeacherNav from '../../components/TeacherNav'
 import { useRoleGuard } from '../../hooks/useRoleGuard'
 import { apiFetch } from '@/app/lib/apiFetch'
 
-function SubmissionFile({ url, alt, inline }: { url: string; alt: string; inline?: boolean }) {
+function SubmissionFile({ url, alt, inline, onView }: { url: string; alt: string; inline?: boolean; onView?: (url: string) => void }) {
   const [failed, setFailed] = useState(false)
   const lc = url.toLowerCase()
   const isPdf = lc.includes('.pdf') || lc.includes('application%2Fpdf') || lc.includes('content-type=application')
@@ -57,10 +57,11 @@ function SubmissionFile({ url, alt, inline }: { url: string; alt: string; inline
     )
   }
 
-  return (
-    <a href={url} target="_blank" rel="noopener noreferrer" style={{ display: 'block' }}>
-      <img src={url} alt={alt} style={{ width: '100%', minHeight: '150px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--gray-light)', cursor: 'pointer', display: 'block' }} onError={() => setFailed(true)} />
-    </a>
+  const img = <img src={url} alt={alt} style={{ width: '100%', minHeight: '150px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--gray-light)', cursor: 'pointer', display: 'block' }} onError={() => setFailed(true)} />
+  return onView ? (
+    <div onClick={() => onView(url)} role="button" style={{ display: 'block', cursor: 'zoom-in' }}>{img}</div>
+  ) : (
+    <a href={url} target="_blank" rel="noopener noreferrer" style={{ display: 'block' }}>{img}</a>
   )
 }
 
@@ -114,6 +115,7 @@ const getLessonTemplateQuestions = /* GraphQL */`
   query GetLessonTemplate($id: ID!) {
     getLessonTemplate(id: $id) {
       teachingNotes
+      instructions
       questions {
         items {
           id
@@ -277,12 +279,13 @@ function NotesSection({ content }: { content: string | null }) {
   )
 }
 
-function QuestionScorecardSection({ questions, content, worksheetImageUrls, questionResults, onToggle }: {
+function QuestionScorecardSection({ questions, content, worksheetImageUrls, questionResults, onToggle, onViewImage }: {
   questions: Question[]
   content: string | null
   worksheetImageUrls: string[]   // The ONE uploaded show-work sheet (all show-work questions on it)
   questionResults: Record<string, boolean | null>
   onToggle: (id: string, correct: boolean | null) => void
+  onViewImage: (url: string) => void
 }) {
   if (questions.length === 0) return null
   let answers: Record<string, string> = {}
@@ -319,9 +322,9 @@ function QuestionScorecardSection({ questions, content, worksheetImageUrls, ques
           </div>
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
             {worksheetImageUrls.map((url, i) => (
-              <a key={i} href={url} target="_blank" rel="noopener noreferrer">
-                <img src={url} alt={`Worksheet ${i + 1}`} style={{ height: '140px', width: 'auto', borderRadius: '6px', border: '1px solid var(--gray-light)', objectFit: 'cover', cursor: 'zoom-in', display: 'block' }} />
-              </a>
+              <div key={i} onClick={() => onViewImage(url)} role="button" style={{ cursor: 'zoom-in' }}>
+                <img src={url} alt={`Worksheet ${i + 1}`} style={{ height: '140px', width: 'auto', borderRadius: '6px', border: '1px solid var(--gray-light)', objectFit: 'cover', display: 'block' }} />
+              </div>
             ))}
           </div>
         </div>
@@ -478,6 +481,10 @@ function GradingPageInner() {
   const [aiError, setAiError] = useState('')
   const [teachingVoice, setTeachingVoice] = useState('')
   const [lessonTeachingNotes, setLessonTeachingNotes] = useState('')
+  const [assignmentInstructions, setAssignmentInstructions] = useState('')
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
+  const [lightboxRotation, setLightboxRotation] = useState(0)
+  const [draftRestored, setDraftRestored] = useState(false)
   const [questionResults, setQuestionResults] = useState<Record<string, boolean | null>>({})
   const [manualOverrides, setManualOverrides] = useState<Record<string, boolean>>({})
   const [expandedStudents, setExpandedStudents] = useState<Set<string>>(new Set())
@@ -605,6 +612,47 @@ function GradingPageInner() {
     } catch { /* silent */ }
   }
 
+  function openLightbox(url: string) {
+    setLightboxUrl(url)
+    setLightboxRotation(0)
+  }
+
+  useEffect(() => {
+    if (!lightboxUrl) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setLightboxUrl(null)
+      if (e.key === 'r' || e.key === 'R') setLightboxRotation(r => (r + 90) % 360)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [lightboxUrl])
+
+  // ── Grading draft autosave ──────────────────────────────────────────────
+  // Melinda often grades halfway, leaves to check another student, and comes
+  // back — without this, everything typed was gone. Drafts live per-submission
+  // in localStorage, restored on open, cleared on any real save.
+  function gradeDraftKey(submissionId: string) {
+    return `mwm-grade-draft:${submissionId}`
+  }
+
+  function clearGradeDraft(submissionId: string) {
+    try { localStorage.removeItem(gradeDraftKey(submissionId)) } catch { /* storage blocked */ }
+    setDraftRestored(false)
+  }
+
+  useEffect(() => {
+    if (!selectedSubmission || saved) return
+    const dirty = (grade || '') !== (selectedSubmission.grade || '')
+      || (comment || '') !== (selectedSubmission.teacherComment || '')
+      || Object.keys(questionResults).length > 0
+    if (!dirty) return
+    try {
+      localStorage.setItem(gradeDraftKey(selectedSubmission.id), JSON.stringify({
+        grade, comment, questionResults, manualOverrides, savedAt: Date.now(),
+      }))
+    } catch { /* storage blocked/full */ }
+  }, [grade, comment, questionResults, manualOverrides, selectedSubmission, saved])
+
   function computeGradeFromResults(qs: Question[], results: Record<string, boolean | null>): string {
     const gradable = qs.filter(q => q.questionType !== 'section_header')
     if (gradable.length === 0) return ''
@@ -662,6 +710,7 @@ function GradingPageInner() {
           lessonTitle,
           teachingVoice,
           teachingNotes: lessonTeachingNotes,
+          instructions: assignmentInstructions,
           // On re-grade, pass Melinda's manual overrides so AI respects them
           lockedResults: isRegrade ? manualOverrides : {},
           recentComments,
@@ -715,9 +764,31 @@ function GradingPageInner() {
     setQuestions([])
     setShowWorkImageUrls({})
     setLessonTeachingNotes('')
+    setAssignmentInstructions('')
     setAiError('')
     setQuestionResults({})
     setManualOverrides({})
+    setDraftRestored(false)
+
+    // Restore any unsaved grading draft (Melinda left mid-grade and came back)
+    try {
+      const raw = localStorage.getItem(gradeDraftKey(submission.id))
+      if (raw) {
+        const draft = JSON.parse(raw)
+        const differs = (draft.grade || '') !== (submission.grade || '')
+          || (draft.comment || '') !== (submission.teacherComment || '')
+          || Object.keys(draft.questionResults || {}).length > 0
+        if (differs) {
+          if (draft.grade) setGrade(draft.grade)
+          if (draft.comment) setComment(draft.comment)
+          if (draft.questionResults) setQuestionResults(draft.questionResults)
+          if (draft.manualOverrides) setManualOverrides(draft.manualOverrides)
+          setDraftRestored(true)
+        } else {
+          localStorage.removeItem(gradeDraftKey(submission.id))
+        }
+      }
+    } catch { /* corrupt draft — ignore */ }
 
     if (!submission.content) return
     try {
@@ -738,7 +809,22 @@ function GradingPageInner() {
           const items: Question[] = tmpl?.questions?.items || []
           setQuestions(items.sort((a, b) => a.order - b.order))
           setLessonTeachingNotes(tmpl?.teachingNotes || '')
+          if (tmpl?.instructions) setAssignmentInstructions(tmpl.instructions)
         } catch { /* no questions */ }
+      }
+
+      // Fall back to the scheduled lesson's instructions — same precedence the
+      // student page uses (template.instructions || lesson.instructions), so
+      // the AI grades against exactly what the student was told to do.
+      if (parsed.lessonId) {
+        try {
+          const result = await (client.graphql({
+            query: `query GetLessonInstructions($id: ID!) { getLesson(id: $id) { instructions } }`,
+            variables: { id: parsed.lessonId }
+          }) as any)
+          const lessonInstr = result.data?.getLesson?.instructions
+          if (lessonInstr) setAssignmentInstructions(prev => prev || lessonInstr)
+        } catch { /* no lesson instructions */ }
       }
 
       if (parsed.showWorkFiles) {
@@ -782,6 +868,7 @@ function GradingPageInner() {
         query: updateSubmission,
         variables: { input: { id: selectedSubmission.id, grade, teacherComment: comment, content: updatedContent } }
       })
+      clearGradeDraft(selectedSubmission.id)
       setSaved(true)
       setTimeout(() => {
         setSelectedSubmission(null)
@@ -864,6 +951,7 @@ function GradingPageInner() {
       } as any
       await (client.graphql({ query: updateSubmission, variables: { input } }) as any)
       const update = { status: 'returned', returnReason: returnReason.trim(), returnDueDate: returnDueDate || null, grade: null }
+      clearGradeDraft(selectedSubmission.id)
       setSubmissions(prev => prev.map(s => s.id === selectedSubmission.id ? { ...s, ...update } : s))
       setSelectedSubmission(prev => prev ? { ...prev, ...update } : prev)
       setReturned(true)
@@ -938,6 +1026,9 @@ function GradingPageInner() {
       }) as any)
       setGrade('')
       setComment('')
+      setQuestionResults({})
+      setManualOverrides({})
+      clearGradeDraft(selectedSubmission.id)
       setSubmissions(prev => prev.map(s => s.id === selectedSubmission.id ? { ...s, grade: null, teacherComment: null } : s))
       setSelectedSubmission(prev => prev ? { ...prev, grade: null, teacherComment: null } : prev)
       setGradeCleared(true)
@@ -1456,6 +1547,7 @@ function GradingPageInner() {
                 worksheetImageUrls={imageUrls}
                 questionResults={questionResults}
                 onToggle={onToggleQuestion}
+                onViewImage={openLightbox}
               />
 
               {/* Show uploaded files for older submissions that have no questions (backwards compat) */}
@@ -1467,7 +1559,7 @@ function GradingPageInner() {
                     const isPdf = lc.includes('.pdf') || lc.includes('application%2Fpdf')
                     return isPdf
                       ? <SubmissionFile key={i} url={url} alt={`Submission ${i + 1}`} inline />
-                      : <div key={i} style={{ marginBottom: '12px' }}><SubmissionFile url={url} alt={`Submission ${i + 1}`} /></div>
+                      : <div key={i} style={{ marginBottom: '12px' }}><SubmissionFile url={url} alt={`Submission ${i + 1}`} onView={openLightbox} /></div>
                   })}
                 </div>
               )}
@@ -1567,6 +1659,7 @@ function GradingPageInner() {
                           query: updateSubmission,
                           variables: { input: { id: selectedSubmission.id, grade: '100', teacherComment: comment } }
                         }) as any)
+                        clearGradeDraft(selectedSubmission.id)
                         setSubmissions(prev => prev.map(s => s.id === selectedSubmission.id ? { ...s, grade: '100', teacherComment: comment } : s))
                         setSelectedSubmission(prev => prev ? { ...prev, grade: '100' } : prev)
                         setSaved(true)
@@ -1584,7 +1677,14 @@ function GradingPageInner() {
                   </button>
                 </div>
                 <div>
-                  <label style={{ fontSize: '12px', fontWeight: 500, color: 'var(--gray-dark)', display: 'block', marginBottom: '6px' }}>Comments for student</label>
+                  <label style={{ fontSize: '12px', fontWeight: 500, color: 'var(--gray-dark)', display: 'block', marginBottom: '6px' }}>
+                    Comments for student
+                    {draftRestored && (
+                      <span style={{ marginLeft: '8px', fontSize: '11px', fontWeight: 600, color: '#d97706', background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: '4px', padding: '1px 6px' }}>
+                        Unsaved draft restored
+                      </span>
+                    )}
+                  </label>
                   <textarea value={comment} onChange={e => setComment(e.target.value)} placeholder="Great work! On problem 3, remember to..." rows={12}
                     style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--gray-light)', borderRadius: '6px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)', resize: 'vertical', lineHeight: '1.5' }} />
                 </div>
@@ -1676,6 +1776,52 @@ function GradingPageInner() {
           </div>
         )}
       </div>
+
+      {/* ── Photo lightbox with rotation (sideways/upside-down uploads) ── */}
+      {lightboxUrl && (
+        <div
+          onClick={() => setLightboxUrl(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.88)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <img
+            src={lightboxUrl}
+            alt="Submission photo"
+            onClick={e => e.stopPropagation()}
+            style={{
+              transform: `rotate(${lightboxRotation}deg)`,
+              transition: 'transform 0.2s ease',
+              // A sideways image fits the viewport's other axis
+              maxWidth: lightboxRotation % 180 === 90 ? '88vh' : '92vw',
+              maxHeight: lightboxRotation % 180 === 90 ? '92vw' : '86vh',
+              borderRadius: '6px',
+              boxShadow: '0 8px 40px rgba(0,0,0,0.5)',
+            }}
+          />
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{ position: 'fixed', top: '16px', right: '16px', display: 'flex', gap: '8px', zIndex: 1001 }}>
+            <button
+              onClick={() => setLightboxRotation(r => (r + 90) % 360)}
+              title="Rotate 90° (R)"
+              style={{ background: 'rgba(255,255,255,0.14)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '8px', padding: '10px 16px', cursor: 'pointer', fontSize: '14px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '7px' }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+              Rotate
+            </button>
+            <a
+              href={lightboxUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ background: 'rgba(255,255,255,0.14)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '8px', padding: '10px 16px', cursor: 'pointer', fontSize: '14px', fontWeight: 600, textDecoration: 'none', display: 'flex', alignItems: 'center' }}>
+              Open ↗
+            </a>
+            <button
+              onClick={() => setLightboxUrl(null)}
+              title="Close (Esc)"
+              style={{ background: 'rgba(255,255,255,0.14)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '8px', padding: '10px 16px', cursor: 'pointer', fontSize: '14px', fontWeight: 600 }}>
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

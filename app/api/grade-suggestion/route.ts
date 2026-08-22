@@ -63,6 +63,7 @@ export async function POST(req: NextRequest) {
       teachingNotes,  // Abeka/curriculum method notes from the lesson template
       lockedResults,  // { [questionId]: boolean } — teacher's manual overrides to preserve
       recentComments, // string[] — this student's most recent graded comments, for variety
+      instructions,   // the assignment instructions the student saw (e.g. "Do problems 1, 3, 5 on page 40")
     } = await req.json()
 
     const locked: Record<string, boolean> = lockedResults || {}
@@ -226,6 +227,36 @@ GRADING RULES
 5. Never give 100% unless every question is clearly correct.${lockedInstruction}
 
 ═══════════════════════════════════════════════════════════════
+GRADE ONLY WHAT WAS ASSIGNED
+═══════════════════════════════════════════════════════════════
+Students often photograph an ENTIRE textbook or workbook page. That page may
+show many problems that were NOT assigned — the assignment instructions (and
+the question list above, when present) define exactly which problems count.
+- A problem visible in the photo but not assigned is NOT missing work. Do not
+  mark it wrong, do not lower the grade for it, and do not mention it.
+- NEVER solve, explain, or give the answer to an unassigned problem in the
+  comment — unassigned problems may be a future assignment, and handing the
+  student those answers ruins it. Teach only the assigned problems.
+- If there is no question list, the ASSIGNMENT INSTRUCTIONS in the user message
+  are the complete definition of what to grade: find exactly those problems in
+  the photos and grade only them.
+
+═══════════════════════════════════════════════════════════════
+READING HANDWRITTEN WORK
+═══════════════════════════════════════════════════════════════
+These are children's handwritten math pages. Digits are easy to misread —
+4 vs 9, 1 vs 7, 6 vs 0, 5 vs 8, 2 vs Z. Before marking any answer wrong:
+1. Re-read the digit in context: does the student's own work on that problem
+   (their intermediate steps, carrying, borrowing) tell you which digit they
+   meant? A "9" at the end of work that computes to 4 is almost always a 4.
+2. Check against the [correct:] value when one is given — if the handwriting
+   could plausibly read as the correct answer AND the visible work supports
+   it, give the student the benefit of the doubt and mark it correct.
+3. Only mark wrong when the math itself is wrong, not when the penmanship is
+   merely hard to read. If a digit is truly illegible and the work gives no
+   clue, say so briefly in the comment instead of guessing against the student.
+
+═══════════════════════════════════════════════════════════════
 OUTPUT FORMAT
 ═══════════════════════════════════════════════════════════════
 Return ONLY a JSON object — no markdown fences, no preamble:
@@ -244,6 +275,9 @@ Only include questions you are grading in questionResults (not teacher-confirmed
       `Student: ${studentName || 'Unknown'}`,
       `Lesson: ${lessonTitle || 'Unknown'}`,
     ]
+    if (typeof instructions === 'string' && instructions.trim()) {
+      userParts.push(`ASSIGNMENT INSTRUCTIONS (what the student was told to do — grade ONLY this):\n${instructions.trim()}`)
+    }
     if (lockedSummary) userParts.push(lockedSummary)
     if (digitalSummary) userParts.push(digitalSummary)
     if (showWorkSummary) userParts.push(showWorkSummary)
@@ -276,14 +310,18 @@ Only include questions you are grading in questionResults (not teacher-confirmed
       { type: 'text' as const, text: userPrompt },
     ]
 
+    // Opus 5: adaptive thinking is on by default, which is exactly what careful
+    // reading of handwritten pages needs. Thinking tokens count against
+    // max_tokens, hence the headroom above the ~1-2K JSON answer.
     const message = await anthropic.messages.create({
-      model: 'claude-opus-4-5',
-      max_tokens: 3000,
+      model: 'claude-opus-5',
+      max_tokens: 8000,
       system: systemPrompt,
       messages: [{ role: 'user', content }],
     })
 
-    const text = (message.content[0] as { type: string; text: string }).text
+    // With thinking enabled, content[0] is a thinking block — find the text block.
+    const text = message.content.find((b): b is Anthropic.TextBlock => b.type === 'text')?.text ?? ''
     // Strip markdown code fences if present
     let cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
     // Extract JSON object even if there's preamble text (e.g. "Looking at the work... {}")
