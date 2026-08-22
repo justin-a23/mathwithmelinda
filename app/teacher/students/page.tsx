@@ -361,6 +361,16 @@ export default function StudentsPage() {
   const [approveSemesterId, setApproveSemesterId] = useState('')
   const [approving, setApproving] = useState(false)
 
+  // Cognito account check for re-enrolling archived students. A returning
+  // student's login can be gone (deleted before the 7/29 profile re-import —
+  // that's how Meredith Jones got "no account found" after re-enrolling on
+  // 2026-08-22). /api/reenroll-account verifies the account before approval
+  // and can rebuild it, so the enrollment never gets stamped with a dead sub.
+  const [accountCheck, setAccountCheck] = useState<null | 'checking' | 'ok' | 'missing' | 'mismatch' | 'error'>(null)
+  const [accountFixing, setAccountFixing] = useState(false)
+  const [accountFixError, setAccountFixError] = useState<string | null>(null)
+  const [accountFixed, setAccountFixed] = useState<null | 'recreated' | 'relinked'>(null)
+
   // Student invites (sent, pending/used)
 
   // Per-student parent invite modal
@@ -426,6 +436,67 @@ export default function StudentsPage() {
     // Clear the param so a refresh doesn't reopen the modal
     window.history.replaceState({}, '', '/teacher/students')
   }, [loading, students])
+
+  /**
+   * When the modal opens on an archived (returning) student, verify their
+   * Cognito account actually exists before the teacher can approve. Active
+   * students skip this — they signed in five minutes ago to request approval.
+   */
+  const approveStudentId = approveStudent?.id ?? null
+  const approveStudentIsArchived = approveStudent?.status === 'archived'
+  useEffect(() => {
+    setAccountFixed(null)
+    setAccountFixError(null)
+    if (!approveStudentId || !approveStudentIsArchived) {
+      setAccountCheck(null)
+      return
+    }
+    let cancelled = false
+    setAccountCheck('checking')
+    ;(async () => {
+      try {
+        const res = await apiFetch('/api/reenroll-account', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'check', profileId: approveStudentId }),
+        })
+        const json = await res.json()
+        if (!res.ok) throw new Error(json.error || 'check failed')
+        if (cancelled) return
+        setAccountCheck(json.exists ? (json.subMatches ? 'ok' : 'mismatch') : 'missing')
+      } catch (err) {
+        console.error('Re-enroll account check failed:', err)
+        if (!cancelled) setAccountCheck('error')
+      }
+    })()
+    return () => { cancelled = true }
+  }, [approveStudentId, approveStudentIsArchived])
+
+  async function repairReenrollAccount() {
+    if (!approveStudent) return
+    setAccountFixing(true)
+    setAccountFixError(null)
+    try {
+      const res = await apiFetch('/api/reenroll-account', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'repair', profileId: approveStudent.id }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Could not repair the account')
+      // The approval below stamps approveStudent.userId into the Enrollment it
+      // creates — both copies must carry the new sub before Approve is clicked.
+      setStudents(prev => prev.map(s => s.id === approveStudent.id ? { ...s, userId: json.userId } : s))
+      setApproveStudent(prev => prev ? { ...prev, userId: json.userId } : prev)
+      setAccountFixed(json.mode)
+      setAccountCheck('ok')
+    } catch (err: any) {
+      console.error('Re-enroll account repair failed:', err)
+      setAccountFixError(err.message || 'Something went wrong')
+    } finally {
+      setAccountFixing(false)
+    }
+  }
 
   async function fetchStudents() {
     const result = await client.graphql({ query: listStudentProfilesQuery }) as any
@@ -670,6 +741,14 @@ export default function StudentsPage() {
           const semester = semesters.find(s => s.id === approveSemesterId)
           const yearLabel = semester?.academicYear?.year || 'the new school year'
           const firstName = approveStudent.firstName
+          // A recreated account has a random password nobody knows — Forgot
+          // Password is the only way in, so don't claim their old login works.
+          const signInHtml = accountFixed === 'recreated'
+            ? `Your account has been set up fresh this year, so start by choosing <strong>&ldquo;Forgot password&rdquo;</strong> on the sign-in page to set a new password for ${approveStudent.email}. Your assignments will appear on your dashboard once the year begins.`
+            : `Sign in with the same account you used before — your assignments will appear on your dashboard once the year begins.`
+          const signInText = accountFixed === 'recreated'
+            ? `Your account has been set up fresh this year — use "Forgot password" on the sign-in page to set a new password for ${approveStudent.email}:`
+            : `Sign in with the same account you used before:`
           await apiFetch('/api/send-email', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -681,11 +760,11 @@ export default function StudentsPage() {
                   <span style="color:white;font-size:18px;font-weight:600">Math with Melinda</span>
                 </div>
                 <h2 style="color:#1E1E2E">Welcome back, ${firstName}! 🎉</h2>
-                <p style="color:#555;font-size:15px;line-height:1.6">You're enrolled in <strong>${courseName}</strong> for <strong>${yearLabel}</strong>. Sign in with the same account you used before — your assignments will appear on your dashboard once the year begins.</p>
+                <p style="color:#555;font-size:15px;line-height:1.6">You're enrolled in <strong>${courseName}</strong> for <strong>${yearLabel}</strong>. ${signInHtml}</p>
                 <a href="https://www.mathwithmelinda.com/login" style="display:inline-block;background:#7B4FA6;color:white;padding:13px 28px;border-radius:8px;font-size:15px;font-weight:600;text-decoration:none;margin:16px 0">Sign In →</a>
                 <p style="color:#888;font-size:13px;line-height:1.6">Forgot your password? Use &ldquo;Forgot password&rdquo; on the sign-in page — your email is ${approveStudent.email}.</p>
               </div>`,
-              text: `Welcome back, ${firstName}!\n\nYou're enrolled in ${courseName} for ${yearLabel}. Sign in with the same account you used before:\nhttps://www.mathwithmelinda.com/login\n\nForgot your password? Use "Forgot password" on the sign-in page.`,
+              text: `Welcome back, ${firstName}!\n\nYou're enrolled in ${courseName} for ${yearLabel}. ${signInText}\nhttps://www.mathwithmelinda.com/login\n\nForgot your password? Use "Forgot password" on the sign-in page.`,
             }),
           })
         } catch (err) {
@@ -1636,6 +1715,52 @@ export default function StudentsPage() {
               <p style={{ fontSize: '14px', color: 'var(--gray-mid)', marginBottom: '24px' }}>
                 Set up <strong>{approveStudent.firstName} {approveStudent.lastName}</strong>&apos;s course and plan before granting access.
               </p>
+              {/* Sign-in account status — archived students only. Approval is
+                  blocked until a missing/mislinked account is repaired, so an
+                  enrollment can never be stamped with a dead sub. */}
+              {approveStudent.status === 'archived' && accountCheck && accountCheck !== 'ok' && (
+                <div style={{
+                  marginBottom: '20px', padding: '12px 14px', borderRadius: '10px', fontSize: '13px', lineHeight: 1.5,
+                  ...(accountCheck === 'missing' || accountCheck === 'mismatch'
+                    ? { background: 'rgba(242,201,76,0.12)', border: '1px solid #F2C94C', color: 'var(--foreground)' }
+                    : { background: 'var(--gray-light)', border: '1px solid var(--gray-light)', color: 'var(--gray-mid)' }),
+                }}>
+                  {accountCheck === 'checking' && 'Checking sign-in account…'}
+                  {accountCheck === 'error' && 'Couldn’t verify the sign-in account. You can still approve, but if the student can’t sign in afterwards, reopen this re-enroll to repair it.'}
+                  {(accountCheck === 'missing' || accountCheck === 'mismatch') && (
+                    <>
+                      <div style={{ fontWeight: 600, marginBottom: '4px' }}>
+                        {accountCheck === 'missing'
+                          ? 'No sign-in account found'
+                          : 'Profile linked to the wrong sign-in account'}
+                      </div>
+                      <div style={{ marginBottom: '10px' }}>
+                        {accountCheck === 'missing'
+                          ? <>There&apos;s no login for <strong>{approveStudent.email}</strong> — it was likely deleted after last year. Recreate it before approving; the student will set a new password with &ldquo;Forgot password&rdquo; on the sign-in page.</>
+                          : <>An account exists for <strong>{approveStudent.email}</strong> but this profile points at a different login. Fix the link before approving so their work lands on the right account.</>}
+                      </div>
+                      <button
+                        onClick={repairReenrollAccount}
+                        disabled={accountFixing}
+                        style={{ background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '8px', padding: '8px 16px', fontSize: '13px', fontWeight: 600, cursor: accountFixing ? 'wait' : 'pointer', fontFamily: 'var(--font-body)' }}>
+                        {accountFixing
+                          ? (accountCheck === 'missing' ? 'Recreating…' : 'Fixing…')
+                          : (accountCheck === 'missing' ? 'Recreate account' : 'Fix account link')}
+                      </button>
+                      {accountFixError && (
+                        <div style={{ color: '#c0392b', marginTop: '8px' }}>{accountFixError}</div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+              {approveStudent.status === 'archived' && accountFixed && (
+                <div style={{ marginBottom: '20px', padding: '12px 14px', borderRadius: '10px', fontSize: '13px', lineHeight: 1.5, background: 'rgba(22,163,74,0.10)', border: '1px solid #86efac', color: 'var(--foreground)' }}>
+                  {accountFixed === 'recreated'
+                    ? <>Account recreated for <strong>{approveStudent.email}</strong>. The welcome email will tell them to use &ldquo;Forgot password&rdquo; to set a new password.</>
+                    : <>Account link fixed — this profile now points at the existing login for <strong>{approveStudent.email}</strong>.</>}
+                </div>
+              )}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 <div>
                   <label style={{ fontSize: '13px', fontWeight: 500, color: 'var(--foreground)', display: 'block', marginBottom: '6px' }}>Course <span style={{ color: '#c0392b' }}>*</span></label>
@@ -1708,12 +1833,26 @@ export default function StudentsPage() {
                   style={{ flex: 1, padding: '11px', borderRadius: '8px', border: '1px solid var(--gray-light)', background: 'transparent', color: 'var(--gray-mid)', fontSize: '14px', cursor: 'pointer', fontFamily: 'var(--font-body)' }}>
                   Cancel
                 </button>
-                <button
-                  onClick={approveStudentFn}
-                  disabled={approving || !approveCourseId || !approvePlanType}
-                  style={{ flex: 2, padding: '11px', borderRadius: '8px', border: 'none', background: approveCourseId && approvePlanType ? 'var(--plum)' : 'var(--gray-light)', color: approveCourseId && approvePlanType ? 'white' : 'var(--gray-mid)', fontSize: '14px', fontWeight: 600, cursor: approveCourseId && approvePlanType ? 'pointer' : 'not-allowed', fontFamily: 'var(--font-body)' }}>
-                  {approving ? 'Approving…' : 'Approve & Grant Access'}
-                </button>
+                {(() => {
+                  // Archived students can't be approved onto a dead or wrong
+                  // sub — the account check must come back clean (or fail
+                  // open on 'error': a Cognito hiccup shouldn't hard-block
+                  // Melinda, the banner above explains the risk).
+                  const accountBlocked = approveStudent.status === 'archived' &&
+                    (accountCheck === 'checking' || accountCheck === 'missing' || accountCheck === 'mismatch')
+                  const ready = !!approveCourseId && !!approvePlanType && !accountBlocked
+                  return (
+                    <button
+                      onClick={approveStudentFn}
+                      disabled={approving || !ready}
+                      style={{ flex: 2, padding: '11px', borderRadius: '8px', border: 'none', background: ready ? 'var(--plum)' : 'var(--gray-light)', color: ready ? 'white' : 'var(--gray-mid)', fontSize: '14px', fontWeight: 600, cursor: ready ? 'pointer' : 'not-allowed', fontFamily: 'var(--font-body)' }}>
+                      {approving ? 'Approving…'
+                        : accountCheck === 'checking' && approveStudent.status === 'archived' ? 'Checking account…'
+                        : accountBlocked ? 'Repair account first'
+                        : 'Approve & Grant Access'}
+                    </button>
+                  )
+                })()}
               </div>
             </div>
           </div>
