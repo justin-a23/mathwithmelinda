@@ -41,6 +41,8 @@ import TeacherNav from '../../../components/TeacherNav'
 import { useRoleGuard } from '../../../hooks/useRoleGuard'
 import MathToolbar from '../../../components/MathToolbar'
 import MathRenderer from '../../../components/MathRenderer'
+import DiagramRenderer from '../../../components/DiagramRenderer'
+import { renderToStaticMarkup } from 'react-dom/server'
 
 const client = generateClient()
 
@@ -99,7 +101,30 @@ type AssignmentQuestion = {
   choices: string | null
   correctAnswer: string | null
   diagramKey: string | null
+  diagramSpec: string | null
   lessonTemplateAssignmentQuestionsId: string | null
+}
+
+/**
+ * Render JSON-spec diagrams (coord-plane, number-line, …) to SVG markup strings
+ * for the generated preview/print popups, which are standalone HTML documents
+ * and can't mount React components. One renderToStaticMarkup call for the whole
+ * batch so the useId-based clipPath ids stay unique within the popup document.
+ */
+function renderDiagramSpecSvgs(qs: { id: string; diagramSpec: string | null }[]): Record<string, string> {
+  const withSpecs = qs.filter(q => q.diagramSpec)
+  if (withSpecs.length === 0) return {}
+  const markup = renderToStaticMarkup(
+    <>{withSpecs.map(q => <div key={q.id} data-qid={q.id}><DiagramRenderer spec={q.diagramSpec!} /></div>)}</>
+  )
+  const host = document.createElement('div')
+  host.innerHTML = markup
+  const out: Record<string, string> = {}
+  host.querySelectorAll('[data-qid]').forEach(el => {
+    const id = el.getAttribute('data-qid')
+    if (id && el.innerHTML) out[id] = el.innerHTML
+  })
+  return out
 }
 
 const QUESTION_TYPE_LABELS: Record<string, string> = {
@@ -566,6 +591,7 @@ export default function LessonLibraryPage() {
         choices: created.choices ?? null,
         correctAnswer: created.correctAnswer ?? null,
         diagramKey: created.diagramKey ?? null,
+        diagramSpec: created.diagramSpec ?? null,
         lessonTemplateAssignmentQuestionsId: lessonId
       }
       setQuestions(prev => [...prev, newQ])
@@ -620,6 +646,7 @@ export default function LessonLibraryPage() {
         choices: null,
         correctAnswer: null,
         diagramKey: null,
+        diagramSpec: null,
         lessonTemplateAssignmentQuestionsId: lessonId
       }
       setQuestions(prev => [...prev, newQ])
@@ -894,6 +921,10 @@ export default function LessonLibraryPage() {
     }
     displayQuestions.sort((a, b) => (sortKeys.get(a.id) ?? 0) - (sortKeys.get(b.id) ?? 0))
 
+    // JSON-spec diagrams (e.g. a blank grid for a graphing problem) render as
+    // inline SVG so they print with the worksheet
+    const specSvgs = renderDiagramSpecSvgs(displayQuestions)
+
     const questionsHTML = displayQuestions.map(q => {
       if (q.questionType === 'section_header') {
         return `<div class="section-header">${renderMath(q.questionText || 'Section Header')}</div>`
@@ -904,7 +935,9 @@ export default function LessonLibraryPage() {
       const diagramSrc = diagramDataUrls[q.id]
       const diagramHTML = diagramSrc
         ? `<div class="diagram"><img src="${diagramSrc}" class="diagram-img" /></div>`
-        : ''
+        : specSvgs[q.id]
+          ? `<div class="diagram diagram-spec">${specSvgs[q.id]}</div>`
+          : ''
       return `<div class="work-item">
         <div class="work-label"><span class="qnum">${qNumLabel}</span> ${qBody}</div>
         ${diagramHTML}
@@ -912,7 +945,7 @@ export default function LessonLibraryPage() {
       </div>`
     }).join('')
 
-    const hasDiagrams = Object.keys(diagramDataUrls).length > 0
+    const hasDiagrams = Object.keys(diagramDataUrls).length > 0 || Object.keys(specSvgs).length > 0
     const printDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
 
     const html = `<!DOCTYPE html><html><head>
@@ -931,6 +964,7 @@ export default function LessonLibraryPage() {
         .header .field{flex:1;font-size:13px;color:#333;padding-bottom:3px;border-bottom:1px solid #888}
         .diagram{margin:8px 0 12px;max-width:320px}
         .diagram-img{width:100%;border:1px solid #ccc;border-radius:4px;display:block}
+        .diagram-spec svg{max-width:100%;height:auto;display:block;background:#fff;border:1px solid #ccc;border-radius:4px}
         .work-item{margin-bottom:18px;page-break-inside:avoid}
         /* Normal inline flow, NOT flex: the body is raw text nodes mixed with
            KaTeX spans, and flex promotes each fragment to its own column —
@@ -990,6 +1024,10 @@ export default function LessonLibraryPage() {
       }
     }
 
+    // JSON-spec diagrams (coord-plane etc.) — rendered to inline SVG, exactly
+    // what the student page shows through DiagramRenderer
+    const specSvgs = renderDiagramSpecSvgs(allQuestions)
+
     const { default: katex } = await import('katex')
 
     function renderMath(text: string): string {
@@ -1031,7 +1069,9 @@ export default function LessonLibraryPage() {
       const diagramSrc = diagramSrcUrls[q.id]
       const diagramHTML = diagramSrc
         ? `<div class="diagram"><img src="${diagramSrc}" /></div>`
-        : ''
+        : specSvgs[q.id]
+          ? `<div class="diagram diagram-spec">${specSvgs[q.id]}</div>`
+          : ''
 
       let answerHTML = ''
       if (q.questionType === 'number' || q.questionType === 'short_text') {
@@ -1074,6 +1114,7 @@ export default function LessonLibraryPage() {
         .q-body{font-size:15px;line-height:1.6;flex:1}
         .diagram{margin-bottom:14px;max-width:360px}
         .diagram img{width:100%;border-radius:8px;border:1px solid #e5e5e5;display:block}
+        .diagram-spec svg{max-width:100%;height:auto;display:block;background:#fff;border:1px solid #e5e5e5;border-radius:8px}
         .answer-input input,.answer-input textarea{width:100%;padding:10px 12px;border:1px solid #e5e5e5;border-radius:6px;font-size:15px;font-family:'DM Sans',sans-serif;background:#fff;color:#999}
         .answer-input textarea{resize:vertical}
         .choices{display:flex;flex-direction:column;gap:8px}
@@ -1944,6 +1985,11 @@ export default function LessonLibraryPage() {
                                                   {diagramUrls[q.id] && (
                                                     <div style={{ marginTop: '6px', marginBottom: '8px', maxWidth: '240px' }}>
                                                       <img src={diagramUrls[q.id]} alt="Diagram" style={{ width: '100%', borderRadius: '6px', border: '1px solid var(--gray-light)' }} />
+                                                    </div>
+                                                  )}
+                                                  {!diagramUrls[q.id] && q.diagramSpec && (
+                                                    <div style={{ marginTop: '6px', marginBottom: '8px', maxWidth: '240px', background: 'white', borderRadius: '6px', border: '1px solid var(--gray-light)', padding: '4px' }}>
+                                                      <DiagramRenderer spec={q.diagramSpec} />
                                                     </div>
                                                   )}
                                                   <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px' }}>
