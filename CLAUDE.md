@@ -43,6 +43,7 @@ The project brief's "What's Left to Build" list is partially outdated. Here's th
 - Local path: `/Users/justinall/mathwithmelinda`
 - GitHub: `github.com/justin-a23/mathwithmelinda`
 - Amplify app ID: `dg6hiwssnna5c`
+- **Amplify Hosting kills /api routes at a hard 30 seconds** (non-configurable, no streaming). A route that exceeds it returns an EMPTY body — the client sees "Unexpected end of JSON input". Anything long-running (AI calls with photos: Opus 5 measured ~50s) must be a Gen 2 `defineFunction` Lambda behind a function URL, called directly from the browser with the Cognito access token — pattern: `amplify/functions/grade-suggestion/` + `backend.ts` (function URL, CORS, `outputs.custom` URL) + shared logic in `app/lib/gradeSuggestionCore.ts`. The Lambda verifies the teacher token itself (same check as `requireTeacher`).
 
 ### DynamoDB / AppSync
 - **400KB item size limit** — profile pictures MUST be compressed before base64 encoding. Use the `compressImage()` utility (200×200 JPEG at quality 0.75) already in `app/dashboard/page.tsx`

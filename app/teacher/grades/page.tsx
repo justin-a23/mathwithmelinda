@@ -10,6 +10,19 @@ import DiagramRenderer from '../../components/DiagramRenderer'
 import TeacherNav from '../../components/TeacherNav'
 import { useRoleGuard } from '../../hooks/useRoleGuard'
 import { apiFetch } from '@/app/lib/apiFetch'
+import outputs from '../../../amplify_outputs.json'
+
+/**
+ * AI grading goes to the grade-suggestion Lambda's function URL, NOT a /api
+ * route: Amplify Hosting kills SSR requests at a hard 30 seconds, and Opus
+ * with thinking takes ~50s on a multi-photo submission — Melinda's first real
+ * grading click came back as an empty body ("Unexpected end of JSON input",
+ * 2026-08-23). apiFetch attaches the same Bearer token either way, and the
+ * Lambda performs the same requireTeacher check. The route stays as fallback
+ * for a stale amplify_outputs.json that predates the function.
+ */
+const GRADE_SUGGESTION_ENDPOINT: string =
+  (outputs as { custom?: { gradeSuggestionUrl?: string } }).custom?.gradeSuggestionUrl || '/api/grade-suggestion'
 
 function SubmissionFile({ url, alt, inline, onView }: { url: string; alt: string; inline?: boolean; onView?: (url: string) => void }) {
   const [failed, setFailed] = useState(false)
@@ -699,7 +712,7 @@ function GradingPageInner() {
         .sort((a, b) => (b.submittedAt || '').localeCompare(a.submittedAt || ''))
         .slice(0, 4)
         .map(s2 => (s2.teacherComment || '').slice(0, 400))
-      const res = await apiFetch('/api/grade-suggestion', {
+      const res = await apiFetch(GRADE_SUGGESTION_ENDPOINT, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -716,7 +729,15 @@ function GradingPageInner() {
           recentComments,
         }),
       })
-      const data = await res.json()
+      // Parse defensively: a gateway timeout or dropped connection hands back an
+      // empty body, and res.json() on that throws the useless "Unexpected end of
+      // JSON input" Melinda actually saw. Read text first, translate to English.
+      const rawBody = await res.text()
+      let data: any = null
+      try { data = rawBody ? JSON.parse(rawBody) : null } catch { /* non-JSON error body */ }
+      if (data === null) {
+        throw new Error('The AI grader took too long or the connection dropped before it finished. Please try again.')
+      }
       if (!res.ok) throw new Error(data.error || 'AI suggestion failed')
       if (data.comment) setComment(data.comment)
       // Apply per-question results from AI, preserving any manual overrides
