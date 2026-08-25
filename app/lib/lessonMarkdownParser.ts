@@ -137,7 +137,8 @@ export function parseLessonMarkdown(raw: string): ParsedLesson {
   // Match "# Lesson N — Title" or "# Lesson N - Title"
   // Keep the FULL string "Lesson N — Title" as the title so it displays
   // correctly everywhere (student dashboard, gradebook, report card, etc.).
-  // The integer N is extracted separately as lessonNumber for sorting.
+  // The number N (integer or fractional, e.g. 7.1 for a chapter test) is
+  // extracted separately as lessonNumber for sorting.
   for (const ln of lines) {
     const fullMatch = ln.match(/^#\s+(.+)$/)
     if (fullMatch && !title) {
@@ -147,8 +148,10 @@ export function parseLessonMarkdown(raw: string): ParsedLesson {
       const lessonPrefix = heading.match(/^Lesson\s+([\w.]+)\s*[—–-]/i)
       if (lessonPrefix) {
         lessonNumberLabel = lessonPrefix[1].trim()
-        const numMatch = lessonNumberLabel.match(/^(\d+)/)
-        if (numMatch) lessonNumber = parseInt(numMatch[1], 10)
+        // Fractional numbers are real: chapter tests are "7.1" and must sort
+        // after Lesson 7, so capture the decimal part instead of truncating.
+        const numMatch = lessonNumberLabel.match(/^(\d+(?:\.\d+)?)/)
+        if (numMatch) lessonNumber = parseFloat(numMatch[1])
       }
       continue
     }

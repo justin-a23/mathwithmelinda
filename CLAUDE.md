@@ -67,7 +67,8 @@ The project brief's "What's Left to Build" list is partially outdated. Here's th
 - Past weeks where all lessons are submitted render empty naturally — no special filtering needed
 
 ### Lesson Numbers
-- Stored as `Float` in DynamoDB — can be non-integer (e.g. `168` → stored as `168`, fractional lessons like `129.5`)
+- `LessonTemplate.lessonNumber` and `Lesson.order` are `a.float()` in the Gen 2 schema — widened from `a.integer()` on 2026-08-24 so chapter tests can use fractional numbers (`7.1` sorts after Lesson 7). Every write path uses `parseFloat` (markdown parser, library editor, schedule page, video upload page); do not reintroduce `parseInt` on these fields
+- All ordering compares numerically (`a - b`), never as strings — keep it that way
 - Display as-is; don't force integer formatting
 
 ### Math Rendering

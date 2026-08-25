@@ -102,7 +102,7 @@ export default function UploadVideo() {
             variables: {
               input: {
                 title: `Lesson ${lessonNumber} - ${lessonTitle}`,
-                order: parseInt(lessonNumber),
+                order: parseFloat(lessonNumber),
                 videoUrl: `https://dgmfzo1xk5r4e.cloudfront.net/${key}`,
                 isPublished: false,
                 courseLessonsId: courses.find(c => c.title === selectedCourse)?.id || ''

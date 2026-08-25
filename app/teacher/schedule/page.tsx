@@ -432,7 +432,7 @@ function ScheduleWeekInner() {
           query: createLesson,
           variables: { input: {
             title: day.lessonTitle || `Lesson ${day.lessonNumber}`,
-            order: parseInt(day.lessonNumber) || 0,
+            order: parseFloat(day.lessonNumber) || 0,
             isPublished: day.isPublished,
             courseLessonsId: selectedCourseId,
             videoUrl: day.videoUrl || '',

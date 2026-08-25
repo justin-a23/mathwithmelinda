@@ -520,7 +520,7 @@ export default function LessonLibraryPage() {
           input: {
             id,
             title: editForm.title,
-            lessonNumber: parseInt(editForm.lessonNumber) || 0,
+            lessonNumber: parseFloat(editForm.lessonNumber) || 0,
             instructions: editForm.instructions || null,
             teachingNotes: editForm.teachingNotes || null,
             worksheetUrl: editForm.worksheetUrl || null,
@@ -533,7 +533,7 @@ export default function LessonLibraryPage() {
       setLessons(prev => prev.map(l => l.id === id ? {
         ...l,
         title: editForm.title,
-        lessonNumber: parseInt(editForm.lessonNumber) || l.lessonNumber,
+        lessonNumber: parseFloat(editForm.lessonNumber) || l.lessonNumber,
         instructions: editForm.instructions || null,
         teachingNotes: editForm.teachingNotes || null,
         worksheetUrl: editForm.worksheetUrl || null,

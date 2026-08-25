@@ -216,7 +216,10 @@ const schema = a.schema({
       title: a.string().required(),
       videoUrl: a.string(),
       instructions: a.string(),
-      order: a.integer(),
+      // Mirrors LessonTemplate.lessonNumber (scheduled copies carry it here),
+      // so it widened to float in the same change — fractional test numbers
+      // like 7.1 must survive scheduling.
+      order: a.float(),
       isPublished: a.boolean(),
       courseLessonsId: a.id(),
       course: a.belongsTo('Course', 'courseLessonsId'),
@@ -226,7 +229,10 @@ const schema = a.schema({
 
   LessonTemplate: a
     .model({
-      lessonNumber: a.integer().required(),
+      // Float, not integer: chapter tests are numbered fractionally ("7.1"
+      // sorts after Lesson 7). Was a.integer() until 2026-08-24 — Int→Float is
+      // a widening, so every existing integer value remains valid.
+      lessonNumber: a.float().required(),
       title: a.string().required(),
       instructions: a.string(),
       teachingNotes: a.string(),
