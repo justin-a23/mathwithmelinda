@@ -30,6 +30,20 @@ type CourseWeekStats = {
   videoWatched: number    // of those, watched (completed or ≥90%)
 }
 
+type TurnInRow = {
+  profileId: string
+  name: string
+  submitted: number
+  total: number
+  missing: string[]  // short labels like "L4" for the lessons not yet turned in
+}
+
+type CourseTurnIns = {
+  courseId: string
+  weekStartDate: string  // the most recent scheduled week for this course
+  rows: TurnInRow[]
+}
+
 type AttentionRow = {
   id: string          // StudentProfile row id
   name: string
@@ -292,6 +306,7 @@ export default function TeacherDashboard() {
   const [courses, setCourses] = useState<Course[]>([])
   const [loading, setLoading] = useState(true)
   const [weekStats, setWeekStats] = useState<CourseWeekStats[]>([])
+  const [turnIns, setTurnIns] = useState<CourseTurnIns[]>([])
   // Friday banner: true once every in-class item this week is fully checked off
   const [participationDone, setParticipationDone] = useState(false)
   // Next-week planning progress: courseId → lesson count scheduled for next week
@@ -793,7 +808,7 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
 
       const allSubs = subsRes?.data?.listSubmissions?.items ?? []
       const allPlans = plansRes?.data?.listWeeklyPlans?.items ?? []
-      const activeStudents: { id: string; userId: string; email: string; courseId?: string | null }[] =
+      const activeStudents: { id: string; userId: string; email: string; firstName: string; lastName: string; courseId?: string | null }[] =
         studentsRes?.data?.listStudentProfiles?.items ?? []
       setGradeScales(scalesRes?.data?.listSemesters?.items ?? [])
 
@@ -968,6 +983,79 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
       }
 
       setWeekStats(Object.values(byCourse))
+
+      // ── Turn-ins: per-student progress on each course's MOST RECENT
+      // scheduled week. Deliberately not keyed to the calendar week like the
+      // stats above: the 2026-27 opener was scheduled on the 8/17 calendar row
+      // but worked (and due) the following week, which left every
+      // calendar-keyed stat blank exactly when Melinda most wanted to know who
+      // had turned what in. The latest week that has started is the one being
+      // worked, whatever row it was scheduled on.
+      {
+        const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+        const plansByCourse = new Map<string, any[]>()
+        for (const p of allPlans) {
+          const cid = p.courseWeeklyPlansId || p.course?.id
+          if (!cid) continue
+          if (!plansByCourse.has(cid)) plansByCourse.set(cid, [])
+          plansByCourse.get(cid)!.push(p)
+        }
+        const result: CourseTurnIns[] = []
+        for (const [cid, coursePlans] of plansByCourse) {
+          const started = coursePlans.filter(p => p.weekStartDate <= todayStr)
+          if (started.length === 0) continue
+          const week = started.map(p => p.weekStartDate).sort().pop()!
+          const rows = new Map<string, TurnInRow>()
+          for (const plan of coursePlans.filter(p => p.weekStartDate === week)) {
+            let assignedIds: string[] | null = null
+            if (plan.assignedStudentIds) {
+              try {
+                const parsed = typeof plan.assignedStudentIds === 'string'
+                  ? JSON.parse(plan.assignedStudentIds)
+                  : plan.assignedStudentIds
+                if (Array.isArray(parsed) && parsed.length > 0) assignedIds = parsed
+              } catch { /* treat as all */ }
+            }
+            const roster = assignedIds
+              ? activeStudents.filter(st => assignedIds!.includes(st.userId) || assignedIds!.includes(st.email))
+              : activeStudents.filter(st => st.courseId === cid)
+            for (const item of plan.items?.items || []) {
+              if (!item.lesson) continue
+              if (item.isPublished === false) continue
+              // In-class days are credited on the Participation page, not
+              // self-submitted — counting them here would show every student
+              // "missing 1" all week long.
+              const inClass = item.isInClass === true || (item.isInClass == null && item.dayOfWeek === 'Friday')
+              if (inClass) continue
+              const m = (item.lesson.title || '').match(/Lesson\s+([\d.]+[a-z]?)/i)
+              const label = m ? `L${m[1]}` : (item.lesson.title || '?').slice(0, 12)
+              for (const st of roster) {
+                if (!rows.has(st.id)) {
+                  rows.set(st.id, { profileId: st.id, name: `${st.firstName} ${st.lastName}`, submitted: 0, total: 0, missing: [] })
+                }
+                const row = rows.get(st.id)!
+                row.total += 1
+                const set = submittedLessonsByStudent.get(st.userId) || submittedLessonsByStudent.get(st.email)
+                if (set && set.has(item.lesson.id)) row.submitted += 1
+                else row.missing.push(label)
+              }
+            }
+          }
+          if (rows.size === 0) continue
+          // Plan items arrive unordered from AppSync — sort each student's
+          // missing list by lesson number so it reads "L1, L2, L4".
+          for (const row of rows.values()) {
+            row.missing.sort((a, b) => (parseFloat(a.slice(1)) || 0) - (parseFloat(b.slice(1)) || 0))
+          }
+          result.push({
+            courseId: cid,
+            weekStartDate: week,
+            // Furthest behind first; ties alphabetical so the order is stable
+            rows: [...rows.values()].sort((a, b) => (a.submitted - b.submitted) || a.name.localeCompare(b.name)),
+          })
+        }
+        setTurnIns(result)
+      }
 
       // ── Count overdue: submissions from before this week that are still ungraded ──
       const overdueByCourse: Record<string, number> = {}
@@ -1507,6 +1595,60 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
             </div>
           )}
         </div>
+
+        {/* ── TURN-INS BY STUDENT ── */}
+        {/* Who has turned in what, per course, on the most recent scheduled
+            week — the roster-level view the per-course bars above can't give. */}
+        {!loading && turnIns.length > 0 && (
+          <div style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', padding: '24px 28px', marginBottom: '40px' }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '4px', flexWrap: 'wrap', gap: '8px' }}>
+              <h2 style={{ fontSize: '13px', fontWeight: 500, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--plum)', margin: 0 }}>
+                Turn-ins by Student
+              </h2>
+              <span style={{ fontSize: '12px', color: 'var(--gray-mid)' }}>
+                Each class&apos;s most recent scheduled week · in-class days are tracked on Participation
+              </span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px', marginTop: '16px' }}>
+              {activeCourses.map(course => {
+                const ti = turnIns.find(t => t.courseId === course.id)
+                if (!ti) return null
+                const weekLabel = new Date(ti.weekStartDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                const doneRows = ti.rows.filter(r => r.submitted >= r.total)
+                const behindRows = ti.rows.filter(r => r.submitted < r.total)
+                return (
+                  <div key={course.id} style={{ border: '1px solid var(--gray-light)', borderRadius: '10px', padding: '14px 16px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '10px' }}>
+                      <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--foreground)' }}>{course.title}</span>
+                      <span style={{ fontSize: '11px', color: 'var(--gray-mid)' }}>week of {weekLabel}</span>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {behindRows.map(r => (
+                        <div key={r.profileId} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', flexWrap: 'wrap' }}>
+                          <span style={{ color: 'var(--foreground)', fontWeight: 500, minWidth: '120px' }}>{r.name}</span>
+                          <span style={{ fontSize: '12px', fontWeight: 700, color: r.submitted === 0 ? '#b91c1c' : '#b45309', background: r.submitted === 0 ? '#fee2e2' : '#fef3c7', padding: '1px 8px', borderRadius: '20px', whiteSpace: 'nowrap' }}>
+                            {r.submitted} of {r.total}
+                          </span>
+                          <span style={{ fontSize: '11px', color: 'var(--gray-mid)' }}>
+                            missing {r.missing.slice(0, 6).join(', ')}{r.missing.length > 6 ? ` +${r.missing.length - 6}` : ''}
+                          </span>
+                        </div>
+                      ))}
+                      {behindRows.length === 0 && (
+                        <div style={{ fontSize: '13px', fontWeight: 600, color: '#15803d' }}>✓ Everyone is caught up</div>
+                      )}
+                      {doneRows.length > 0 && behindRows.length > 0 && (
+                        <div style={{ fontSize: '12px', color: '#15803d', marginTop: '4px' }}>
+                          ✓ All in: {doneRows.map(r => r.name.split(' ')[0]).join(', ')}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         {/* ── NEXT WEEK PLANNING ── */}
         {/* This page is all about the current week — this card is the one
