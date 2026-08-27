@@ -58,7 +58,6 @@ const getLessonTemplateQuery = /* GraphQL */`
       id
       title
       assignmentType
-      lessonCategory
       lessonNumber
       instructions
       worksheetUrl
@@ -153,7 +152,6 @@ type LessonTemplateData = {
   id: string
   title: string
   assignmentType: string | null
-  lessonCategory: string | null
   lessonNumber: number | null
   instructions: string | null
   worksheetUrl: string | null
@@ -912,19 +910,11 @@ function LessonPageInner() {
     if (allQuestions.length === 0) return
     const aType = lessonTemplate?.assignmentType || 'upload'
     const isWorksheetType = aType === 'worksheet' || aType === 'upload'
-    // Tests print as a full WORK PACKET: every question gets a work box so the
-    // student has somewhere to show written work for the whole test, with the
-    // section headers kept for structure. Without this, a `both`-type test
-    // printed only its final photograph-and-upload show_work question — one
-    // near-empty page and no packet at all (Chapter 1 Test, 2026-08-26).
-    const isTest = (lessonTemplate?.lessonCategory || '').toLowerCase().includes('test')
     // For worksheet/upload type, print ALL questions (it's a paper-only assignment)
     // For digital questions or both, only print show_work questions
-    const showWorkQuestions = isTest
-      ? [...allQuestions]
-      : isWorksheetType
-        ? allQuestions.filter(q => q.questionType !== 'section_header')
-        : allQuestions.filter(q => q.questionType === 'show_work')
+    const showWorkQuestions = isWorksheetType
+      ? allQuestions.filter(q => q.questionType !== 'section_header')
+      : allQuestions.filter(q => q.questionType === 'show_work')
     if (showWorkQuestions.length === 0) return
 
     // Get diagram image URLs for embedding in print
@@ -995,34 +985,19 @@ function LessonPageInner() {
     }
     showWorkQuestions.sort((a, b) => (swSortKeys.get(a.id) ?? 0) - (swSortKeys.get(b.id) ?? 0))
 
-    // Sequential question numbers (headers skipped) — imported questions don't
-    // carry a leading "N." in their text, and raw `order` counts headers too.
-    let seq = 0
-    const seqNums = new Map<string, number>()
-    for (const q of showWorkQuestions) {
-      if (q.questionType !== 'section_header') { seq++; seqNums.set(q.id, seq) }
-    }
-
     // Build question HTML — each question shows its text, diagram (if any), and work box
     const questionsHTML = showWorkQuestions.map(q => {
-      if (q.questionType === 'section_header') {
-        return `<div class="section-header">${renderMath(q.questionText)}</div>`
-      }
       const bookNumMatch = q.questionText.match(/^(\d+\.)\s/)
-      const qNumLabel = bookNumMatch ? bookNumMatch[1] : isTest ? `${seqNums.get(q.id)}.` : `#${q.order % 1000}.`
+      const qNumLabel = bookNumMatch ? bookNumMatch[1] : `#${q.order % 1000}.`
       const qBody = renderMath(q.questionText.replace(/^\d+\.\s*/, ''))
       const diagramSrc = diagramDataUrls[q.id]
       const diagramHTML = diagramSrc
         ? `<div class="diagram"><img src="${diagramSrc}" class="diagram-img" /></div>`
         : ''
-      // In a test packet the show_work question is the photograph-and-upload
-      // instruction — an empty box under "upload your photos here" on paper
-      // only confuses. It gets its text, no box.
-      const boxHTML = isTest && q.questionType === 'show_work' ? '' : '<div class="work-box"></div>'
       return `<div class="work-item">
         <div class="work-label"><span class="qnum">${qNumLabel}</span> ${qBody}</div>
         ${diagramHTML}
-        ${boxHTML}
+        <div class="work-box"></div>
       </div>`
     }).join('')
 
@@ -1049,7 +1024,6 @@ function LessonPageInner() {
         .work-label{margin-bottom:6px;line-height:1.6}
         .qnum{font-weight:bold;font-size:15px;margin-right:6px}
         .work-box{border:1px solid #bbb;border-radius:4px;height:120px}
-        .section-header{font-size:13px;font-weight:bold;letter-spacing:1px;text-transform:uppercase;color:#5b3e80;border-bottom:2px solid #cbb8e0;padding-bottom:4px;margin:26px 0 14px;page-break-after:avoid}
         @media print{body{padding:20px}@page{margin:.6in}}
       </style>
     </head><body onload="var imgs=document.images;if(imgs.length===0){setTimeout(function(){window.print()},800)}else{var loaded=0;function chk(){loaded++;if(loaded>=imgs.length)setTimeout(function(){window.print()},400)}for(var i=0;i<imgs.length;i++){if(imgs[i].complete)chk();else{imgs[i].onload=chk;imgs[i].onerror=chk}}}">
