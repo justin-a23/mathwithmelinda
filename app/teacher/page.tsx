@@ -1004,44 +1004,59 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
         for (const [cid, coursePlans] of plansByCourse) {
           const started = coursePlans.filter(p => p.weekStartDate <= todayStr)
           if (started.length === 0) continue
-          const week = started.map(p => p.weekStartDate).sort().pop()!
-          const rows = new Map<string, TurnInRow>()
-          for (const plan of coursePlans.filter(p => p.weekStartDate === week)) {
-            let assignedIds: string[] | null = null
-            if (plan.assignedStudentIds) {
-              try {
-                const parsed = typeof plan.assignedStudentIds === 'string'
-                  ? JSON.parse(plan.assignedStudentIds)
-                  : plan.assignedStudentIds
-                if (Array.isArray(parsed) && parsed.length > 0) assignedIds = parsed
-              } catch { /* treat as all */ }
-            }
-            const roster = assignedIds
-              ? activeStudents.filter(st => assignedIds!.includes(st.userId) || assignedIds!.includes(st.email))
-              : activeStudents.filter(st => st.courseId === cid)
-            for (const item of plan.items?.items || []) {
-              if (!item.lesson) continue
-              if (item.isPublished === false) continue
-              // In-class days are credited on the Participation page, not
-              // self-submitted — counting them here would show every student
-              // "missing 1" all week long.
-              const inClass = item.isInClass === true || (item.isInClass == null && item.dayOfWeek === 'Friday')
-              if (inClass) continue
-              const m = (item.lesson.title || '').match(/Lesson\s+([\d.]+[a-z]?)/i)
-              const label = m ? `L${m[1]}` : (item.lesson.title || '?').slice(0, 12)
-              for (const st of roster) {
-                if (!rows.has(st.id)) {
-                  rows.set(st.id, { profileId: st.id, name: `${st.firstName} ${st.lastName}`, submitted: 0, total: 0, missing: [] })
+
+          const rowsForWeek = (week: string): Map<string, TurnInRow> => {
+            const rows = new Map<string, TurnInRow>()
+            for (const plan of coursePlans.filter(p => p.weekStartDate === week)) {
+              let assignedIds: string[] | null = null
+              if (plan.assignedStudentIds) {
+                try {
+                  const parsed = typeof plan.assignedStudentIds === 'string'
+                    ? JSON.parse(plan.assignedStudentIds)
+                    : plan.assignedStudentIds
+                  if (Array.isArray(parsed) && parsed.length > 0) assignedIds = parsed
+                } catch { /* treat as all */ }
+              }
+              const roster = assignedIds
+                ? activeStudents.filter(st => assignedIds!.includes(st.userId) || assignedIds!.includes(st.email))
+                : activeStudents.filter(st => st.courseId === cid)
+              for (const item of plan.items?.items || []) {
+                if (!item.lesson) continue
+                if (item.isPublished === false) continue
+                // In-class days are credited on the Participation page, not
+                // self-submitted — counting them here would show every student
+                // "missing 1" all week long.
+                const inClass = item.isInClass === true || (item.isInClass == null && item.dayOfWeek === 'Friday')
+                if (inClass) continue
+                const m = (item.lesson.title || '').match(/Lesson\s+([\d.]+[a-z]?)/i)
+                const label = m ? `L${m[1]}` : (item.lesson.title || '?').slice(0, 12)
+                for (const st of roster) {
+                  if (!rows.has(st.id)) {
+                    rows.set(st.id, { profileId: st.id, name: `${st.firstName} ${st.lastName}`, submitted: 0, total: 0, missing: [] })
+                  }
+                  const row = rows.get(st.id)!
+                  row.total += 1
+                  const set = submittedLessonsByStudent.get(st.userId) || submittedLessonsByStudent.get(st.email)
+                  if (set && set.has(item.lesson.id)) row.submitted += 1
+                  else row.missing.push(label)
                 }
-                const row = rows.get(st.id)!
-                row.total += 1
-                const set = submittedLessonsByStudent.get(st.userId) || submittedLessonsByStudent.get(st.email)
-                if (set && set.has(item.lesson.id)) row.submitted += 1
-                else row.missing.push(label)
               }
             }
+            return rows
           }
-          if (rows.size === 0) continue
+
+          // Walk started weeks newest-first and take the first with countable
+          // work. "Most recent week" alone is not enough: the week of 8/24 was
+          // scheduled as a single in-class Friday item, which made the panel
+          // vanish entirely while the 8/17 week's turn-ins were due that day.
+          const weeks = [...new Set(started.map(p => p.weekStartDate as string))].sort().reverse()
+          let week = ''
+          let rows = new Map<string, TurnInRow>()
+          for (const w of weeks) {
+            const r = rowsForWeek(w)
+            if (r.size > 0) { week = w; rows = r; break }
+          }
+          if (!week) continue
           // Plan items arrive unordered from AppSync — sort each student's
           // missing list by lesson number so it reads "L1, L2, L4".
           for (const row of rows.values()) {
