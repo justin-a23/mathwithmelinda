@@ -825,10 +825,15 @@ export default function LessonLibraryPage() {
 
     const aType = editForm.assignmentType === 'worksheet' ? 'upload' : (editForm.assignmentType || lesson.assignmentType || 'upload')
     const isWorksheetType = aType === 'upload'
+    // Tests print as a full WORK PACKET — every question gets a work box, so a
+    // `both`-type test doesn't collapse to a single page holding only its
+    // photograph-and-upload show_work question. Mirrors the student page's
+    // printShowWorkSheet.
+    const isTest = ((editForm.lessonCategory || lesson.lessonCategory || '')).toLowerCase().includes('test')
 
     // For worksheet/upload type, show ALL questions (paper-only assignment)
     // For digital or both, only show show_work questions
-    const filteredQuestions = isWorksheetType
+    const filteredQuestions = (isWorksheetType || isTest)
       ? allQuestions.filter(q => q.questionType !== 'section_header' || true) // keep headers + all question types
       : (() => {
           const result: typeof allQuestions = []
@@ -938,10 +943,13 @@ export default function LessonLibraryPage() {
         : specSvgs[q.id]
           ? `<div class="diagram diagram-spec">${specSvgs[q.id]}</div>`
           : ''
+      // In a test packet the show_work question is the photograph-and-upload
+      // instruction — no work box under it (matches the student print).
+      const boxHTML = isTest && q.questionType === 'show_work' ? '' : '<div class="work-box"></div>'
       return `<div class="work-item">
         <div class="work-label"><span class="qnum">${qNumLabel}</span> ${qBody}</div>
         ${diagramHTML}
-        <div class="work-box"></div>
+        ${boxHTML}
       </div>`
     }).join('')
 
