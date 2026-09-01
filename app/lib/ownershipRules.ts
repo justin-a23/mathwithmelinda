@@ -11,6 +11,7 @@ import type { AuthUser } from './auth'
  * Key shapes in `mathwithmelinda-submissions`:
  *   submissions/{studentEmail}/{lessonId}/{timestamp}-{filename}
  *   profiles/{cognitoSub}.jpg
+ *   scan-pages/{lessonTemplateId}/{page|diagram|worksheet…}.{pdf|png|jpg}
  */
 
 /**
@@ -69,6 +70,17 @@ export function isOwnProfileKey(key: string, userId: string): boolean {
 }
 
 /**
+ * Teacher-authored lesson material: worksheet PDFs, scanned pages, and cropped
+ * diagram images, all written by the teacher-only /api/scan-upload route under
+ * `scan-pages/{lessonTemplateId}/`. Unlike the rest of this bucket it is
+ * course content, not student work, so every signed-in role may read it — the
+ * same audience the LessonTemplate model grants read to in AppSync.
+ */
+export function isLessonAssetKey(key: string): boolean {
+  return key.startsWith('scan-pages/') && key.length > 'scan-pages/'.length
+}
+
+/**
  * Whether `auth` may read `key` from the submissions bucket, given the set of
  * student emails they are entitled to (their own, or their children's).
  *
@@ -81,6 +93,7 @@ export function canReadSubmissionKeyGiven(
 ): boolean {
   if (!isStructurallySafeKey(key)) return false
   if (auth.role === 'teacher') return true
+  if (isLessonAssetKey(key)) return true
   if (isOwnProfileKey(key, auth.userId)) return true
   if (auth.role !== 'student' && auth.role !== 'parent') return false
   return entitledEmails.some(email => ownsSubmissionPrefix(key, email))

@@ -889,20 +889,34 @@ function LessonPageInner() {
         window.open(wsUrl, '_blank')
       } else if (wsUrl.startsWith('[')) {
         // Scan pages — open first page (already fetched as presigned URLs)
-        if (scanPageUrls.length > 0) window.open(scanPageUrls[0], '_blank')
+        if (scanPageUrls.length > 0) {
+          window.open(scanPageUrls[0], '_blank')
+        } else {
+          alert('The worksheet could not be loaded. Please refresh the page and try again.')
+        }
       } else {
-        // S3 key — get presigned URL
+        // S3 key — presign it. The tab must open synchronously in the click
+        // handler: Safari blocks window.open once an await has passed, which
+        // used to make this button appear to do nothing.
+        const tab = window.open('', '_blank')
         try {
           const res = await apiFetch('/api/view-submission', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ key: wsUrl })
           })
-          if (res.ok) {
-            const data = await res.json()
+          if (!res.ok) throw new Error(`worksheet presign failed: ${res.status}`)
+          const data = await res.json()
+          if (tab) {
+            tab.location.href = data.url
+          } else {
             window.open(data.url, '_blank')
           }
-        } catch { /* ignore */ }
+        } catch (err) {
+          console.error('print worksheet error:', err)
+          tab?.close()
+          alert('The worksheet could not be opened. Please refresh the page and try again — if it keeps failing, message your teacher.')
+        }
       }
       return
     }
