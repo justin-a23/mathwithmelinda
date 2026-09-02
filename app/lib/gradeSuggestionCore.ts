@@ -278,7 +278,7 @@ Return ONLY a JSON object — no markdown fences, no preamble:
   ]
 }
 
-Only include questions you are grading in questionResults (not teacher-confirmed ones). Use the exact id values from the question list. The "comment" field can be multiple paragraphs — use \\n between paragraphs for readability when many problems need explanation.`
+"questionResults" is REQUIRED, never optional. It MUST contain exactly one {"id","correct"} entry for EVERY question you were asked to grade — every digital question AND every show-work question — using the exact [id:...] values from the question list. Exclude only teacher-confirmed questions. On a long test this array is large; include it anyway, in full. A response without a complete questionResults array is invalid. Per-question judgments in the comment are NOT a substitute for the array — the teacher's grading screen paints each question green or red from this array and shows nothing without it. The "comment" field can be multiple paragraphs — use \\n between paragraphs for readability when many problems need explanation.`
 
   const userParts: string[] = [
     `Student: ${studentName || 'Unknown'}`,
@@ -323,24 +323,47 @@ Only include questions you are grading in questionResults (not teacher-confirmed
   // Opus 5: adaptive thinking is on by default, which is exactly what careful
   // reading of handwritten pages needs. Thinking tokens count against
   // max_tokens, hence the headroom above the ~1-2K JSON answer.
-  const message = await deps.anthropic.messages.create({
-    model: 'claude-opus-5',
-    max_tokens: 8000,
-    system: systemPrompt,
-    messages: [{ role: 'user', content }],
-  })
-
-  // With thinking enabled, content[0] is a thinking block — find the text block.
-  const text = message.content.find((b): b is Anthropic.TextBlock => b.type === 'text')?.text ?? ''
-  // Strip markdown code fences if present
-  let cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
-  // Extract JSON object even if there's preamble text (e.g. "Looking at the work... {}")
-  const jsonStart = cleaned.indexOf('{')
-  const jsonEnd = cleaned.lastIndexOf('}')
-  if (jsonStart > 0 && jsonEnd > jsonStart) {
-    cleaned = cleaned.slice(jsonStart, jsonEnd + 1)
+  async function callModel(messages: Anthropic.MessageParam[]): Promise<{ parsed: any; rawText: string }> {
+    const message = await deps.anthropic.messages.create({
+      model: 'claude-opus-5',
+      max_tokens: 8000,
+      system: systemPrompt,
+      messages,
+    })
+    // With thinking enabled, content[0] is a thinking block — find the text block.
+    const text = message.content.find((b): b is Anthropic.TextBlock => b.type === 'text')?.text ?? ''
+    // Strip markdown code fences if present
+    let cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+    // Extract JSON object even if there's preamble text (e.g. "Looking at the work... {}")
+    const jsonStart = cleaned.indexOf('{')
+    const jsonEnd = cleaned.lastIndexOf('}')
+    if (jsonStart > 0 && jsonEnd > jsonStart) {
+      cleaned = cleaned.slice(jsonStart, jsonEnd + 1)
+    }
+    return { parsed: JSON.parse(cleaned), rawText: text }
   }
-  const parsed = JSON.parse(cleaned)
+
+  let { parsed, rawText } = await callModel([{ role: 'user', content }])
+
+  // On question-heavy submissions (chapter tests: ~17 questions, mostly
+  // show-work) the model has been observed pouring everything into the comment
+  // and omitting questionResults entirely — which leaves the teacher's grading
+  // screen with no green/red per-question marks. One corrective retry, keeping
+  // the first response's grade and comment as context, reliably recovers it.
+  const expectedResults = questionList.filter(q => !(q.id && q.id in locked)).length
+  if (expectedResults > 0 && !(Array.isArray(parsed.questionResults) && parsed.questionResults.length > 0)) {
+    const retry = await callModel([
+      { role: 'user', content },
+      { role: 'assistant', content: [{ type: 'text', text: rawText }] },
+      {
+        role: 'user',
+        content: `Your response omitted the required "questionResults" array. Respond again with ONLY the complete JSON object — keep the same "grade" and "comment", and add "questionResults" with exactly ${expectedResults} entries, one {"id": "...", "correct": true|false} per question you graded, using the exact [id:...] values from the question list.`,
+      },
+    ])
+    if (Array.isArray(retry.parsed.questionResults) && retry.parsed.questionResults.length > 0) {
+      parsed = { ...parsed, ...retry.parsed }
+    }
+  }
 
   return {
     status: 200,

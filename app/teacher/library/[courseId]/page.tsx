@@ -974,7 +974,7 @@ export default function LessonLibraryPage() {
         .section-header{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#5b2d8e;border-bottom:2px solid #d8b4fe;padding-bottom:5px;margin:28px 0 16px;page-break-after:avoid}
         @media print{body{padding:20px}@page{margin:.6in}}
       </style>
-    </head><body onload="setTimeout(function(){window.print()},1200)">
+    </head><body onload="(function(){var done=false;function go(){if(done)return;done=true;setTimeout(function(){window.print()},200)}var waits=[];if(document.fonts&&document.fonts.ready){waits.push(document.fonts.ready)}var imgs=document.images;if(imgs.length>0){waits.push(new Promise(function(res){var n=0;function c(){n++;if(n>=imgs.length)res()}for(var i=0;i<imgs.length;i++){if(imgs[i].complete)c();else{imgs[i].onload=c;imgs[i].onerror=c}}}))}Promise.all(waits).then(go);setTimeout(go,5000)})()">
       <div class="header">
         <div class="lessonnum">Lesson ${lesson.lessonNumber}</div>
         <h1>${lesson.title} — Show Work</h1>

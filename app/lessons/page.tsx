@@ -1069,7 +1069,7 @@ function LessonPageInner() {
         .work-box{border:1px solid #bbb;border-radius:4px;height:120px}
         @media print{body{padding:20px}@page{margin:.6in}}
       </style>
-    </head><body onload="var imgs=document.images;if(imgs.length===0){setTimeout(function(){window.print()},800)}else{var loaded=0;function chk(){loaded++;if(loaded>=imgs.length)setTimeout(function(){window.print()},400)}for(var i=0;i<imgs.length;i++){if(imgs[i].complete)chk();else{imgs[i].onload=chk;imgs[i].onerror=chk}}}">
+    </head><body onload="(function(){var done=false;function go(){if(done)return;done=true;setTimeout(function(){window.print()},200)}var waits=[];if(document.fonts&&document.fonts.ready){waits.push(document.fonts.ready)}var imgs=document.images;if(imgs.length>0){waits.push(new Promise(function(res){var n=0;function c(){n++;if(n>=imgs.length)res()}for(var i=0;i<imgs.length;i++){if(imgs[i].complete)c();else{imgs[i].onload=c;imgs[i].onerror=c}}}))}Promise.all(waits).then(go);setTimeout(go,5000)})()">
       <div class="header">
         ${lessonNum != null ? `<div class="lessonnum">Lesson ${lessonNum}</div>` : ''}
         <h1>${title} — Show Work</h1>
