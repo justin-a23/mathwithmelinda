@@ -1525,7 +1525,7 @@ export default function LessonLibraryPage() {
                                       style={{ background: videoPreviewOpen ? 'var(--plum)' : 'none', border: '1px solid var(--plum)', color: videoPreviewOpen ? 'white' : 'var(--plum)', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', padding: '4px 10px', whiteSpace: 'nowrap' }}>
                                       {videoPreviewOpen ? 'Close' : '▶ Watch'}
                                     </button>
-                                    <button onClick={() => { if (window.confirm('Are you sure you want to remove this video? This cannot be undone.')) setEditForm(f => ({ ...f, videoUrl: '' })) }} style={{ background: 'none', border: '1px solid #e05252', color: '#e05252', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', padding: '4px 10px', whiteSpace: 'nowrap' }}>
+                                    <button onClick={() => { if (window.confirm('Remove this video from this lesson? The file stays in your video library — you can re-attach it any time with "Attach existing video".')) setEditForm(f => ({ ...f, videoUrl: '' })) }} style={{ background: 'none', border: '1px solid #e05252', color: '#e05252', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', padding: '4px 10px', whiteSpace: 'nowrap' }}>
                                       Remove
                                     </button>
                                   </div>
@@ -1584,15 +1584,24 @@ export default function LessonLibraryPage() {
                                 {showOrphanPicker ? '▲ Hide' : '📎 Attach existing video…'}
                               </button>
 
-                              {showOrphanPicker && (
+                              {showOrphanPicker && (() => {
+                                // Videos attached to OTHER lessons in this course. Selecting one
+                                // shares it: two templates point at the same S3 key, which is safe —
+                                // nothing ever deletes video objects (Remove only clears the field),
+                                // and watch tracking keys on the lesson, not the video. This is how
+                                // a split lesson (e.g. 8 and 8.1) reuses one recording.
+                                const sharedCandidates = lessons
+                                  .filter(l => l.id !== lesson.id && l.videoUrl)
+                                  .sort((a, b) => (a.lessonNumber ?? 0) - (b.lessonNumber ?? 0))
+                                return (
                                 <div style={{ marginTop: '10px', padding: '14px', background: 'var(--page-bg)', border: '1px solid var(--gray-light)', borderRadius: '8px' }}>
                                   <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginBottom: '8px' }}>
-                                    Videos already uploaded to S3 but not attached to any lesson:
+                                    Pick an unattached upload, or share another lesson's video (both lessons will play the same recording):
                                   </div>
                                   {loadingOrphans ? (
                                     <p style={{ fontSize: '13px', color: 'var(--gray-mid)' }}>Loading…</p>
-                                  ) : !orphanVideos || orphanVideos.length === 0 ? (
-                                    <p style={{ fontSize: '13px', color: 'var(--gray-mid)', fontStyle: 'italic' }}>No unattached videos found for this course.</p>
+                                  ) : (!orphanVideos || orphanVideos.length === 0) && sharedCandidates.length === 0 ? (
+                                    <p style={{ fontSize: '13px', color: 'var(--gray-mid)', fontStyle: 'italic' }}>No other videos found for this course.</p>
                                   ) : (
                                     <select
                                       defaultValue=""
@@ -1602,18 +1611,31 @@ export default function LessonLibraryPage() {
                                         setIsDirty(true)
                                         setShowOrphanPicker(false)
                                         // Remove from orphan list immediately so it doesn't show again
+                                        // (shared videos stay listed — sharing doesn't consume them)
                                         setOrphanVideos(prev => prev?.filter(v => v.key !== e.target.value) ?? null)
                                       }}
                                       style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--gray-light)', borderRadius: '6px', fontSize: '13px', fontFamily: 'var(--font-body)', background: 'var(--white)', color: 'var(--foreground)' }}
                                     >
                                       <option value="">— pick a video —</option>
-                                      {orphanVideos.map(v => (
-                                        <option key={v.key} value={v.key}>{v.label}</option>
-                                      ))}
+                                      {orphanVideos && orphanVideos.length > 0 && (
+                                        <optgroup label="Not attached to any lesson">
+                                          {orphanVideos.map(v => (
+                                            <option key={v.key} value={v.key}>{v.label}</option>
+                                          ))}
+                                        </optgroup>
+                                      )}
+                                      {sharedCandidates.length > 0 && (
+                                        <optgroup label="In use by another lesson (video will be shared)">
+                                          {sharedCandidates.map(l => (
+                                            <option key={l.id} value={l.videoUrl!}>{l.title}</option>
+                                          ))}
+                                        </optgroup>
+                                      )}
                                     </select>
                                   )}
                                 </div>
-                              )}
+                                )
+                              })()}
                             </div>
 
                             {/* Worksheet */}
