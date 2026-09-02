@@ -6,12 +6,14 @@ import { useEffect, useState } from 'react'
 import { generateClient } from 'aws-amplify/api'
 import TeacherNav from '../../components/TeacherNav'
 import { useRoleGuard } from '../../hooks/useRoleGuard'
+import { fetchAllPages } from '@/app/lib/fetchAllPages'
 
 const client = generateClient()
 
 const LIST_SEMESTERS = /* GraphQL */ `
-  query ListSemesters {
-    listSemesters(limit: 100) {
+  query ListSemesters($nextToken: String) {
+    listSemesters(limit: 100, nextToken: $nextToken) {
+      nextToken
       items {
         id name startDate endDate isActive courseId
         lessonWeightPercent testWeightPercent quizWeightPercent
@@ -24,8 +26,9 @@ const LIST_SEMESTERS = /* GraphQL */ `
 `
 
 const LIST_WEEKLY_PLANS = /* GraphQL */ `
-  query ListWeeklyPlans {
-    listWeeklyPlans(limit: 500) {
+  query ListWeeklyPlans($nextToken: String) {
+    listWeeklyPlans(limit: 500, nextToken: $nextToken) {
+      nextToken
       items {
         id weekStartDate courseWeeklyPlansId assignedStudentIds
         items {
@@ -49,8 +52,9 @@ const LIST_LESSON_TEMPLATES = /* GraphQL */ `
 `
 
 const LIST_STUDENTS = /* GraphQL */ `
-  query ListStudents($filter: ModelStudentProfileFilterInput) {
-    listStudentProfiles(filter: $filter, limit: 200) {
+  query ListStudents($filter: ModelStudentProfileFilterInput, $nextToken: String) {
+    listStudentProfiles(filter: $filter, limit: 200, nextToken: $nextToken) {
+      nextToken
       items { id userId email firstName lastName courseId status enrolledAt createdAt }
     }
   }
@@ -59,16 +63,18 @@ const LIST_STUDENTS = /* GraphQL */ `
 // Sent-report-card tracking for the progress banner. studentId here is the
 // StudentProfile row id (same id the Report Card button passes in its URL).
 const LIST_SENT_REPORT_CARDS = /* GraphQL */ `
-  query ListSentReportCards($filter: ModelReportCardRecordFilterInput) {
-    listReportCardRecords(filter: $filter, limit: 500) {
+  query ListSentReportCards($filter: ModelReportCardRecordFilterInput, $nextToken: String) {
+    listReportCardRecords(filter: $filter, limit: 500, nextToken: $nextToken) {
+      nextToken
       items { id studentId quarterId recipientEmails }
     }
   }
 `
 
 const LIST_ALL_SUBMISSIONS = /* GraphQL */ `
-  query ListAllSubmissions {
-    listSubmissions(limit: 1000) {
+  query ListAllSubmissions($nextToken: String) {
+    listSubmissions(limit: 1000, nextToken: $nextToken) {
+      nextToken
       items { id studentId content grade status isArchived }
     }
   }
@@ -234,8 +240,7 @@ export default function GradebookPage() {
   async function loadSemesters() {
     setLoading(true)
     try {
-      const res = await (client.graphql({ query: LIST_SEMESTERS }) as any)
-      const items: Semester[] = res.data.listSemesters.items
+      const items = await fetchAllPages<Semester>(client, LIST_SEMESTERS, 'listSemesters')
       const sorted = [...items].sort((a, b) => b.startDate.localeCompare(a.startDate))
       setSemesters(sorted)
       const active = sorted.find(s => s.isActive)
@@ -254,29 +259,25 @@ export default function GradebookPage() {
     setDataLoading(true)
     try {
       // 1. Load all weekly plans and filter client-side
-      const plansRes = await (client.graphql({ query: LIST_WEEKLY_PLANS }) as any)
-      const allPlans: WeeklyPlan[] = plansRes.data.listWeeklyPlans.items
+      const allPlans = await fetchAllPages<WeeklyPlan>(client, LIST_WEEKLY_PLANS, 'listWeeklyPlans')
 
       // 2. Load students first — the term floor below depends on when they enrolled
-      const studentsRes = await (client.graphql({
-        query: LIST_STUDENTS,
-        variables: { filter: { courseId: { eq: sem.courseId } } },
-      }) as any)
+      const allStudents = await fetchAllPages<StudentProfile>(client, LIST_STUDENTS, 'listStudentProfiles', {
+        filter: { courseId: { eq: sem.courseId } },
+      })
       // Exclude removed, archived, pending, and declined students — only currently-active
       // students belong in the live gradebook. Past students have their own transcript view.
-      const students: StudentProfile[] = studentsRes.data.listStudentProfiles.items.filter(
-        (s: StudentProfile) => s.status === 'active'
-      )
+      const students: StudentProfile[] = allStudents.filter(s => s.status === 'active')
 
       // 2b. Which of these students already have a SENT report card for this
       // quarter (drafts have null recipientEmails and don't count).
       try {
-        const rcRes = await (client.graphql({
-          query: LIST_SENT_REPORT_CARDS,
-          variables: { filter: { semesterId: { eq: semesterId } } },
-        }) as any)
+        const rcItems = await fetchAllPages<{ studentId: string; quarterId: string | null; recipientEmails: string | null }>(
+          client, LIST_SENT_REPORT_CARDS, 'listReportCardRecords',
+          { filter: { semesterId: { eq: semesterId } } },
+        )
         const sent = new Set<string>(
-          (rcRes.data.listReportCardRecords.items as { studentId: string; quarterId: string | null; recipientEmails: string | null }[])
+          rcItems
             .filter(r => r.recipientEmails && (r.quarterId || '') === selectedQuarterId)
             .map(r => r.studentId)
         )
@@ -411,8 +412,7 @@ export default function GradebookPage() {
       cols.sort((a, b) => a.order - b.order)
 
       // 8. Load all submissions
-      const subsRes = await (client.graphql({ query: LIST_ALL_SUBMISSIONS }) as any)
-      const allSubs: Submission[] = subsRes.data.listSubmissions.items
+      const allSubs = await fetchAllPages<Submission>(client, LIST_ALL_SUBMISSIONS, 'listSubmissions')
 
       // 9. Match submissions to lessons
       const lessonIdSet = new Set(cols.map(c => c.lessonId))

@@ -7,6 +7,7 @@ import { listCourses } from '../../src/graphql/queries'
 import TeacherNav from '../components/TeacherNav'
 import { useRoleGuard } from '../hooks/useRoleGuard'
 import { apiFetch } from '@/app/lib/apiFetch'
+import { fetchAllPages } from '@/app/lib/fetchAllPages'
 
 const client = generateClient()
 
@@ -55,8 +56,9 @@ type AttentionRow = {
 type GradeScale = { courseId: string | null; isActive: boolean | null; gradeA: number | null; gradeB: number | null; gradeC: number | null; gradeD: number | null }
 
 const listRecentSubmissionsQuery = /* GraphQL */`
-  query ListRecentSubmissions {
-    listSubmissions(limit: 500) {
+  query ListRecentSubmissions($nextToken: String) {
+    listSubmissions(limit: 500, nextToken: $nextToken) {
+      nextToken
       items {
         id
         studentId
@@ -196,24 +198,27 @@ function SubmissionBar({ submitted, late, assigned }: { submitted: number; late:
 }
 
 const listPendingStudentsQuery = /* GraphQL */`
-  query ListPendingStudents {
-    listStudentProfiles(limit: 50, filter: { status: { eq: "pending" } }) {
+  query ListPendingStudents($nextToken: String) {
+    listStudentProfiles(limit: 200, filter: { status: { eq: "pending" } }, nextToken: $nextToken) {
+      nextToken
       items { id firstName lastName email gradeLevel }
     }
   }
 `
 
 const listActiveStudentsQuery = /* GraphQL */`
-  query ListActiveStudents {
-    listStudentProfiles(limit: 200, filter: { status: { eq: "active" } }) {
+  query ListActiveStudents($nextToken: String) {
+    listStudentProfiles(limit: 200, filter: { status: { eq: "active" } }, nextToken: $nextToken) {
+      nextToken
       items { id userId email firstName lastName courseId }
     }
   }
 `
 
 const listAllSubmissionsForAlertsQuery = /* GraphQL */`
-  query ListAllSubmissionsForAlerts {
-    listSubmissions(limit: 1000) {
+  query ListAllSubmissionsForAlerts($nextToken: String) {
+    listSubmissions(limit: 1000, nextToken: $nextToken) {
+      nextToken
       items {
         id
         studentId
@@ -227,8 +232,9 @@ const listAllSubmissionsForAlertsQuery = /* GraphQL */`
 `
 
 const listWeeklyPlansQuery = /* GraphQL */`
-  query ListWeeklyPlans {
-    listWeeklyPlans(limit: 500) {
+  query ListWeeklyPlans($nextToken: String) {
+    listWeeklyPlans(limit: 500, nextToken: $nextToken) {
+      nextToken
       items {
         id
         weekStartDate
@@ -250,6 +256,15 @@ const listWeeklyPlansQuery = /* GraphQL */`
   }
 `
 
+const listZoomMeetingsQuery = /* GraphQL */`
+  query ListZoomMeetings($nextToken: String) {
+    listZoomMeetings(limit: 100, nextToken: $nextToken) {
+      nextToken
+      items { id topic startTime durationMinutes startUrl joinUrl }
+    }
+  }
+`
+
 const listAssignmentCountQuery = /* GraphQL */`
   query ListAssignmentCount {
     listAssignments(limit: 1) {
@@ -261,16 +276,18 @@ const listAssignmentCountQuery = /* GraphQL */`
 // NOTE: no server-side filter — AppSync applies `limit` to the table scan
 // BEFORE filtering, so a filtered query with a small limit silently drops rows.
 const listVideoWatchesQuery = /* GraphQL */`
-  query ListVideoWatchesForDashboard {
-    listVideoWatches(limit: 1000) {
+  query ListVideoWatchesForDashboard($nextToken: String) {
+    listVideoWatches(limit: 1000, nextToken: $nextToken) {
+      nextToken
       items { studentId lessonId percentWatched completed }
     }
   }
 `
 
 const listGradeScalesQuery = /* GraphQL */`
-  query ListGradeScales {
-    listSemesters(limit: 100) {
+  query ListGradeScales($nextToken: String) {
+    listSemesters(limit: 100, nextToken: $nextToken) {
+      nextToken
       items { id courseId isActive gradeA gradeB gradeC gradeD }
     }
   }
@@ -354,8 +371,8 @@ export default function TeacherDashboard() {
 
   async function fetchPendingStudents() {
     try {
-      const result = await (client.graphql({ query: listPendingStudentsQuery }) as any)
-      setPendingStudents(result.data.listStudentProfiles.items)
+      const items = await fetchAllPages(client, listPendingStudentsQuery, 'listStudentProfiles')
+      setPendingStudents(items)
     } catch { /* silent */ }
   }
 
@@ -390,11 +407,11 @@ export default function TeacherDashboard() {
       // so one failure doesn't crash the whole briefing
       const safe = (p: Promise<any>) => p.then(r => r).catch(() => null)
       const [meetingsRes, subsRes, studentsRes, plansRes, pendingRes, assignRes] = await Promise.all([
-        safe(client.graphql({ query: `query { listZoomMeetings(limit: 100) { items { id topic startTime durationMinutes startUrl joinUrl } } }` }) as any),
-        safe(client.graphql({ query: listAllSubmissionsForAlertsQuery }) as any),
-        safe(client.graphql({ query: listActiveStudentsQuery }) as any),
-        safe(client.graphql({ query: listWeeklyPlansQuery }) as any),
-        safe(client.graphql({ query: listPendingStudentsQuery }) as any),
+        safe(fetchAllPages(client, listZoomMeetingsQuery, 'listZoomMeetings')),
+        safe(fetchAllPages(client, listAllSubmissionsForAlertsQuery, 'listSubmissions')),
+        safe(fetchAllPages(client, listActiveStudentsQuery, 'listStudentProfiles')),
+        safe(fetchAllPages(client, listWeeklyPlansQuery, 'listWeeklyPlans')),
+        safe(fetchAllPages(client, listPendingStudentsQuery, 'listStudentProfiles')),
         safe(client.graphql({ query: listAssignmentCountQuery }) as any),
       ])
 
@@ -403,7 +420,7 @@ export default function TeacherDashboard() {
       // Today's meetings
       const dayStart = new Date(now); dayStart.setHours(0,0,0,0)
       const dayEnd = new Date(now); dayEnd.setHours(23,59,59,999)
-      const meetingItems = meetingsRes?.data?.listZoomMeetings?.items ?? []
+      const meetingItems = meetingsRes ?? []
       const meetsToday = (meetingItems as any[])
         .filter(m => { const s = new Date(m.startTime); return s >= dayStart && s <= dayEnd })
         .sort((a: any, b: any) => a.startTime.localeCompare(b.startTime))
@@ -420,23 +437,23 @@ export default function TeacherDashboard() {
           }).join('\n')
 
       // Ungraded submissions
-      const allSubs = subsRes?.data?.listSubmissions?.items ?? []
+      const allSubs = subsRes ?? []
       const ungradedThisWeek = allSubs.filter((s: any) => !s.isArchived && !s.grade && s.submittedAt && new Date(s.submittedAt).getTime() >= weekStartMs)
       const staleUngraded = allSubs.filter((s: any) => !s.isArchived && !s.grade && s.submittedAt && new Date(s.submittedAt) < new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000))
 
       // Students who haven't submitted this week
       const submittedThisWeek = new Set(allSubs.filter((s: any) => !s.isArchived && s.submittedAt && new Date(s.submittedAt).getTime() >= weekStartMs).map((s: any) => s.studentId))
-      const activeStudents: any[] = studentsRes?.data?.listStudentProfiles?.items ?? []
+      const activeStudents: any[] = studentsRes ?? []
       const notSubmitted = activeStudents.filter(s => !submittedThisWeek.has(s.userId) && !submittedThisWeek.has(s.email))
 
       // Next week planned?
-      const weeklyPlans: any[] = plansRes?.data?.listWeeklyPlans?.items ?? []
+      const weeklyPlans: any[] = plansRes ?? []
       const nextWeekPlanned = weeklyPlans.some((p: any) => p.weekStartDate === nextMondayStr)
       const dayOfWeek = now.getDay()
       const isEndOfWeek = dayOfWeek === 4 || dayOfWeek === 5 || dayOfWeek === 0 || dayOfWeek === 6
 
       // Pending students
-      const pendingItems = pendingRes?.data?.listStudentProfiles?.items ?? []
+      const pendingItems = pendingRes ?? []
       const pendingCount = pendingItems.length
       const pendingNames = pendingItems.slice(0, 3).map((s: any) => `${s.firstName} ${s.lastName}`).join(', ')
 
@@ -489,10 +506,8 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
       const now = new Date()
       const dayStart = new Date(now); dayStart.setHours(0,0,0,0)
       const dayEnd = new Date(now); dayEnd.setHours(23,59,59,999)
-      const meetingsRes = await (client.graphql({
-        query: `query { listZoomMeetings(limit: 100) { items { id topic startTime durationMinutes startUrl joinUrl } } }`
-      }) as any)
-      const meetsToday = (meetingsRes.data.listZoomMeetings.items as any[])
+      const meetingItems = await fetchAllPages(client, listZoomMeetingsQuery, 'listZoomMeetings')
+      const meetsToday = (meetingItems as any[])
         .filter(m => { const s = new Date(m.startTime); return s >= dayStart && s <= dayEnd })
         .sort((a: any, b: any) => a.startTime.localeCompare(b.startTime))
       setTodayMeetings(meetsToday)
@@ -510,16 +525,16 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
 
       const safeQ = (p: Promise<any>) => p.then(r => r).catch(() => null)
       const [subsResult, studentsResult, plansResult, assignResult] = await Promise.all([
-        safeQ(client.graphql({ query: listAllSubmissionsForAlertsQuery }) as any),
-        safeQ(client.graphql({ query: listActiveStudentsQuery }) as any),
-        safeQ(client.graphql({ query: listWeeklyPlansQuery }) as any),
+        safeQ(fetchAllPages(client, listAllSubmissionsForAlertsQuery, 'listSubmissions')),
+        safeQ(fetchAllPages(client, listActiveStudentsQuery, 'listStudentProfiles')),
+        safeQ(fetchAllPages(client, listWeeklyPlansQuery, 'listWeeklyPlans')),
         safeQ(client.graphql({ query: listAssignmentCountQuery }) as any),
       ])
 
-      const allSubs = subsResult?.data?.listSubmissions?.items ?? []
+      const allSubs = subsResult ?? []
       const activeStudents: { id: string; userId: string; email: string; firstName: string; lastName: string; courseId?: string | null }[] =
-        studentsResult?.data?.listStudentProfiles?.items ?? []
-      const weeklyPlans: any[] = plansResult?.data?.listWeeklyPlans?.items ?? []
+        studentsResult ?? []
+      const weeklyPlans: any[] = plansResult ?? []
       const hasAnyAssignments = (assignResult?.data?.listAssignments?.items?.length ?? 0) > 0
 
       // Helper: compute due datetime for a plan item (mirrors getDueStatus on dashboard)
@@ -759,8 +774,8 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
 
   async function fetchCourses() {
     try {
-      const result = await client.graphql({ query: listCourses })
-      setCourses(result.data.listCourses.items as Course[])
+      const items = await fetchAllPages<Course>(client, listCourses, 'listCourses')
+      setCourses(items)
     } catch (err) {
       console.error('Error fetching courses:', err)
     } finally {
@@ -799,24 +814,24 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
       // Fetch everything in parallel
       const safeQ = (p: Promise<any>) => p.then(r => r).catch(() => null)
       const [subsRes, plansRes, studentsRes, watchesRes, scalesRes] = await Promise.all([
-        safeQ(client.graphql({ query: listRecentSubmissionsQuery }) as any),
-        safeQ(client.graphql({ query: listWeeklyPlansQuery }) as any),
-        safeQ(client.graphql({ query: listActiveStudentsQuery }) as any),
-        safeQ(client.graphql({ query: listVideoWatchesQuery }) as any),
-        safeQ(client.graphql({ query: listGradeScalesQuery }) as any),
+        safeQ(fetchAllPages(client, listRecentSubmissionsQuery, 'listSubmissions')),
+        safeQ(fetchAllPages(client, listWeeklyPlansQuery, 'listWeeklyPlans')),
+        safeQ(fetchAllPages(client, listActiveStudentsQuery, 'listStudentProfiles')),
+        safeQ(fetchAllPages(client, listVideoWatchesQuery, 'listVideoWatches')),
+        safeQ(fetchAllPages(client, listGradeScalesQuery, 'listSemesters')),
       ])
 
-      const allSubs = subsRes?.data?.listSubmissions?.items ?? []
-      const allPlans = plansRes?.data?.listWeeklyPlans?.items ?? []
+      const allSubs = subsRes ?? []
+      const allPlans = plansRes ?? []
       const activeStudents: { id: string; userId: string; email: string; firstName: string; lastName: string; courseId?: string | null }[] =
-        studentsRes?.data?.listStudentProfiles?.items ?? []
-      setGradeScales(scalesRes?.data?.listSemesters?.items ?? [])
+        studentsRes ?? []
+      setGradeScales(scalesRes ?? [])
 
       // Best watch progress per student+lesson. VideoWatch.studentId is the
       // Cognito sub (see app/lib/identity.ts) and lessonId is the Lesson row id
       // — the same ids the plan items and active students carry below.
       const watchByKey = new Map<string, { percent: number; completed: boolean }>()
-      for (const w of watchesRes?.data?.listVideoWatches?.items ?? []) {
+      for (const w of watchesRes ?? []) {
         const key = `${w.studentId}:${w.lessonId}`
         const prev = watchByKey.get(key)
         const percent = w.percentWatched ?? 0

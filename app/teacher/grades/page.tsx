@@ -10,6 +10,7 @@ import DiagramRenderer from '../../components/DiagramRenderer'
 import TeacherNav from '../../components/TeacherNav'
 import { useRoleGuard } from '../../hooks/useRoleGuard'
 import { apiFetch } from '@/app/lib/apiFetch'
+import { fetchAllPages } from '@/app/lib/fetchAllPages'
 import outputs from '../../../amplify_outputs.json'
 
 /**
@@ -81,8 +82,9 @@ function SubmissionFile({ url, alt, inline, onView }: { url: string; alt: string
 const client = generateClient()
 
 const listSubmissionsWithDetails = /* GraphQL */`
-  query ListSubmissionsWithDetails {
-    listSubmissions(limit: 1000) {
+  query ListSubmissionsWithDetails($nextToken: String) {
+    listSubmissions(limit: 1000, nextToken: $nextToken) {
+      nextToken
       items {
         id
         studentId
@@ -110,8 +112,9 @@ const listSubmissionsWithDetails = /* GraphQL */`
 `
 
 const listStudentProfilesQuery = /* GraphQL */`
-  query ListStudentProfiles {
-    listStudentProfiles(limit: 500) {
+  query ListStudentProfiles($nextToken: String) {
+    listStudentProfiles(limit: 500, nextToken: $nextToken) {
+      nextToken
       items {
         id
         userId
@@ -144,8 +147,9 @@ const getLessonTemplateQuestions = /* GraphQL */`
 `
 
 const listVideoWatchesQuery = /* GraphQL */`
-  query ListVideoWatches {
-    listVideoWatches(limit: 2000) {
+  query ListVideoWatches($nextToken: String) {
+    listVideoWatches(limit: 2000, nextToken: $nextToken) {
+      nextToken
       items {
         id
         studentId
@@ -540,8 +544,7 @@ function GradingPageInner() {
 
   async function silentRefresh() {
     try {
-      const result = await client.graphql({ query: listSubmissionsWithDetails }) as any
-      const items = result.data.listSubmissions.items as Submission[]
+      const items = await fetchAllPages<Submission>(client, listSubmissionsWithDetails, 'listSubmissions')
       setSubmissions(items)
       setLastRefreshed(new Date())
     } catch { /* silent */ }
@@ -550,8 +553,7 @@ function GradingPageInner() {
   async function handleManualRefresh() {
     setRefreshing(true)
     try {
-      const result = await client.graphql({ query: listSubmissionsWithDetails }) as any
-      const items = result.data.listSubmissions.items as Submission[]
+      const items = await fetchAllPages<Submission>(client, listSubmissionsWithDetails, 'listSubmissions')
       setSubmissions(items)
       setLastRefreshed(new Date())
     } catch (err) { console.error(err) }
@@ -560,8 +562,7 @@ function GradingPageInner() {
 
   async function fetchStudentProfiles() {
     try {
-      const result = await client.graphql({ query: listStudentProfilesQuery }) as any
-      const items = result.data.listStudentProfiles.items as { id: string; userId: string; email: string; firstName: string; lastName: string; status?: string | null }[]
+      const items = await fetchAllPages<{ id: string; userId: string; email: string; firstName: string; lastName: string; status?: string | null }>(client, listStudentProfilesQuery, 'listStudentProfiles')
       const map: Record<string, string> = {}
       const archived = new Set<string>()
       for (const p of items) {
@@ -585,8 +586,7 @@ function GradingPageInner() {
 
   async function fetchVideoWatches() {
     try {
-      const result = await client.graphql({ query: listVideoWatchesQuery }) as any
-      const items = result.data.listVideoWatches.items as VideoWatchRecord[]
+      const items = await fetchAllPages<VideoWatchRecord>(client, listVideoWatchesQuery, 'listVideoWatches')
       const map: Record<string, VideoWatchRecord> = {}
       for (const w of items) {
         const key = `${w.studentId}_${w.lessonId}`
@@ -602,8 +602,7 @@ function GradingPageInner() {
 
   async function fetchSubmissions() {
     try {
-      const result = await client.graphql({ query: listSubmissionsWithDetails }) as any
-      const items = result.data.listSubmissions.items as Submission[]
+      const items = await fetchAllPages<Submission>(client, listSubmissionsWithDetails, 'listSubmissions')
       setSubmissions(items)
       setLastRefreshed(new Date())
     } catch (err) {
@@ -616,11 +615,12 @@ function GradingPageInner() {
   async function fetchTeachingVoice() {
     try {
       const userId = user?.userId || user?.username || ''
-      const result = await (client.graphql({
-        query: `query GetTeacherProfile($userId: String!) { listTeacherProfiles(filter: { userId: { eq: $userId } }, limit: 500) { items { teachingVoice } } }`,
-        variables: { userId }
-      }) as any)
-      const items = result.data?.listTeacherProfiles?.items || []
+      const items = await fetchAllPages<{ teachingVoice: string | null }>(
+        client,
+        `query GetTeacherProfile($userId: String!, $nextToken: String) { listTeacherProfiles(filter: { userId: { eq: $userId } }, limit: 500, nextToken: $nextToken) { nextToken items { teachingVoice } } }`,
+        'listTeacherProfiles',
+        { userId },
+      )
       if (items.length > 0) setTeachingVoice(items[0].teachingVoice || '')
     } catch { /* silent */ }
   }
