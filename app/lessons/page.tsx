@@ -998,10 +998,23 @@ function LessonPageInner() {
     }
     showWorkQuestions.sort((a, b) => (swSortKeys.get(a.id) ?? 0) - (swSortKeys.get(b.id) ?? 0))
 
+    // Display numbers must match the digital view and the teacher pages, which
+    // both count questions SKIPPING section headers. The stored `order` is the
+    // raw source position with headers included, so a lesson with 3 headers
+    // printed its 20th question as #23. Legacy scan-imported lessons encode
+    // order as pageIndex*1000 + seq and keep their page-relative fallback.
+    const printQNum = new Map<string, number>()
+    ;[...allQuestions]
+      .filter(q => q.questionType !== 'section_header')
+      .sort((a, b) => a.order - b.order)
+      .forEach((q, i) => printQNum.set(q.id, i + 1))
+
     // Build question HTML — each question shows its text, diagram (if any), and work box
     const questionsHTML = showWorkQuestions.map(q => {
       const bookNumMatch = q.questionText.match(/^(\d+\.)\s/)
-      const qNumLabel = bookNumMatch ? bookNumMatch[1] : `#${q.order % 1000}.`
+      const qNumLabel = bookNumMatch ? bookNumMatch[1]
+        : q.order >= 1000 ? `#${q.order % 1000}.`
+        : `#${printQNum.get(q.id) ?? q.order}.`
       const qBody = renderMath(q.questionText.replace(/^\d+\.\s*/, ''))
       const diagramSrc = diagramDataUrls[q.id]
       const diagramHTML = diagramSrc
