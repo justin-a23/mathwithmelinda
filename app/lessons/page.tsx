@@ -95,9 +95,10 @@ const findVideoWatchQuery = /* GraphQL */`
 `
 
 const findSubmissionsQuery = /* GraphQL */`
-  query FindSubmissions($studentId: String!) {
-    listSubmissions(filter: { studentId: { eq: $studentId } }, limit: 100) {
-      items { id content status returnReason answers }
+  query FindSubmissions($studentId: String!, $nextToken: String) {
+    listSubmissionsByStudentId(studentId: $studentId, limit: 1000, nextToken: $nextToken) {
+      items { id content status returnReason isArchived submittedAt }
+      nextToken
     }
   }
 `
@@ -439,17 +440,33 @@ function LessonPageInner() {
 
     async function checkExistingSubmission() {
       try {
-        const res = await (client.graphql({
-          query: findSubmissionsQuery,
-          variables: { studentId }
-        }) as any)
-        const items = res.data.listSubmissions.items as any[]
-        const existing = items.find(s => {
+        // Index-backed query with a pagination loop. This lookup used to be a
+        // filtered listSubmissions scan reading only the first 100-item scan
+        // page — once the class's table outgrew that page, a returned
+        // submission could be missed entirely, and resubmitting then CREATED a
+        // duplicate row (one stuck "returned"/ungraded, one graded) instead of
+        // updating the returned one.
+        const items: any[] = []
+        let nextToken: string | null = null
+        do {
+          const res = await (client.graphql({
+            query: findSubmissionsQuery,
+            variables: { studentId, nextToken }
+          }) as any)
+          items.push(...res.data.listSubmissionsByStudentId.items)
+          nextToken = res.data.listSubmissionsByStudentId.nextToken
+        } while (nextToken)
+        const matches = items.filter(s => {
+          if (s.isArchived) return false
           try {
             const c = JSON.parse(s.content || '{}')
             return c.lessonId === lessonId
           } catch { return false }
         })
+        // If duplicates exist (from the pre-fix bug), the returned one is the
+        // live thread — resubmitting must update it. Otherwise take the newest.
+        const existing = matches.find(s => s.status === 'returned')
+          ?? matches.sort((a, b) => (b.submittedAt || '').localeCompare(a.submittedAt || ''))[0]
         if (!existing) return
         setExistingSubmissionId(existing.id)
         if (existing.status === 'returned') {
