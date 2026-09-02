@@ -40,7 +40,7 @@ const createLessonTemplateInline = /* GraphQL */`
 import TeacherNav from '../../../components/TeacherNav'
 import { useRoleGuard } from '../../../hooks/useRoleGuard'
 import MathToolbar from '../../../components/MathToolbar'
-import MathRenderer from '../../../components/MathRenderer'
+import MathRenderer, { MATH_DELIMITER_SPLIT } from '../../../components/MathRenderer'
 import DiagramRenderer from '../../../components/DiagramRenderer'
 import { renderToStaticMarkup } from 'react-dom/server'
 
@@ -876,10 +876,9 @@ export default function LessonLibraryPage() {
     const { default: katex } = await import('katex')
 
     function renderMath(text: string): string {
-      // Delimiters mirror the MathRenderer component: \(...\), \[...\], $...$, $$...$$.
-      // $$...$$ must be tried before $...$, and the $-patterns require a non-empty
-      // body and no newlines so a literal "$5 to $10" sentence isn't matched.
-      const parts = text.split(/(\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$\$[^$]+?\$\$|\$[^$\n]+?\$)/g)
+      // Shared delimiter pattern from MathRenderer: \(...\), \[...\], $...$, $$...$$,
+      // with \$ escapes honored inside $-bodies so money like $\$18$ renders as $18.
+      const parts = text.split(MATH_DELIMITER_SPLIT)
       return parts.map(part => {
         if (part.startsWith('\\[') && part.endsWith('\\]')) {
           return katex.renderToString(part.slice(2, -2), { displayMode: true, throwOnError: false })
@@ -1031,10 +1030,9 @@ export default function LessonLibraryPage() {
     const { default: katex } = await import('katex')
 
     function renderMath(text: string): string {
-      // Delimiters mirror the MathRenderer component: \(...\), \[...\], $...$, $$...$$.
-      // $$...$$ must be tried before $...$, and the $-patterns require a non-empty
-      // body and no newlines so a literal "$5 to $10" sentence isn't matched.
-      const parts = text.split(/(\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$\$[^$]+?\$\$|\$[^$\n]+?\$)/g)
+      // Shared delimiter pattern from MathRenderer: \(...\), \[...\], $...$, $$...$$,
+      // with \$ escapes honored inside $-bodies so money like $\$18$ renders as $18.
+      const parts = text.split(MATH_DELIMITER_SPLIT)
       return parts.map(part => {
         if (part.startsWith('\\[') && part.endsWith('\\]')) {
           return katex.renderToString(part.slice(2, -2), { displayMode: true, throwOnError: false })

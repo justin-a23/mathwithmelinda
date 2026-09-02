@@ -4,7 +4,7 @@ import { useAuthenticator } from '@aws-amplify/ui-react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState, useRef, Suspense } from 'react'
 import { generateClient } from 'aws-amplify/api'
-import MathRenderer from '../components/MathRenderer'
+import MathRenderer, { MATH_DELIMITER_SPLIT } from '../components/MathRenderer'
 import DiagramRenderer from '../components/DiagramRenderer'
 import MathInput from '../components/MathInput'
 import StudentNav from '../components/StudentNav'
@@ -957,10 +957,9 @@ function LessonPageInner() {
 
     const MULTIROW_RE = /\\begin\{(cases|aligned|align|array|gathered|gather|split|matrix|pmatrix|bmatrix|vmatrix|smallmatrix)\*?\}/
     function renderMath(text: string): string {
-      // Delimiters mirror the MathRenderer component: \(...\), \[...\], $...$, $$...$$.
-      // $$...$$ must be tried before $...$, and the $-patterns require a non-empty
-      // body and no newlines so a literal "$5 to $10" sentence isn't matched.
-      const parts = text.split(/(\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$\$[^$]+?\$\$|\$[^$\n]+?\$)/g)
+      // Shared delimiter pattern from MathRenderer: \(...\), \[...\], $...$, $$...$$,
+      // with \$ escapes honored inside $-bodies so money like $\$18$ renders as $18.
+      const parts = text.split(MATH_DELIMITER_SPLIT)
       return parts.map(part => {
         if (part.startsWith('\\[') && part.endsWith('\\]')) {
           return katex.renderToString(part.slice(2, -2), { displayMode: true, throwOnError: false })

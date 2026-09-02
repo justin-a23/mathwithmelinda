@@ -18,12 +18,21 @@ import katex from 'katex'
 
 const MULTIROW_ENVIRONMENTS = /\\begin\{(cases|aligned|align|array|gathered|gather|split|matrix|pmatrix|bmatrix|vmatrix|smallmatrix)\*?\}/
 
+// Split pattern for all four delimiter styles. Order matters: $$...$$ must be
+// tried before $...$ so we don't split a display-math chunk into two inline
+// chunks. The $-style patterns avoid matching newlines (math is normally
+// inline) and require a non-empty body. Inside a $-delimited body, `\$` (and
+// any other backslash escape) is consumed as a pair, so a money amount written
+// as `$\$18$` parses as ONE math chunk whose tex is `\$18` — which KaTeX
+// renders as a literal dollar sign. Without that, `$\$18$ ... $\$37$` split as
+// `$\$` + `18` + `$ ... $`, turning the prose between two amounts into math.
+//
+// The print popups in app/lessons and app/teacher/library import this same
+// pattern — change it here and every renderer changes together.
+export const MATH_DELIMITER_SPLIT = /(\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$\$(?:\\[\s\S]|[^$])+?\$\$|\$(?:\\[\s\S]|[^$\n])+?\$)/g
+
 function renderMixedMath(input: string): string {
-  // Split on all four delimiter styles. Order matters: $$...$$ must be tried
-  // before $...$ so we don't split a display-math chunk into two inline chunks.
-  // The $-style patterns avoid matching newlines (math is normally inline) and
-  // require a non-empty body so a literal "$5 to $10" sentence isn't matched.
-  const parts = input.split(/(\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$\$[^$]+?\$\$|\$[^$\n]+?\$)/g)
+  const parts = input.split(MATH_DELIMITER_SPLIT)
   return parts.map(part => {
     if (part.startsWith('\\[') && part.endsWith('\\]')) {
       return safeKatex(part.slice(2, -2), true)
