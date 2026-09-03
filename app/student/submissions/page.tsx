@@ -11,8 +11,8 @@ import { apiFetch } from '@/app/lib/apiFetch'
 import { useResolvedStudent } from '@/app/hooks/useResolvedStudent'
 
 const listStudentSubmissions = /* GraphQL */`
-  query ListStudentSubmissions($studentId: String!) {
-    listSubmissions(filter: { studentId: { eq: $studentId } }, limit: 500) {
+  query ListStudentSubmissions($studentId: String!, $nextToken: String) {
+    listSubmissionsByStudentId(studentId: $studentId, limit: 1000, nextToken: $nextToken) {
       items {
         id
         content
@@ -22,7 +22,9 @@ const listStudentSubmissions = /* GraphQL */`
         grade
         teacherComment
         submittedAt
+        isArchived
       }
+      nextToken
     }
   }
 `
@@ -137,17 +139,27 @@ export default function StudentSubmissions() {
 
     async function loadSubmissions() {
       try {
-        const [result, profRes] = await Promise.all([
-          client.graphql({ query: listStudentSubmissions, variables: { studentId } }) as any,
-          client.graphql({ query: getEnrolledAtQuery, variables: { userId: studentId } }) as any,
-        ])
+        // Index-backed with a pagination loop (was a filtered listSubmissions
+        // scan reading one page — the same trap that once hid a returned
+        // submission from the lesson page and caused a duplicate row).
+        const rawItems: StudentSubmission[] = []
+        let nextToken: string | null = null
+        do {
+          const page = await (client.graphql({ query: listStudentSubmissions, variables: { studentId, nextToken } }) as any)
+          rawItems.push(...page.data.listSubmissionsByStudentId.items)
+          nextToken = page.data.listSubmissionsByStudentId.nextToken
+        } while (nextToken)
+        const profRes = await (client.graphql({ query: getEnrolledAtQuery, variables: { userId: studentId } }) as any)
         // Returning students (re-enrolled after a year away) get a fresh
         // enrolledAt — work submitted before it belongs to a previous year and
         // stays out of this year's view, same cutoff the dashboard and grades
         // pages apply. Null enrolledAt (legacy profiles) shows everything.
+        // Archived rows are the teacher's clean-up (including superseded
+        // duplicates) — never part of the student's Turned In view.
         const enrolledAt = profRes?.data?.listStudentProfilesByUserId?.items?.[0]?.enrolledAt || null
         const enrolledMs = enrolledAt ? new Date(enrolledAt).getTime() : null
-        const items: StudentSubmission[] = (result.data.listSubmissions.items as StudentSubmission[])
+        const items: StudentSubmission[] = rawItems
+          .filter(s => !(s as any).isArchived)
           .filter(s => !enrolledMs || !s.submittedAt || new Date(s.submittedAt).getTime() >= enrolledMs)
         items.sort((a, b) => {
           const da = a.submittedAt ? new Date(a.submittedAt).getTime() : 0

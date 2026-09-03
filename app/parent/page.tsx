@@ -91,6 +91,7 @@ const listSubmissionsByStudent = /* GraphQL */`
         teacherComment
         submittedAt
         returnDueDate
+        isArchived
         assignment {
           id
           title
@@ -300,7 +301,10 @@ export default function ParentDashboard() {
         query: listSubmissionsByStudent,
         variables: { studentId: studentSub }
       }) as any
-      const items = (result.data as any).listSubmissionsByStudentId.items as Submission[]
+      // Archived rows are teacher clean-up (including superseded duplicates) —
+      // not part of the parent's view of current work.
+      const items = ((result.data as any).listSubmissionsByStudentId.items as Submission[])
+        .filter((s: any) => !s.isArchived)
       const sorted = items.sort((a, b) => {
         if (!a.submittedAt) return 1
         if (!b.submittedAt) return -1

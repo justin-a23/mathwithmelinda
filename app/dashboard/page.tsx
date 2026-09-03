@@ -124,6 +124,7 @@ const listMySubmissionsQuery = /* GraphQL */`
         returnReason
         returnDueDate
         submittedAt
+        isArchived
       }
     }
   }
@@ -428,7 +429,7 @@ export default function Dashboard() {
 
         // Build submitted lesson IDs — include returned ones so they stay hidden from the
         // weekly schedule (students reach them via the "Needs Revision" banner button)
-        const subItems = subsResult.data.listSubmissionsByStudentId.items as { id: string; content: string | null; status?: string | null; returnReason?: string | null; returnDueDate?: string | null; submittedAt?: string | null }[]
+        const subItems = subsResult.data.listSubmissionsByStudentId.items as { id: string; content: string | null; status?: string | null; returnReason?: string | null; returnDueDate?: string | null; submittedAt?: string | null; isArchived?: boolean | null }[]
         const lessonIds = new Set<string>()
         for (const sub of subItems) {
           try {
@@ -447,10 +448,13 @@ export default function Dashboard() {
           }
         }
 
-        // Find returned submissions and parse their lesson info
+        // Find returned submissions and parse their lesson info. Archived rows
+        // are excluded: when a returned submission is superseded (e.g. a
+        // resubmit that landed as a new row) the teacher-side archive is what
+        // retires it, and it must not keep a "Needs Revision" banner alive.
         const returned: ReturnedSubmission[] = []
         for (const sub of subItems) {
-          if (sub.status === 'returned') {
+          if (sub.status === 'returned' && !sub.isArchived) {
             try {
               const c = JSON.parse(sub.content || '{}')
               let itemId = c.weeklyPlanItemId || lessonToItemId[c.lessonId] || ''
