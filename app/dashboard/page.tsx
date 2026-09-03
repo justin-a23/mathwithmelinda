@@ -9,6 +9,7 @@ import StudentNav from '../components/StudentNav'
 import { apiFetch } from '@/app/lib/apiFetch'
 import { useRoleGuard } from '@/app/hooks/useRoleGuard'
 import { hardSignOut } from '@/app/lib/hardSignOut'
+import { lessonDisplayTitle } from '@/app/lib/lessonTitle'
 const findPlanItemByLessonQuery = /* GraphQL */`
   query FindPlanItemByLesson($filter: ModelWeeklyPlanItemFilterInput) {
     listWeeklyPlanItems(filter: $filter, limit: 1000) {
@@ -1186,7 +1187,7 @@ export default function Dashboard() {
                               )}
                             </div>
                             <div style={{ fontFamily: 'var(--font-display)', fontSize: '18px', color: 'var(--foreground)' }}>
-                              {item.lesson?.order ? 'Lesson ' + item.lesson.order + ' — ' : ''}{item.lesson?.title || 'Lesson'}
+                              {lessonDisplayTitle(item.lesson?.order, item.lesson?.title)}
                             </div>
                           </div>
                           <div style={{ textAlign: 'right', flexShrink: 0 }}>

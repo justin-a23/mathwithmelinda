@@ -7,6 +7,7 @@ import { generateClient } from 'aws-amplify/api'
 import { listCourses } from '../../../src/graphql/queries'
 import TeacherNav from '../../components/TeacherNav'
 import { useRoleGuard } from '../../hooks/useRoleGuard'
+import { lessonDisplayTitle } from '@/app/lib/lessonTitle'
 
 const client = generateClient()
 
@@ -406,7 +407,7 @@ export default function ParticipationPage() {
                   style={{ width: '100%', maxWidth: '460px', padding: '10px 12px', border: '1px solid var(--gray-light)', borderRadius: '6px', fontSize: '14px', fontFamily: 'var(--font-body)', background: 'var(--background)', color: 'var(--foreground)' }}>
                   {options.map(o => (
                     <option key={o.itemId} value={o.itemId}>
-                      Week of {weekLabel(o.weekStartDate)} · {o.dayOfWeek} — {o.lessonOrder ? `Lesson ${o.lessonOrder} — ` : ''}{o.lessonTitle}
+                      Week of {weekLabel(o.weekStartDate)} · {o.dayOfWeek} — {lessonDisplayTitle(o.lessonOrder, o.lessonTitle)}
                     </option>
                   ))}
                 </select>

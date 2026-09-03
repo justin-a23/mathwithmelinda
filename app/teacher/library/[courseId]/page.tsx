@@ -43,6 +43,7 @@ import MathToolbar from '../../../components/MathToolbar'
 import MathRenderer, { MATH_DELIMITER_SPLIT } from '../../../components/MathRenderer'
 import DiagramRenderer from '../../../components/DiagramRenderer'
 import { renderToStaticMarkup } from 'react-dom/server'
+import { lessonBareTitle } from '@/app/lib/lessonTitle'
 
 const client = generateClient()
 
@@ -464,7 +465,7 @@ export default function LessonLibraryPage() {
     if (!videoFile || !course) return
     try {
       const courseFolder = COURSE_FOLDERS[course.title] || course.title.toLowerCase().replace(/\s+/g, '')
-      const filename = `${course.title} - Lesson ${lesson.lessonNumber} - ${lesson.title}.mp4`
+      const filename = `${course.title} - Lesson ${lesson.lessonNumber} - ${lessonBareTitle(lesson.title)}.mp4`
       const key = await uploadFile(videoFile, courseFolder, filename, 'video/mp4', setVideoUpload)
       setEditForm(f => ({ ...f, videoUrl: key }))
       setIsDirty(true)

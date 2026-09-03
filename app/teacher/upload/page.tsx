@@ -8,6 +8,7 @@ import { listCourses } from '../../../src/graphql/queries'
 import TeacherNav from '../../components/TeacherNav'
 import { useRoleGuard } from '../../hooks/useRoleGuard'
 import { apiFetch } from '@/app/lib/apiFetch'
+import { lessonBareTitle } from '@/app/lib/lessonTitle'
 
 const client = generateClient()
 
@@ -70,7 +71,7 @@ export default function UploadVideo() {
     setProgress(0)
 
     try {
-      const filename = `${selectedCourse} - Lesson ${lessonNumber} - ${lessonTitle}.mp4`
+      const filename = `${selectedCourse} - Lesson ${lessonNumber} - ${lessonBareTitle(lessonTitle)}.mp4`
 
       const res = await apiFetch('/api/upload', {
         method: 'POST',
@@ -101,7 +102,7 @@ export default function UploadVideo() {
             query: createLesson,
             variables: {
               input: {
-                title: `Lesson ${lessonNumber} - ${lessonTitle}`,
+                title: `Lesson ${lessonNumber} - ${lessonBareTitle(lessonTitle)}`,
                 order: parseFloat(lessonNumber),
                 videoUrl: `https://dgmfzo1xk5r4e.cloudfront.net/${key}`,
                 isPublished: false,

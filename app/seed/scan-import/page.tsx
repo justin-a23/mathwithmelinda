@@ -6,6 +6,7 @@ import { apiFetch } from '@/app/lib/apiFetch'
 import { useRoleGuard } from '@/app/hooks/useRoleGuard'
 import { listCourses, listLessonTemplates } from '../../../src/graphql/queries'
 import { createAssignmentQuestion, updateLessonTemplate } from '../../../src/graphql/mutations'
+import { lessonDisplayTitle } from '@/app/lib/lessonTitle'
 /** Render every page of a PDF File to JPEG Blobs at 2x resolution */
 async function renderPdfToImages(file: File): Promise<Blob[]> {
   // Dynamic import — pdfjs-dist uses DOMMatrix which doesn't exist during SSR
@@ -498,7 +499,7 @@ export default function ScanImportPage() {
               {questionCount} questions imported
             </div>
             <div style={{ color: '#166534', fontSize: '14px', marginBottom: '6px' }}>
-              {selectedLessonObj ? `Lesson ${selectedLessonObj.lessonNumber} — ${selectedLessonObj.title}` : ''}
+              {selectedLessonObj ? lessonDisplayTitle(selectedLessonObj.lessonNumber, selectedLessonObj.title) : ''}
             </div>
             {instructions.trim() && (
               <div style={{ color: '#166534', fontSize: '13px', marginBottom: '24px' }}>Instructions saved ✓</div>

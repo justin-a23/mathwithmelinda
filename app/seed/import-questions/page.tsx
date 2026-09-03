@@ -5,6 +5,7 @@ import { generateClient } from 'aws-amplify/api'
 import { useRoleGuard } from '@/app/hooks/useRoleGuard'
 import { listCourses, listLessonTemplates } from '../../../src/graphql/queries'
 import { createAssignmentQuestion, updateLessonTemplate } from '../../../src/graphql/mutations'
+import { lessonDisplayTitle } from '@/app/lib/lessonTitle'
 
 const client = generateClient()
 
@@ -241,7 +242,7 @@ export default function ImportQuestionsPage() {
               Imported {parsed.filter(r => r.type !== 'instructions' && r.type !== 'section_header').length} questions
             </div>
             <div style={{ color: '#166534', fontSize: '14px', marginBottom: '12px' }}>
-              Into: {selectedLessonObj ? `Lesson ${selectedLessonObj.lessonNumber} — ${selectedLessonObj.title}` : ''}
+              Into: {selectedLessonObj ? lessonDisplayTitle(selectedLessonObj.lessonNumber, selectedLessonObj.title) : ''}
             </div>
             {instructionsResult === 'ok' && (
               <div style={{ color: '#166534', fontSize: '13px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '6px' }}>

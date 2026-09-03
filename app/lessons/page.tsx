@@ -10,6 +10,7 @@ import MathInput from '../components/MathInput'
 import StudentNav from '../components/StudentNav'
 import SubmissionMethodPicker from '../components/SubmissionMethodPicker'
 import { apiFetch } from '@/app/lib/apiFetch'
+import { lessonDisplayTitle } from '@/app/lib/lessonTitle'
 import { useResolvedStudent } from '@/app/hooks/useResolvedStudent'
 import { useRoleGuard } from '@/app/hooks/useRoleGuard'
 
@@ -1165,7 +1166,7 @@ function LessonPageInner() {
               {course?.title || 'Math with Melinda'}
             </p>
             <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '28px', color: 'var(--foreground)', marginBottom: '8px' }}>
-              {lesson?.order ? `Lesson ${lesson.order} — ` : ''}{lesson?.title || 'Lesson'}
+              {lessonDisplayTitle(lesson?.order, lesson?.title)}
             </h1>
             <p style={{ fontSize: '13px', color: 'var(--gray-mid)', marginBottom: '32px' }}>
               {planItem.dueTime

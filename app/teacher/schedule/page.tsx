@@ -7,6 +7,7 @@ import { generateClient } from 'aws-amplify/api'
 import { listCourses, listStudentProfiles } from '../../../src/graphql/queries'
 import TeacherNav from '../../components/TeacherNav'
 import { useRoleGuard } from '../../hooks/useRoleGuard'
+import { lessonDisplayTitle } from '@/app/lib/lessonTitle'
 
 const client = generateClient()
 
@@ -365,7 +366,7 @@ function ScheduleWeekInner() {
       const dups = [...byTemplate.values()].filter(rows => rows.length > 1)
       if (dups.length > 0) {
         const lines = dups.map(rows =>
-          `• Lesson ${rows[0].lessonNumber} — ${rows[0].lessonTitle} (${rows.map(r => r.day).join(' and ')})`
+          `• ${lessonDisplayTitle(rows[0].lessonNumber, rows[0].lessonTitle)} (${rows.map(r => r.day).join(' and ')})`
         ).join('\n')
         const proceed = window.confirm(
           `You've scheduled the same lesson more than once this week:\n\n${lines}\n\n` +
