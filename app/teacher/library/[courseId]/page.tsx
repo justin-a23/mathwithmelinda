@@ -996,6 +996,152 @@ export default function LessonLibraryPage() {
     pw.document.close()
   }
 
+  // In-class participation sheet: EVERY question on paper — digital questions
+  // included — with choices printed for circling and a blank work box in place
+  // of any typed input. Melinda prints a stack of these for days the class
+  // works a lesson together in the room instead of on devices.
+  async function printParticipationWorksheet(lesson: LessonTemplate) {
+    const allQuestions = [...questions].sort((a, b) => a.order - b.order)
+    if (allQuestions.filter(q => q.questionType !== 'section_header').length === 0) {
+      alert('No questions to print.')
+      return
+    }
+
+    // Diagram images as base64 (presigned-URL fallback), same as the other sheets
+    const diagramDataUrls: Record<string, string> = {}
+    for (const q of allQuestions) {
+      const url = diagramUrls[q.id]
+      if (!url) continue
+      try {
+        const res = await fetch(url)
+        const blob = await res.blob()
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = () => resolve(reader.result as string)
+          reader.onerror = reject
+          reader.readAsDataURL(blob)
+        })
+        diagramDataUrls[q.id] = dataUrl
+      } catch {
+        diagramDataUrls[q.id] = url
+      }
+    }
+
+    const specSvgs = renderDiagramSpecSvgs(allQuestions)
+    const { default: katex } = await import('katex')
+
+    function renderMath(text: string): string {
+      const parts = text.split(MATH_DELIMITER_SPLIT)
+      return parts.map(part => {
+        if (part.startsWith('\\[') && part.endsWith('\\]')) {
+          return katex.renderToString(part.slice(2, -2), { displayMode: true, throwOnError: false })
+        }
+        if (part.startsWith('\\(') && part.endsWith('\\)')) {
+          return katex.renderToString(part.slice(2, -2), { displayMode: false, throwOnError: false })
+        }
+        if (part.startsWith('$$') && part.endsWith('$$') && part.length >= 4) {
+          return katex.renderToString(part.slice(2, -2), { displayMode: true, throwOnError: false })
+        }
+        if (part.startsWith('$') && part.endsWith('$') && part.length >= 2) {
+          return katex.renderToString(part.slice(1, -1), { displayMode: false, throwOnError: false })
+        }
+        return part.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      }).join('')
+    }
+
+    let qNum = 0
+    const questionsHTML = allQuestions.map(q => {
+      if (q.questionType === 'section_header') {
+        return `<div class="section-header">${renderMath(q.questionText || 'Section Header')}</div>`
+      }
+      qNum++
+      const bookNumMatch = q.questionText.match(/^(\d+\.)\s/)
+      const qNumLabel = bookNumMatch ? bookNumMatch[1] : `${qNum}.`
+      const qBody = renderMath(q.questionText.replace(/^\d+\.\s*/, ''))
+      const diagramSrc = diagramDataUrls[q.id]
+      const diagramHTML = diagramSrc
+        ? `<div class="diagram"><img src="${diagramSrc}" class="diagram-img" /></div>`
+        : specSvgs[q.id]
+          ? `<div class="diagram diagram-spec">${specSvgs[q.id]}</div>`
+          : ''
+
+      let answerHTML = ''
+      if ((q.questionType === 'multiple_choice' || q.questionType === 'multiple_choice_multi') && q.choices) {
+        const marker = q.questionType === 'multiple_choice' ? 'bubble-round' : 'bubble-square'
+        const note = q.questionType === 'multiple_choice_multi' ? '<div class="mc-note">Mark all that apply</div>' : ''
+        const choicesHTML = q.choices.split('\n').filter(Boolean).map((c, i) => {
+          const letter = String.fromCharCode(65 + i)
+          return `<div class="choice"><span class="bubble ${marker}"></span><span class="choice-letter">${letter}.</span> ${renderMath(c)}</div>`
+        }).join('')
+        answerHTML = `${note}<div class="choices">${choicesHTML}</div>`
+      } else if (q.questionType === 'show_work') {
+        answerHTML = '<div class="work-box"></div>'
+      } else {
+        // number / short_text — a shorter blank box replaces the typed input
+        answerHTML = '<div class="work-box answer-box"></div>'
+      }
+
+      return `<div class="work-item">
+        <div class="work-label"><span class="qnum">${qNumLabel}</span> ${qBody}</div>
+        ${diagramHTML}
+        ${answerHTML}
+      </div>`
+    }).join('')
+
+    const printDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+
+    const html = `<!DOCTYPE html><html><head>
+      <meta charset="utf-8">
+      <title>Participation Worksheet — ${lesson.title}</title>
+      <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+      <style>
+        *{box-sizing:border-box}
+        body{font-family:'Times New Roman',serif;max-width:720px;margin:0 auto;padding:40px;color:#111;font-size:15px}
+        .header{text-align:center;margin-bottom:24px;padding-bottom:14px;border-bottom:2px solid #333}
+        .header h1{font-size:22px;margin:0 0 2px}
+        .header .lessonnum{font-size:13px;color:#777;margin-bottom:2px}
+        .header .course{font-size:13px;color:#555;margin-bottom:6px}
+        .header .instruction{font-size:12px;color:#666;font-style:italic;margin-bottom:10px}
+        .header .fields{display:flex;justify-content:space-between;margin-top:10px;gap:24px}
+        .header .field{flex:1;font-size:13px;color:#333;padding-bottom:3px;border-bottom:1px solid #888}
+        .diagram{margin:8px 0 12px;max-width:320px}
+        .diagram-img{width:100%;border:1px solid #ccc;border-radius:4px;display:block}
+        .diagram-spec svg{max-width:100%;height:auto;display:block;background:#fff;border:1px solid #ccc;border-radius:4px}
+        .work-item{margin-bottom:18px;page-break-inside:avoid}
+        .work-label{margin-bottom:6px;line-height:1.6}
+        .qnum{font-weight:bold;font-size:15px;margin-right:6px}
+        .work-box{border:1px solid #bbb;border-radius:4px;height:120px}
+        .answer-box{height:70px}
+        .choices{display:flex;flex-direction:column;gap:7px;margin-left:8px}
+        .choice{display:flex;align-items:baseline;gap:9px;line-height:1.5}
+        .bubble{display:inline-block;width:13px;height:13px;border:1.5px solid #444;flex-shrink:0;position:relative;top:2px}
+        .bubble-round{border-radius:50%}
+        .bubble-square{border-radius:2px}
+        .choice-letter{font-weight:bold}
+        .mc-note{font-size:12px;color:#666;font-style:italic;margin-bottom:5px}
+        .section-header{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#5b2d8e;border-bottom:2px solid #d8b4fe;padding-bottom:5px;margin:28px 0 16px;page-break-after:avoid}
+        @media print{body{padding:20px}@page{margin:.6in}}
+      </style>
+    </head><body onload="(function(){var done=false;function go(){if(done)return;done=true;setTimeout(function(){window.print()},200)}var waits=[];if(document.fonts&&document.fonts.ready){waits.push(document.fonts.ready)}var imgs=document.images;if(imgs.length>0){waits.push(new Promise(function(res){var n=0;function c(){n++;if(n>=imgs.length)res()}for(var i=0;i<imgs.length;i++){if(imgs[i].complete)c();else{imgs[i].onload=c;imgs[i].onerror=c}}}))}Promise.all(waits).then(go);setTimeout(go,5000)})()">
+      <div class="header">
+        <div class="lessonnum">Lesson ${lesson.lessonNumber}</div>
+        <h1>${lesson.title} — Participation Worksheet</h1>
+        ${course?.title ? `<div class="course">${course.title}</div>` : ''}
+        <div class="instruction">Complete every problem on this sheet. Mark your answer choices and show your work in the boxes.</div>
+        <div class="fields">
+          <div class="field">Name: ___________________________</div>
+          <div class="field">Date: ${printDate}</div>
+        </div>
+      </div>
+      ${questionsHTML}
+    </body></html>`
+
+    const pw = window.open('', '_blank')
+    if (!pw) return
+    pw.document.write(html)
+    pw.document.close()
+  }
+
   async function previewDigital(lesson: LessonTemplate) {
     const allQuestions = [...questions].sort((a, b) => a.order - b.order)
     if (allQuestions.length === 0) { alert('No questions to preview.'); return }
@@ -1767,11 +1913,21 @@ export default function LessonLibraryPage() {
                                     <button
                                       onClick={() => previewWorksheet(lesson)}
                                       disabled={!canPreview}
+                                      title="The show-work sheet exactly as students print it"
                                       style={{ background: 'transparent', border: '1px solid var(--gray-light)', color: 'var(--gray-mid)', padding: '7px 14px', borderRadius: '6px', cursor: !canPreview ? 'not-allowed' : 'pointer', fontSize: '13px', fontFamily: 'var(--font-body)', ...(effectiveAssignmentType === 'both' ? {} : { marginLeft: 'auto' }) }}
                                     >
-                                      🖨 {hasWorksheet && questions.length === 0 ? 'View Worksheet' : 'Worksheet'}
+                                      🖨 {hasWorksheet && questions.length === 0 ? 'View Worksheet' : 'Student View Worksheet'}
                                     </button>)
                                     })(
+                                  )}
+                                  {questions.length > 0 && (
+                                    <button
+                                      onClick={() => printParticipationWorksheet(lesson)}
+                                      title="Every question on paper — choices to circle, blank work boxes — for working the lesson together in class"
+                                      style={{ background: 'transparent', border: '1px solid var(--gray-light)', color: 'var(--gray-mid)', padding: '7px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontFamily: 'var(--font-body)', ...(effectiveAssignmentType === 'questions' || effectiveAssignmentType === 'both' || effectiveAssignmentType === 'upload' ? {} : { marginLeft: 'auto' }) }}
+                                    >
+                                      🖨 Participation Worksheet
+                                    </button>
                                   )}
                                 </div>
 
