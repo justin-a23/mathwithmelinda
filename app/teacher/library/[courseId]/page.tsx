@@ -44,6 +44,7 @@ import MathRenderer, { MATH_DELIMITER_SPLIT } from '../../../components/MathRend
 import DiagramRenderer from '../../../components/DiagramRenderer'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { lessonBareTitle } from '@/app/lib/lessonTitle'
+import { playableVideoUrl } from '@/app/lib/videoUrl'
 
 const client = generateClient()
 
@@ -155,12 +156,6 @@ export default function LessonLibraryPage() {
   const [videoPreviewOpen, setVideoPreviewOpen] = useState(false)
 
   // Imported templates store a bare S3 key ("algebra1/….mp4"), not a URL —
-  // played raw, the browser treats it as a relative path and 404s. Prefix the
-  // CloudFront host (encoding each segment: spaces, em-dashes) when needed.
-  function playableVideoUrl(v: string): string {
-    if (/^https?:\/\//.test(v)) return v
-    return 'https://dgmfzo1xk5r4e.cloudfront.net/' + v.split('/').map(encodeURIComponent).join('/')
-  }
   const [saving, setSaving] = useState(false)
   const [videoUpload, setVideoUpload] = useState<UploadState>({ uploading: false, progress: 0, error: '' })
   const [orphanVideos, setOrphanVideos] = useState<{ key: string; label: string }[] | null>(null)

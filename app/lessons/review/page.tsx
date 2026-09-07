@@ -18,9 +18,9 @@ import StudentNav from '../../components/StudentNav'
 import { studentKey } from '@/app/lib/identity'
 import { useRoleGuard } from '@/app/hooks/useRoleGuard'
 import { useResolvedStudent } from '@/app/hooks/useResolvedStudent'
+import { playableVideoUrl } from '@/app/lib/videoUrl'
 
 const client = generateClient()
-const CLOUDFRONT_URL = 'https://dgmfzo1xk5r4e.cloudfront.net'
 
 const GET_ITEM = /* GraphQL */`
   query GetWeeklyPlanItem($id: ID!) {
@@ -114,9 +114,7 @@ function ReviewInner() {
         })
         if (!turnedIn) { setState('not-allowed'); return }
 
-        const url = item.lesson.videoUrl
-          ? (item.lesson.videoUrl.startsWith('http') ? item.lesson.videoUrl : `${CLOUDFRONT_URL}/${item.lesson.videoUrl}`)
-          : null
+        const url = item.lesson.videoUrl ? playableVideoUrl(item.lesson.videoUrl) : null
         setTitle(item.lesson.title || 'Lesson')
         setCourseTitle(item.weeklyPlan?.course?.title || '')
         setIsInClass(item.isInClass === true || (item.isInClass == null && item.dayOfWeek === 'Friday'))

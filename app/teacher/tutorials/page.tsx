@@ -159,7 +159,7 @@ export default function ManageTutorialsPage() {
 
       // One row per audience, sharing the uploaded file. Every course checked
       // collapses to a single courseId-null row so future courses are included.
-      const videoUrl = `https://dgmfzo1xk5r4e.cloudfront.net/${key}`
+      const videoUrl = `https://dgmfzo1xk5r4e.cloudfront.net/${key.split('/').map(encodeURIComponent).join('/')}`
       const base = {
         title: title.trim(),
         description: description.trim() || null,

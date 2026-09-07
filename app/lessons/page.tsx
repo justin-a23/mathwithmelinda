@@ -11,10 +11,10 @@ import StudentNav from '../components/StudentNav'
 import SubmissionMethodPicker from '../components/SubmissionMethodPicker'
 import { apiFetch } from '@/app/lib/apiFetch'
 import { lessonDisplayTitle } from '@/app/lib/lessonTitle'
+import { playableVideoUrl } from '@/app/lib/videoUrl'
 import { useResolvedStudent } from '@/app/hooks/useResolvedStudent'
 import { useRoleGuard } from '@/app/hooks/useRoleGuard'
 
-const CLOUDFRONT_URL = 'https://dgmfzo1xk5r4e.cloudfront.net'
 
 const client = generateClient()
 
@@ -299,9 +299,7 @@ function LessonPageInner() {
     if (Object.keys(answers).length === 0 && !notes) return
     try { localStorage.setItem(draftKey, JSON.stringify({ answers, notes })) } catch { /* storage blocked/full */ }
   }, [draftKey, answers, notes])
-  const videoSrc = lesson?.videoUrl
-    ? lesson.videoUrl.startsWith('http') ? lesson.videoUrl : `${CLOUDFRONT_URL}/${lesson.videoUrl}`
-    : null
+  const videoSrc = lesson?.videoUrl ? playableVideoUrl(lesson.videoUrl) : null
 
   // Keep stable refs in sync so the interval can always read current values
   planItemRef.current = planItem
