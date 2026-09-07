@@ -527,6 +527,11 @@ export default function TeacherMessagesPage() {
   const activeMessages = messages.filter(m => !m.isArchivedByTeacher)
   const archivedMessages = messages.filter(m => m.isArchivedByTeacher)
   const studentNameById = Object.fromEntries(students.map(s => [s.userId, s.name]))
+  // Thread rows show which class the student is in — the enrollment and course
+  // data is already loaded for recipient filtering, this just surfaces it.
+  const courseTitleById = Object.fromEntries(courses.map(c => [c.id, c.title]))
+  const courseTitleForStudent = (studentId: string): string | null =>
+    courseTitleById[studentCourseMap[studentId] || ''] || null
   const activeGroups = groupByStudent(activeMessages, studentNameById)
   const archivedGroups = groupByStudent(archivedMessages, studentNameById)
   // One line per thread: unread first, then most recent activity. Search
@@ -883,6 +888,11 @@ export default function TeacherMessagesPage() {
                     <span style={{ fontFamily: 'var(--font-display)', fontSize: '18px', fontWeight: 700, color: 'var(--foreground)' }}>{group.studentName}</span>
                     {group.studentId.startsWith('parent:') && (
                       <span style={{ background: '#dbeafe', color: '#1d4ed8', fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '20px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Parent</span>
+                    )}
+                    {!group.studentId.startsWith('parent:') && courseTitleForStudent(group.studentId) && (
+                      <span style={{ background: 'var(--plum-light)', color: 'var(--plum)', fontSize: '11px', fontWeight: 600, padding: '2px 10px', borderRadius: '20px', border: '1px solid var(--plum-mid)', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                        {courseTitleForStudent(group.studentId)}
+                      </span>
                     )}
                     {unreadCount > 0 && (
                       <span style={{ background: '#ef4444', color: 'white', fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '20px' }}>
