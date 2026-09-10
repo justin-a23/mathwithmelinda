@@ -960,6 +960,18 @@ function GradingPageInner() {
 
   async function returnToStudent() {
     if (!selectedSubmission || !returnReason.trim()) return
+    // A return due date in the past is almost certainly a typo (a mistyped
+    // year in the date field once produced "2006", which made the student's
+    // on-time resubmission read as twenty years late — returnDueDate
+    // supersedes the original due date in every late check).
+    if (returnDueDate) {
+      const todayLocal = new Date(); todayLocal.setHours(0, 0, 0, 0)
+      const picked = new Date(returnDueDate + 'T00:00:00')
+      if (isNaN(picked.getTime()) || picked < todayLocal) {
+        alert(`The new due date (${returnDueDate}) is in the past — that would mark every resubmission late. Please double-check the date, especially the year.`)
+        return
+      }
+    }
     setReturning(true)
     try {
       const { updateSubmission } = await import('../../../src/graphql/mutations')
