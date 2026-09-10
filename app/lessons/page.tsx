@@ -1031,7 +1031,7 @@ function LessonPageInner() {
       const qNumLabel = bookNumMatch ? bookNumMatch[1]
         : q.order >= 1000 ? `#${q.order % 1000}.`
         : `#${printQNum.get(q.id) ?? q.order}.`
-      const qBody = renderMath(q.questionText.replace(/^\d+\.\s*/, ''))
+      const qBody = renderMath(q.questionText.replace(/^\d+\.\s+/, ''))
       const diagramSrc = diagramDataUrls[q.id]
       const diagramHTML = diagramSrc
         ? `<div class="diagram"><img src="${diagramSrc}" class="diagram-img" /></div>`

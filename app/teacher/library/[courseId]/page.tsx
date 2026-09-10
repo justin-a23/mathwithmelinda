@@ -926,7 +926,7 @@ export default function LessonLibraryPage() {
       }
       const bookNumMatch = q.questionText.match(/^(\d+\.)\s/)
       const qNumLabel = bookNumMatch ? bookNumMatch[1] : `${origNums.get(q.id) ?? ''}.`
-      const qBody = renderMath(q.questionText.replace(/^\d+\.\s*/, ''))
+      const qBody = renderMath(q.questionText.replace(/^\d+\.\s+/, ''))
       const diagramSrc = diagramDataUrls[q.id]
       const diagramHTML = diagramSrc
         ? `<div class="diagram"><img src="${diagramSrc}" class="diagram-img" /></div>`
@@ -1053,7 +1053,7 @@ export default function LessonLibraryPage() {
       qNum++
       const bookNumMatch = q.questionText.match(/^(\d+\.)\s/)
       const qNumLabel = bookNumMatch ? bookNumMatch[1] : `${qNum}.`
-      const qBody = renderMath(q.questionText.replace(/^\d+\.\s*/, ''))
+      const qBody = renderMath(q.questionText.replace(/^\d+\.\s+/, ''))
       const diagramSrc = diagramDataUrls[q.id]
       const diagramHTML = diagramSrc
         ? `<div class="diagram"><img src="${diagramSrc}" class="diagram-img" /></div>`

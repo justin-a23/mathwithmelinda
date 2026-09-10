@@ -29,7 +29,16 @@ const MULTIROW_ENVIRONMENTS = /\\begin\{(cases|aligned|align|array|gathered|gath
 //
 // The print popups in app/lessons and app/teacher/library import this same
 // pattern — change it here and every renderer changes together.
-export const MATH_DELIMITER_SPLIT = /(\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$\$(?:\\[\s\S]|[^$])+?\$\$|\$(?:\\[\s\S]|[^$\n])+?\$)/g
+// The single-$ pattern also applies pandoc's money guards, because teachers
+// type plain dollar amounts directly in the editor ("a check for $1,000. He
+// gave $150…" once paired its first two dollars into a math chunk, italicizing
+// the prose between them): the opening $ must not be followed by whitespace,
+// the BODY must not end in whitespace (encoded structurally — the last body
+// token is an escape pair or a non-space character, since lookbehind is not
+// safe on older student iPads), and the closing $ must not be followed by a
+// digit. Real math ($x$, $0.65$, $\$18$, $3 + 5 \cdot 2$) passes all three;
+// money pairs fail at least one.
+export const MATH_DELIMITER_SPLIT = /(\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$\$(?:\\[\s\S]|[^$])+?\$\$|\$(?!\s)(?:(?:\\[\s\S]|[^$\n])*?(?:\\[\s\S]|[^\s$\n]))\$(?!\d))/g
 
 function renderMixedMath(input: string): string {
   const parts = input.split(MATH_DELIMITER_SPLIT)
