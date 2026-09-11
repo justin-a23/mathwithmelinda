@@ -526,7 +526,9 @@ function ReportCardInner() {
         const lesson = item.lesson!
         const tmpl = item.lessonTemplateId ? templateMap.get(item.lessonTemplateId) : null
         const inClass = isInClassItem(item)
-        const cat = inClass ? 'quiz' : categoryLabel(tmpl?.lessonCategory)
+        // Tests grade into the Tests bucket even on an in-class day.
+        const tmplCat = categoryLabel(tmpl?.lessonCategory)
+        const cat = tmplCat === 'test' ? 'test' : (inClass ? 'quiz' : tmplCat)
         const order = lesson.order ?? tmpl?.lessonNumber ?? 9999
         if (inClass && item.dueTime) {
           const dueMs = new Date(item.dueTime).getTime()
@@ -567,10 +569,14 @@ function ReportCardInner() {
       // Attendance: of in-class days already held, how many was this student
       // marked present for? (Doing the lesson online while absent counts for
       // the GRADE, but not for attendance.)
+      const colCategoryById = new Map(cols.map(c => [c.lessonId, c.category]))
       let attHeld = 0, attPresent = 0
       for (const lid of heldInClassLessonIds) {
         attHeld++
-        if (creditedLessonIds.has(lid)) attPresent++
+        // In-class test day: the turned-in test is the attendance record.
+        const attended = creditedLessonIds.has(lid) ||
+          (colCategoryById.get(lid) === 'test' && gradeMap[lid] !== undefined)
+        if (attended) attPresent++
       }
 
       // 10. Build assignment results
@@ -653,7 +659,8 @@ function ReportCardInner() {
           for (const [lessonId, item] of qLessonMap.entries()) {
             const lesson = item.lesson!
             const tmpl = item.lessonTemplateId ? templateMap.get(item.lessonTemplateId) : null
-            const cat = isInClassItem(item) ? 'quiz' : categoryLabel(tmpl?.lessonCategory)
+            const tmplCat2 = categoryLabel(tmpl?.lessonCategory)
+            const cat = tmplCat2 === 'test' ? 'test' : (isInClassItem(item) ? 'quiz' : tmplCat2)
             const order = lesson.order ?? tmpl?.lessonNumber ?? 9999
             qCols.push({ lessonId, title: lesson.title, order, category: cat, templateId: item.lessonTemplateId || null })
           }

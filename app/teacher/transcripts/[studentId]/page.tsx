@@ -319,7 +319,9 @@ export default function TranscriptPage() {
             const n = parseFloat(g)
             if (!isNaN(n)) {
               const tplId = lessonTemplateMap[lid]
-              const cat = lessonInClass[lid] ? 'quiz' : tplId ? (catMap[tplId] || 'lesson') : 'lesson'
+              const tmplCat = tplId ? (catMap[tplId] || 'lesson') : 'lesson'
+              // Tests grade into the Tests bucket even on an in-class day.
+              const cat = tmplCat === 'test' ? 'test' : (lessonInClass[lid] ? 'quiz' : tmplCat)
               byCat[cat].push(n)
               lessonsGraded++
             }

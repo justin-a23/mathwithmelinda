@@ -102,6 +102,7 @@ export default function ParticipationPage() {
   const [courses, setCourses] = useState<Course[]>([])
   const [selectedCourseId, setSelectedCourseId] = useState('')
   const [options, setOptions] = useState<InClassOption[]>([])
+  const [testTemplateIds, setTestTemplateIds] = useState<Set<string>>(new Set())
   const [selectedItemId, setSelectedItemId] = useState('')
   const [students, setStudents] = useState<Student[]>([])
   const [subs, setSubs] = useState<Sub[]>([])
@@ -177,6 +178,23 @@ export default function ParticipationPage() {
         }
         opts.sort((a, b) => b.weekStartDate.localeCompare(a.weekStartDate))
         setOptions(opts)
+
+        // Which of these in-class items are chapter TESTS? Give Credit must
+        // not stamp a 100 on a test — under the tests-always-count-as-Tests
+        // rule that 100 would read as a test score. The turned-in test itself
+        // is the attendance record on a test day.
+        try {
+          const tplIds = [...new Set(opts.map(o => o.lessonTemplateId).filter(Boolean))] as string[]
+          const testIds = new Set<string>()
+          for (const tid of tplIds) {
+            const tRes = await (client.graphql({
+              query: `query GetTemplateCategory($id: ID!) { getLessonTemplate(id: $id) { id lessonCategory } }`,
+              variables: { id: tid },
+            }) as any)
+            if ((tRes.data?.getLessonTemplate?.lessonCategory || '').toLowerCase().includes('test')) testIds.add(tid)
+          }
+          setTestTemplateIds(testIds)
+        } catch { /* category lookup is best-effort; the button guard just won't engage */ }
 
         // Default to the current week's in-class day; otherwise the most
         // recent past one — that's the one Melinda is standing in front of.
@@ -469,7 +487,14 @@ export default function ParticipationPage() {
                     </div>
                   )}
 
-                  {/* Action row */}
+                  {/* Action row — on a test day there is no Give Credit: the
+                      turned-in test is both the attendance record and the
+                      grade, and a stamped 100 would read as a test score. */}
+                  {selectedOption?.lessonTemplateId && testTemplateIds.has(selectedOption.lessonTemplateId) ? (
+                    <div style={{ marginTop: '20px', padding: '12px 16px', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: '8px', fontSize: '13px', color: '#78350F', lineHeight: 1.6 }}>
+                      📝 <strong>This is a test day.</strong> Skip Give Credit here — each student's turned-in test counts as their attendance, and the grade you give it lands in the Tests bucket. Grade the tests on the Grade Work page. A student who was absent can still take the test and submit it for a (partial) grade at your discretion.
+                    </div>
+                  ) : (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginTop: '20px', flexWrap: 'wrap' }}>
                     <button onClick={giveCredit} disabled={saving || checkedCount === 0}
                       style={{
@@ -487,6 +512,7 @@ export default function ParticipationPage() {
                     )}
                     {saveError && <span style={{ color: '#dc2626', fontSize: '14px' }}>{saveError}</span>}
                   </div>
+                  )}
                 </div>
               )}
             </>

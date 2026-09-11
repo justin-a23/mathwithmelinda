@@ -400,7 +400,11 @@ export default function GradebookPage() {
         const lesson = item.lesson!
         const tmpl = item.lessonTemplateId ? templateMap.get(item.lessonTemplateId) : null
         const inClass = isInClassItem(item)
-        const cat = inClass ? 'quiz' : categoryLabel(tmpl?.lessonCategory)
+        // A test grades into the Tests bucket even on an in-class day — the
+        // in-class flag only routes NON-test lessons into Participation.
+        // (Melinda's rule: the turned-in test is the attendance record.)
+        const tmplCat = categoryLabel(tmpl?.lessonCategory)
+        const cat = tmplCat === 'test' ? 'test' : (inClass ? 'quiz' : tmplCat)
         const order = lesson.order ?? tmpl?.lessonNumber ?? 9999
         if (inClass) {
           const dueMs = item.dueTime ? new Date(item.dueTime).getTime() : NaN
@@ -410,6 +414,7 @@ export default function GradebookPage() {
         cols.push({ lessonId, title: lesson.title, order, category: cat, templateId: item.lessonTemplateId || null })
       }
       cols.sort((a, b) => a.order - b.order)
+      const colCategoryById = new Map(cols.map(c => [c.lessonId, c.category]))
 
       // 8. Load all submissions
       const allSubs = await fetchAllPages<Submission>(client, LIST_ALL_SUBMISSIONS, 'listSubmissions')
@@ -506,7 +511,10 @@ export default function GradebookPage() {
           if (!wasHeld) continue
           if (!isStudentAssigned(student.userId, student.enrolledAt, lessonId)) continue
           held++
-          if (studentSubs.some(sm => sm.lessonId === lessonId && sm.participationCredit)) present++
+          // On an in-class TEST day the turned-in test IS the attendance
+          // record — no separate participation credit is given.
+          const isTestDay = colCategoryById.get(lessonId) === 'test'
+          if (studentSubs.some(sm => sm.lessonId === lessonId && (sm.participationCredit || isTestDay))) present++
         }
         studentRows.push({ student, grades, avg, letter, assignedLessonIds, attendance: { present, held } })
       }

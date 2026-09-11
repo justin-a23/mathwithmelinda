@@ -304,7 +304,9 @@ export default function StudentGradesPage() {
       for (const [lessonId, item] of lessonMap.entries()) {
         const lesson = item.lesson
         const tmpl = item.lessonTemplateId ? templateMap.get(item.lessonTemplateId) : null
-        const cat = isInClassItem(item) ? 'quiz' : categoryLabel(tmpl?.lessonCategory)
+        // Tests grade into the Tests bucket even on an in-class day.
+        const tmplCat = categoryLabel(tmpl?.lessonCategory)
+        const cat = tmplCat === 'test' ? 'test' : (isInClassItem(item) ? 'quiz' : tmplCat)
         const order = lesson.order ?? tmpl?.lessonNumber ?? 9999
         cols.push({ lessonId, title: lesson.title, order, category: cat, templateId: item.lessonTemplateId || null, week: item.weekStartDate || '' })
       }
