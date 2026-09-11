@@ -4,6 +4,7 @@ import { requireAuth } from '@/app/lib/auth'
 import { s3 } from '../../lib/s3'
 import { validateFileType, isFileTooLarge, MAX_FILE_SIZE } from '@/app/lib/fileValidation'
 import { checkRateLimit, getClientIp } from '@/app/lib/rateLimit'
+import { normalizeUploadFile } from '@/app/lib/normalizeUpload'
 import { resolveStudentEmail } from '@/app/lib/ownership'
 import { sanitizeKeySegment } from '@/app/lib/ownershipRules'
 
@@ -76,32 +77,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
-    const isHeic = file.type === 'image/heic' || file.type === 'image/heif'
-      || file.name.toLowerCase().endsWith('.heic') || file.name.toLowerCase().endsWith('.heif')
-
-    let uploadBuffer: Buffer
-    let contentType: string
-    let filename: string
-
-    if (isPdf) {
-      // Upload PDF as-is
-      uploadBuffer = buffer
-      contentType = 'application/pdf'
-      filename = file.name
-    } else if (isHeic) {
-      // Convert HEIC/HEIF to JPEG (iPhone format)
-      const heicConvert = (await import('heic-convert')).default
-      const converted = await heicConvert({ buffer, format: 'JPEG', quality: 0.9 })
-      uploadBuffer = Buffer.from(converted)
-      contentType = 'image/jpeg'
-      filename = file.name.replace(/\.[^.]+$/, '.jpg')
-    } else {
-      // JPG, PNG, etc — upload directly, no processing needed
-      uploadBuffer = buffer
-      contentType = file.type || 'image/jpeg'
-      filename = file.name
-    }
+    const { buffer: uploadBuffer, contentType, filename } = await normalizeUploadFile(file, buffer)
 
     // lessonId and filename are both client-controlled and both land in the S3
     // key, so a `../` in either would write outside the student's namespace —

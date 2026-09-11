@@ -4,6 +4,7 @@ import { s3 } from '@/app/lib/s3'
 import { validateToken, incrementUploadCount } from '@/app/lib/uploadToken'
 import { validateFileType, isFileTooLarge, MAX_FILE_SIZE } from '@/app/lib/fileValidation'
 import { checkRateLimit, getClientIp } from '@/app/lib/rateLimit'
+import { normalizeUploadFile } from '@/app/lib/normalizeUpload'
 import { sanitizeKeySegment } from '@/app/lib/ownershipRules'
 
 /**
@@ -57,30 +58,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // HEIC → JPEG conversion (same logic as /api/submit)
-    const isHeic = file.type === 'image/heic' || file.type === 'image/heif'
-      || file.name.toLowerCase().endsWith('.heic') || file.name.toLowerCase().endsWith('.heif')
-    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
-
-    let uploadBuffer: Buffer
-    let contentType: string
-    let filename: string
-
-    if (isPdf) {
-      uploadBuffer = buffer
-      contentType = 'application/pdf'
-      filename = file.name
-    } else if (isHeic) {
-      const heicConvert = (await import('heic-convert')).default
-      const converted = await heicConvert({ buffer, format: 'JPEG', quality: 0.9 })
-      uploadBuffer = Buffer.from(converted)
-      contentType = 'image/jpeg'
-      filename = file.name.replace(/\.[^.]+$/, '.jpg')
-    } else {
-      uploadBuffer = buffer
-      contentType = file.type || 'image/jpeg'
-      filename = file.name
-    }
+    const { buffer: uploadBuffer, contentType, filename } = await normalizeUploadFile(file, buffer)
 
     // S3 key: same pattern as /api/submit for consistency
     // studentId and lessonId come from the validated token, so they're trusted.
