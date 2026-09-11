@@ -604,6 +604,50 @@ const schema = a.schema({
     // Melinda. Should become a field-level teacher-only rule; see bottom note.
     .authorization(studentScoped),
 
+  // ── Support ───────────────────────────────────────────────────────────────
+
+  // IT tickets Melinda files to Justin (admin group). Staff-only in Phase 1;
+  // the requester field holds the Cognito sub so a later student-intake phase
+  // can tighten to allow.ownerDefinedIn('requesterId').identityClaim('sub')
+  // (see the studentScoped comment above — .identityClaim('sub') is required).
+  SupportTicket: a
+    .model({
+      requesterId: a.string().required(),
+      requesterName: a.string(),
+      requesterEmail: a.string(),
+      category: a.string().required(), // 'broken' | 'improvement' | 'question' | 'other'
+      severity: a.string().required(), // 'critical' | 'important' | 'nice-to-have'
+      title: a.string().required(),
+      description: a.string().required(),
+      // Guided answers, populated per category:
+      pageUrl: a.string(),
+      stepsTaken: a.string(),
+      actualBehavior: a.string(),
+      expectedBehavior: a.string(),
+      screenshotKeys: a.string(), // JSON array of S3 keys under tickets/
+      // Free string so an automated triage agent can add states without a
+      // schema deploy: 'new' | 'in_progress' | 'waiting_on_reporter' |
+      // 'resolved' | 'closed'
+      status: a.string().required(),
+      resolutionSummary: a.string(),
+      resolvedAt: a.string(),
+      submittedAt: a.string().required(),
+    })
+    .authorization(teacherOnly),
+
+  // Append-only follow-ups on a ticket. A separate model rather than a JSON
+  // field on SupportTicket so two writers (Justin's browser, a future triage
+  // agent) never race on read-modify-write of one row.
+  SupportTicketNote: a
+    .model({
+      ticketId: a.string().required(),
+      authorId: a.string().required(),
+      authorName: a.string(),
+      body: a.string().required(),
+      createdAtIso: a.string().required(),
+    })
+    .authorization(teacherOnly),
+
   // ── Reporting ─────────────────────────────────────────────────────────────
 
   Syllabus: a
