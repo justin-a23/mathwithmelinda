@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { lessonId } = await request.json()
+    const { lessonId, forStudentEmail } = await request.json()
     if (!lessonId || typeof lessonId !== 'string') {
       return NextResponse.json({ error: 'lessonId is required' }, { status: 400 })
     }
@@ -25,8 +25,25 @@ export async function POST(request: NextRequest) {
     // the student's own preview reads 403. Resolved server-side from the auth
     // token, not the client — cannot be spoofed. Falls back to the sub for
     // teachers (who have no student profile) and legacy safety.
-    const ownEmail = auth.role === 'teacher' ? null : await resolveStudentEmail(auth.token, auth.userId)
-    const token = await createToken(ownEmail || auth.userId, lessonId)
+    //
+    // Teachers may mint a token on a STUDENT's behalf (attaching graded pages
+    // from their phone in Grade Work): forStudentEmail scopes the uploads to
+    // that student's namespace, mirroring /api/submit's teacher path — same
+    // structural check, teacher-only.
+    let owner: string
+    if (typeof forStudentEmail === 'string' && forStudentEmail) {
+      if (auth.role !== 'teacher') {
+        return NextResponse.json({ error: 'Only teachers can upload for a student' }, { status: 403 })
+      }
+      if (forStudentEmail.includes('..') || forStudentEmail.includes('/')) {
+        return NextResponse.json({ error: 'Invalid student' }, { status: 400 })
+      }
+      owner = forStudentEmail
+    } else {
+      const ownEmail = auth.role === 'teacher' ? null : await resolveStudentEmail(auth.token, auth.userId)
+      owner = ownEmail || auth.userId
+    }
+    const token = await createToken(owner, lessonId)
 
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://mathwithmelinda.com'
     const snapUrl = `${baseUrl}/snap?token=${token.tokenId}`

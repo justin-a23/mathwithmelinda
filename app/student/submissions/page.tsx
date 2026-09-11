@@ -131,6 +131,7 @@ export default function StudentSubmissions() {
   const [loading, setLoading] = useState(true)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [fileUrls, setFileUrls] = useState<Record<string, string[]>>({})
+  const [gradedFileUrls, setGradedFileUrls] = useState<Record<string, string[]>>({})
   const [questionMap, setQuestionMap] = useState<Record<string, Question[]>>({})
   const [fetchedIds, setFetchedIds] = useState<Set<string>>(new Set())
 
@@ -207,6 +208,27 @@ export default function StudentSubmissions() {
         setFileUrls(prev => ({ ...prev, [id]: urls }))
       } catch (err) {
         console.error('Error fetching file URLs:', err)
+      }
+    }
+
+    // Melinda's scans of the graded paper work, if she attached any
+    const teacherFiles: string[] = Array.isArray(parsed.teacherFiles) ? parsed.teacherFiles : []
+    if (teacherFiles.length > 0) {
+      try {
+        const urls = await Promise.all(
+          teacherFiles.map(async (key: string) => {
+            const res = await apiFetch('/api/view-submission', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ key })
+            })
+            const data = await res.json()
+            return data.url as string
+          })
+        )
+        setGradedFileUrls(prev => ({ ...prev, [id]: urls.filter(Boolean) }))
+      } catch (err) {
+        console.error('Error fetching graded file URLs:', err)
       }
     }
 
@@ -529,6 +551,25 @@ export default function StudentSubmissions() {
                               />
                             )
                           })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Melinda's scans of the graded paper work */}
+                    {(gradedFileUrls[sub.id] || []).length > 0 && (
+                      <div style={{ marginTop: '16px' }}>
+                        <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--plum)', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                          ✍️ Graded copy from Melinda
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+                          {(gradedFileUrls[sub.id] || []).map((url, i) => (
+                            <SubmissionImage
+                              key={i}
+                              url={url}
+                              alt={`Graded page ${i + 1}`}
+                              style={{ width: '120px', height: '120px', objectFit: 'cover', borderRadius: '6px', display: 'block', border: '2px solid var(--plum-mid)' }}
+                            />
+                          ))}
                         </div>
                       </div>
                     )}

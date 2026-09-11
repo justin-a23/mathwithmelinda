@@ -3,6 +3,7 @@
 import { useAuthenticator } from '@aws-amplify/ui-react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useRef, useState, Suspense } from 'react'
+import QRCode from 'qrcode'
 import { generateClient } from 'aws-amplify/api'
 import { useTheme } from '../../ThemeProvider'
 import MathRenderer from '../../components/MathRenderer'
@@ -478,7 +479,21 @@ function GradingPageInner() {
   const [clearingGrade, setClearingGrade] = useState(false)
   const [gradeCleared, setGradeCleared] = useState(false)
   const [imageUrls, setImageUrls] = useState<string[]>([])
+  // Teacher-attached graded pages (scans/photos of the marked-up paper work).
+  // Keys live in the submission content's teacherFiles array, stored under the
+  // STUDENT's S3 namespace so the existing ownership rules let the student and
+  // their parents view them with no new access paths.
+  const [gradedFiles, setGradedFiles] = useState<string[]>([])
+  const [gradedUrls, setGradedUrls] = useState<string[]>([])
+  const [gradedUploading, setGradedUploading] = useState(false)
+  const [gradedError, setGradedError] = useState('')
+  const [gradedQr, setGradedQr] = useState<{ tokenId: string; dataUrl: string } | null>(null)
+  const gradedFilesRef = useRef<string[]>([])
+  const gradedPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const gradedKnownRef = useRef(new Set<string>())
+  const gradedFileInputRef = useRef<HTMLInputElement>(null)
   const [studentNameMap, setStudentNameMap] = useState<Record<string, string>>({})
+  const [studentEmailById, setStudentEmailById] = useState<Record<string, string>>({})
   const [archivedStudentIds, setArchivedStudentIds] = useState<Set<string>>(new Set())
   const [questions, setQuestions] = useState<Question[]>([])
   const [showWorkImageUrls, setShowWorkImageUrls] = useState<Record<string, string[]>>({})
@@ -579,6 +594,12 @@ function GradingPageInner() {
       }
       setStudentNameMap(map)
       setArchivedStudentIds(archived)
+      const emails: Record<string, string> = {}
+      for (const p of items) {
+        if (p.userId && p.email) emails[p.userId] = p.email
+        if (p.email) emails[p.email] = p.email // legacy rows keyed by email
+      }
+      setStudentEmailById(emails)
     } catch (err) {
       console.error('Error fetching student profiles:', err)
     }
@@ -761,6 +782,127 @@ function GradingPageInner() {
     }
   }
 
+  // ── Teacher-attached graded pages ────────────────────────────────────────
+
+  /** Append keys to the submission's teacherFiles and persist. */
+  async function addGradedKeys(keys: string[]) {
+    if (!selectedSubmission || keys.length === 0) return
+    const fresh = keys.filter(k => !gradedFilesRef.current.includes(k))
+    if (fresh.length === 0) return
+    const next = [...gradedFilesRef.current, ...fresh]
+    gradedFilesRef.current = next
+    setGradedFiles(next)
+    try {
+      const parsed = JSON.parse(selectedSubmission.content || '{}')
+      parsed.teacherFiles = next
+      const newContent = JSON.stringify(parsed)
+      const { updateSubmission } = await import('../../../src/graphql/mutations')
+      await (client.graphql({ query: updateSubmission, variables: { input: { id: selectedSubmission.id, content: newContent } } }) as any)
+      setSubmissions(prev => prev.map(s => s.id === selectedSubmission.id ? { ...s, content: newContent } : s))
+      setSelectedSubmission(prev => prev ? { ...prev, content: newContent } : prev)
+    } catch (err) {
+      console.error('Error saving graded pages:', err)
+      setGradedError('The pages uploaded but did not save to the submission. Try again.')
+    }
+    try {
+      const urls = await Promise.all(fresh.map(fetchPresignedUrl))
+      setGradedUrls(prev => [...prev, ...urls])
+    } catch { /* thumbnails are best-effort */ }
+  }
+
+  async function removeGradedKey(index: number) {
+    if (!selectedSubmission) return
+    const next = gradedFilesRef.current.filter((_, i) => i !== index)
+    gradedFilesRef.current = next
+    setGradedFiles(next)
+    setGradedUrls(prev => prev.filter((_, i) => i !== index))
+    try {
+      const parsed = JSON.parse(selectedSubmission.content || '{}')
+      parsed.teacherFiles = next
+      const newContent = JSON.stringify(parsed)
+      const { updateSubmission } = await import('../../../src/graphql/mutations')
+      await (client.graphql({ query: updateSubmission, variables: { input: { id: selectedSubmission.id, content: newContent } } }) as any)
+      setSubmissions(prev => prev.map(s => s.id === selectedSubmission.id ? { ...s, content: newContent } : s))
+      setSelectedSubmission(prev => prev ? { ...prev, content: newContent } : prev)
+    } catch (err) { console.error('Error removing graded page:', err) }
+  }
+
+  function gradedUploadTarget(): { email: string; lessonId: string } | null {
+    if (!selectedSubmission) return null
+    const email = studentEmailById[selectedSubmission.studentId]
+    let lessonId = ''
+    try { lessonId = JSON.parse(selectedSubmission.content || '{}').lessonId || '' } catch { /* ignore */ }
+    if (!email || !lessonId) return null
+    return { email, lessonId }
+  }
+
+  async function uploadGradedFiles(fileList: FileList) {
+    const target = gradedUploadTarget()
+    if (!target) { setGradedError('Cannot resolve this student\'s account — try refreshing.'); return }
+    setGradedUploading(true)
+    setGradedError('')
+    try {
+      const keys: string[] = []
+      for (const file of Array.from(fileList)) {
+        const fd = new FormData()
+        fd.append('file', file)
+        fd.append('studentId', target.email)
+        fd.append('lessonId', target.lessonId)
+        const res = await apiFetch('/api/submit', { method: 'POST', body: fd })
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}))
+          throw new Error(body.error || `Upload failed (${res.status})`)
+        }
+        const data = await res.json()
+        keys.push(data.key)
+        gradedKnownRef.current.add(data.key)
+      }
+      await addGradedKeys(keys)
+    } catch (err: any) {
+      setGradedError(err.message || 'Upload failed. Please try again.')
+    } finally {
+      setGradedUploading(false)
+      if (gradedFileInputRef.current) gradedFileInputRef.current.value = ''
+    }
+  }
+
+  async function startGradedQr() {
+    const target = gradedUploadTarget()
+    if (!target) { setGradedError('Cannot resolve this student\'s account — try refreshing.'); return }
+    setGradedError('')
+    try {
+      const res = await apiFetch('/api/upload-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lessonId: target.lessonId, forStudentEmail: target.email }),
+      })
+      if (!res.ok) throw new Error('Could not create a phone upload link')
+      const data = await res.json()
+      const dataUrl = await QRCode.toDataURL(data.url, { width: 220, margin: 2, color: { dark: '#1E1E2E', light: '#FFFFFF' } })
+      setGradedQr({ tokenId: data.tokenId, dataUrl })
+      if (gradedPollRef.current) clearInterval(gradedPollRef.current)
+      gradedPollRef.current = setInterval(async () => {
+        try {
+          const statusRes = await apiFetch(`/api/upload-token/${data.tokenId}/status`)
+          if (!statusRes.ok) return
+          const status = await statusRes.json()
+          if (status.expired) {
+            if (gradedPollRef.current) { clearInterval(gradedPollRef.current); gradedPollRef.current = null }
+            setGradedQr(null)
+            return
+          }
+          const newKeys = (status.uploadedKeys || []).filter((k: string) => !gradedKnownRef.current.has(k))
+          if (newKeys.length > 0) {
+            newKeys.forEach((k: string) => gradedKnownRef.current.add(k))
+            await addGradedKeys(newKeys)
+          }
+        } catch { /* polling failure is not critical */ }
+      }, 3000)
+    } catch (err: any) {
+      setGradedError(err.message || 'Could not create a phone upload link')
+    }
+  }
+
   async function fetchPresignedUrl(key: string): Promise<string> {
     const res = await apiFetch('/api/view-submission', {
       method: 'POST',
@@ -811,6 +953,15 @@ function GradingPageInner() {
       }
     } catch { /* corrupt draft — ignore */ }
 
+    // Reset graded-pages state (and stop any phone-QR polling from the
+    // previously open submission)
+    if (gradedPollRef.current) { clearInterval(gradedPollRef.current); gradedPollRef.current = null }
+    gradedKnownRef.current.clear()
+    setGradedQr(null)
+    setGradedError('')
+    setGradedFiles([]); gradedFilesRef.current = []
+    setGradedUrls([])
+
     if (!submission.content) return
     try {
       const parsed = JSON.parse(submission.content)
@@ -818,6 +969,13 @@ function GradingPageInner() {
       if (parsed.files && parsed.files.length > 0) {
         const urls = await Promise.all(parsed.files.map(fetchPresignedUrl))
         setImageUrls(urls)
+      }
+
+      if (Array.isArray(parsed.teacherFiles) && parsed.teacherFiles.length > 0) {
+        setGradedFiles(parsed.teacherFiles); gradedFilesRef.current = parsed.teacherFiles
+        parsed.teacherFiles.forEach((k: string) => gradedKnownRef.current.add(k))
+        const gUrls = await Promise.all(parsed.teacherFiles.map(fetchPresignedUrl))
+        setGradedUrls(gUrls)
       }
 
       if (parsed.lessonTemplateId) {
@@ -1596,6 +1754,48 @@ function GradingPageInner() {
                   })}
                 </div>
               )}
+
+              {/* ── Graded pages: teacher-attached scans of the marked-up
+                     paper work, visible to the student and parents ── */}
+              <div style={{ background: 'var(--page-bg)', border: '1px solid var(--gray-light)', borderRadius: '8px', padding: '14px 16px', marginBottom: '24px' }}>
+                <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--gray-mid)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '10px' }}>
+                  ✍️ Graded pages {gradedFiles.length > 0 ? `(${gradedFiles.length})` : ''}
+                </div>
+                {gradedUrls.length > 0 && (
+                  <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '12px' }}>
+                    {gradedUrls.map((url, i) => (
+                      <div key={i} style={{ position: 'relative' }}>
+                        <img src={url} alt={`Graded page ${i + 1}`} onClick={() => openLightbox(url)}
+                          style={{ height: '110px', width: 'auto', borderRadius: '6px', border: '1px solid var(--gray-light)', objectFit: 'cover', display: 'block', cursor: 'zoom-in' }} />
+                        <button onClick={() => removeGradedKey(i)} title="Remove this page"
+                          style={{ position: 'absolute', top: '-6px', right: '-6px', width: '20px', height: '20px', borderRadius: '50%', border: '1px solid var(--gray-light)', background: 'var(--background)', color: '#dc2626', fontSize: '11px', lineHeight: 1, cursor: 'pointer' }}>✕</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                  <input ref={gradedFileInputRef} type="file" accept="image/*,.pdf,.heic,.heif" multiple style={{ display: 'none' }}
+                    onChange={e => { if (e.target.files && e.target.files.length > 0) uploadGradedFiles(e.target.files) }} />
+                  <button onClick={() => gradedFileInputRef.current?.click()} disabled={gradedUploading}
+                    style={{ background: 'transparent', border: '1px solid var(--plum-mid)', color: 'var(--plum)', borderRadius: '6px', padding: '6px 14px', cursor: gradedUploading ? 'default' : 'pointer', fontSize: '13px', fontWeight: 600, fontFamily: 'var(--font-body)', opacity: gradedUploading ? 0.6 : 1 }}>
+                    {gradedUploading ? 'Uploading…' : '📎 Upload graded pages'}
+                  </button>
+                  <button onClick={() => { if (gradedQr) { if (gradedPollRef.current) { clearInterval(gradedPollRef.current); gradedPollRef.current = null } setGradedQr(null) } else { startGradedQr() } }}
+                    style={{ background: gradedQr ? 'var(--plum-light)' : 'transparent', border: '1px solid var(--plum-mid)', color: 'var(--plum)', borderRadius: '6px', padding: '6px 14px', cursor: 'pointer', fontSize: '13px', fontWeight: 600, fontFamily: 'var(--font-body)' }}>
+                    {gradedQr ? 'Hide QR' : '📱 From phone'}
+                  </button>
+                  <span style={{ fontSize: '12px', color: 'var(--gray-mid)' }}>The student and their parents will see these with the grade.</span>
+                </div>
+                {gradedQr && (
+                  <div style={{ marginTop: '12px', display: 'flex', gap: '14px', alignItems: 'center' }}>
+                    <img src={gradedQr.dataUrl} alt="Phone upload QR code" style={{ width: '150px', height: '150px', borderRadius: '8px', border: '1px solid var(--gray-light)' }} />
+                    <p style={{ fontSize: '13px', color: 'var(--gray-mid)', lineHeight: 1.6, margin: 0, maxWidth: '320px' }}>
+                      Scan with your phone camera, snap the graded pages, and they will appear here automatically.
+                    </p>
+                  </div>
+                )}
+                {gradedError && <p style={{ color: '#dc2626', fontSize: '13px', margin: '10px 0 0' }}>{gradedError}</p>}
+              </div>
 
               <NotesSection content={selectedSubmission.content} />
 

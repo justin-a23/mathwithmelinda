@@ -350,6 +350,13 @@ export default function ParentDashboard() {
     if (!sub.content) return
     try {
       const parsed = JSON.parse(sub.content)
+      // Melinda's graded scans render alongside the student's own uploads —
+      // parents see the marked-up work, not just the score.
+      const allKeys = [
+        ...(parsed.files || []),
+        ...(Array.isArray(parsed.teacherFiles) ? parsed.teacherFiles : []),
+      ]
+      parsed.files = allKeys
       if (parsed.files && parsed.files.length > 0) {
         const urls = await Promise.all(
           parsed.files.map(async (key: string) => {
