@@ -8,6 +8,8 @@ import TeacherNav from '../components/TeacherNav'
 import { useRoleGuard } from '../hooks/useRoleGuard'
 import { apiFetch } from '@/app/lib/apiFetch'
 import { fetchAllPages } from '@/app/lib/fetchAllPages'
+import { fetchAuthSession } from 'aws-amplify/auth'
+import { OPEN_STATUSES } from '@/app/lib/support'
 
 const client = generateClient()
 
@@ -294,6 +296,15 @@ const listGradeScalesQuery = /* GraphQL */`
 `
 
 
+const listSupportTicketsForAlertsQuery = /* GraphQL */ `
+  query ListSupportTicketsForAlerts($nextToken: String) {
+    listSupportTickets(limit: 200, nextToken: $nextToken, filter: { status: { ne: "closed" } }) {
+      nextToken
+      items { id requesterId title status resolvedAt }
+    }
+  }
+`
+
 type Alert = {
   id: string
   level: 'urgent' | 'warning' | 'info'
@@ -524,11 +535,13 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
       const newAlerts: Alert[] = []
 
       const safeQ = (p: Promise<any>) => p.then(r => r).catch(() => null)
-      const [subsResult, studentsResult, plansResult, assignResult] = await Promise.all([
+      const [subsResult, studentsResult, plansResult, assignResult, ticketsResult, sessionResult] = await Promise.all([
         safeQ(fetchAllPages(client, listAllSubmissionsForAlertsQuery, 'listSubmissions')),
         safeQ(fetchAllPages(client, listActiveStudentsQuery, 'listStudentProfiles')),
         safeQ(fetchAllPages(client, listWeeklyPlansQuery, 'listWeeklyPlans')),
         safeQ(client.graphql({ query: listAssignmentCountQuery }) as any),
+        safeQ(fetchAllPages(client, listSupportTicketsForAlertsQuery, 'listSupportTickets')),
+        safeQ(fetchAuthSession()),
       ])
 
       const allSubs = subsResult ?? []
@@ -762,6 +775,52 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
             level: 'info',
             message: `${neverSubmitted.length} active student${neverSubmitted.length > 1 ? 's have' : ' has'} never submitted work — ${names}${extra}`,
             href: '/teacher/students',
+          })
+        }
+      }
+
+      // 5. IT tickets. The open-queue row is Justin's (admin group); the
+      // needs-your-input / resolved rows are the reporter's.
+      const tickets: { id: string; requesterId: string; title: string; status: string; resolvedAt: string | null }[] =
+        ticketsResult ?? []
+      const groups = (sessionResult?.tokens?.accessToken?.payload?.['cognito:groups'] as string[]) ?? []
+      const mySub = (sessionResult?.tokens?.accessToken?.payload?.sub as string) ?? ''
+
+      if (groups.includes('admin')) {
+        const openCount = tickets.filter(t => OPEN_STATUSES.includes(t.status)).length
+        if (openCount > 0 && !alertDismissed('open-tickets')) {
+          newAlerts.push({
+            id: 'open-tickets',
+            level: 'info',
+            message: `${openCount} open IT ticket${openCount > 1 ? 's' : ''}`,
+            href: '/teacher/support',
+            dismissible: true,
+          })
+        }
+      }
+      if (mySub) {
+        const mine = tickets.filter(t => t.requesterId === mySub)
+        const waiting = mine.find(t => t.status === 'waiting_on_reporter')
+        if (waiting && !alertDismissed(`ticket-waiting-${waiting.id}`)) {
+          newAlerts.push({
+            id: `ticket-waiting-${waiting.id}`,
+            level: 'warning',
+            message: `Your IT ticket "${waiting.title}" needs your input`,
+            href: `/teacher/support/${waiting.id}`,
+            dismissible: true,
+          })
+        }
+        const weekAgo = now.getTime() - 7 * 24 * 60 * 60 * 1000
+        const recentlyResolved = mine.find(t =>
+          t.status === 'resolved' && t.resolvedAt && new Date(t.resolvedAt).getTime() >= weekAgo
+        )
+        if (recentlyResolved && !alertDismissed(`ticket-resolved-${recentlyResolved.id}`)) {
+          newAlerts.push({
+            id: `ticket-resolved-${recentlyResolved.id}`,
+            level: 'info',
+            message: `Your IT ticket "${recentlyResolved.title}" was resolved — see what changed`,
+            href: `/teacher/support/${recentlyResolved.id}`,
+            dismissible: true,
           })
         }
       }

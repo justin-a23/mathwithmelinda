@@ -23,6 +23,9 @@ const NAV_COUNTS_QUERY = /* GraphQL */`
     listStudentProfiles(limit: 200, filter: { status: { eq: "pending" } }) {
       items { id }
     }
+    listSupportTickets(limit: 200, filter: { status: { ne: "closed" } }) {
+      items { id status }
+    }
   }
 `
 
@@ -49,6 +52,7 @@ export default function TeacherNav({ ungradedCount: propUngraded, unreadCount: p
   const [ungraded, setUngraded] = useState(propUngraded ?? 0)
   const [unread, setUnread] = useState(propUnread ?? 0)
   const [pendingStudents, setPendingStudents] = useState(0)
+  const [openTickets, setOpenTickets] = useState(0)
   const [displayName, setDisplayName] = useState('')
   const [picUrl, setPicUrl] = useState<string | null>(null)
   const [moreOpen, setMoreOpen] = useState(false)
@@ -92,6 +96,7 @@ export default function TeacherNav({ ungradedCount: propUngraded, unreadCount: p
       setUngraded(subs.filter((s: any) => !s.grade && s.status !== 'returned').length)
       setUnread(msgs.length)
       setPendingStudents(result.data.listStudentProfiles.items.length)
+      setOpenTickets(result.data.listSupportTickets.items.filter((t: any) => t.status !== 'resolved').length)
     } catch { /* silent — nav badges are non-critical */ }
   }
 
@@ -146,11 +151,13 @@ export default function TeacherNav({ ungradedCount: propUngraded, unreadCount: p
   const isReportCard = pathname.startsWith('/teacher/report-card')
   const isPayments = pathname === '/teacher/payments'
   const isProfile = pathname === '/teacher/profile'
+  // startsWith so /new and /[id] highlight too
+  const isSupport = pathname.startsWith('/teacher/support')
 
-  const moreIsActive = isGradebook || isParticipation || isTerms || isPlans || isSyllabi || isZoom || isReportCard || isPayments || isImport || isTutorials || isParents || isInvites || isPastStudents
+  const moreIsActive = isGradebook || isParticipation || isTerms || isPlans || isSyllabi || isZoom || isReportCard || isPayments || isImport || isTutorials || isParents || isInvites || isPastStudents || isSupport
 
   // Label for "More" button when a sub-item is active
-  const moreActiveLabel = isGradebook ? 'Gradebook' : isParticipation ? 'Participation' : isReportCard ? 'Report Card' : isPlans ? 'Assigned Work' : isTerms ? 'Academic Year' : isSyllabi ? 'Syllabi' : isZoom ? 'Meetings' : isPayments ? 'Payments' : isImport ? 'Import Lesson' : isTutorials ? 'Help Tutorials' : isParents ? 'Parents' : isInvites ? 'Invites' : isPastStudents ? 'Past Students' : null
+  const moreActiveLabel = isGradebook ? 'Gradebook' : isParticipation ? 'Participation' : isReportCard ? 'Report Card' : isPlans ? 'Assigned Work' : isTerms ? 'Academic Year' : isSyllabi ? 'Syllabi' : isZoom ? 'Meetings' : isPayments ? 'Payments' : isImport ? 'Import Lesson' : isTutorials ? 'Help Tutorials' : isParents ? 'Parents' : isInvites ? 'Invites' : isPastStudents ? 'Past Students' : isSupport ? 'IT Help' : null
 
   function primaryBtn(label: string, path: string, active: boolean, badge?: number) {
     return (
@@ -195,13 +202,16 @@ export default function TeacherNav({ ungradedCount: propUngraded, unreadCount: p
     )
   }
 
-  function dropdownItem(label: string, path: string, active: boolean) {
+  function dropdownItem(label: string, path: string, active: boolean, badge?: number) {
     return (
       <button
         key={path}
         onClick={() => { setMoreOpen(false); router.push(path) }}
         style={{
-          display: 'block',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '8px',
           width: '100%',
           textAlign: 'left',
           background: active ? 'var(--plum)' : 'transparent',
@@ -219,6 +229,19 @@ export default function TeacherNav({ ungradedCount: propUngraded, unreadCount: p
         onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}
       >
         {label}
+        {badge && badge > 0 ? (
+          <span style={{
+            background: active ? 'white' : '#D97706',
+            color: active ? 'var(--plum)' : 'white',
+            fontSize: '10px',
+            fontWeight: 700,
+            padding: '1px 6px',
+            borderRadius: '20px',
+            lineHeight: 1.4,
+          }}>
+            {badge > 99 ? '99+' : badge}
+          </span>
+        ) : null}
       </button>
     )
   }
@@ -284,6 +307,19 @@ export default function TeacherNav({ ungradedCount: propUngraded, unreadCount: p
           onMouseLeave={e => { if (!moreIsActive && !moreOpen) e.currentTarget.style.background = 'rgba(255,255,255,0.08)' }}
         >
           {moreActiveLabel || 'More'}
+          {openTickets > 0 && (
+            <span style={{
+              background: '#D97706',
+              color: 'white',
+              fontSize: '10px',
+              fontWeight: 700,
+              padding: '1px 6px',
+              borderRadius: '20px',
+              lineHeight: 1.4,
+            }}>
+              {openTickets > 99 ? '99+' : openTickets}
+            </span>
+          )}
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ transform: moreOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>
             <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
@@ -317,6 +353,7 @@ export default function TeacherNav({ ungradedCount: propUngraded, unreadCount: p
             {dropdownItem('Past Students', '/teacher/students/past', isPastStudents)}
             <div style={{ height: '1px', background: 'var(--gray-light)', margin: '4px 8px' }} />
             {dropdownItem('Payments', '/teacher/payments', isPayments)}
+            {dropdownItem('IT Help', '/teacher/support', isSupport, openTickets)}
           </div>
         )}
       </div>
