@@ -16,6 +16,7 @@ type PlanItem = {
   dayOfWeek: string
   dueTime: string | null
   isPublished: boolean | null
+  isInClass?: boolean | null
   lessonTemplateId: string | null
   lesson?: { id: string; title: string } | null
 }
@@ -50,6 +51,7 @@ const LIST_WEEKLY_PLANS = /* GraphQL */ `
             dayOfWeek
             dueTime
             isPublished
+            isInClass
             lessonTemplateId
             lesson { id title }
           }
@@ -72,7 +74,7 @@ const LIST_ACTIVE_SEMESTERS = /* GraphQL */ `
 
 const UPDATE_PLAN_ITEM = /* GraphQL */ `
   mutation UpdateWeeklyPlanItem($input: UpdateWeeklyPlanItemInput!) {
-    updateWeeklyPlanItem(input: $input) { id isPublished }
+    updateWeeklyPlanItem(input: $input) { id isPublished isInClass }
   }
 `
 
@@ -191,6 +193,7 @@ export default function ManagePlansPage() {
   const [confirmRemoveItemId, setConfirmRemoveItemId] = useState<string | null>(null)
   const [confirmDeletePlanId, setConfirmDeletePlanId] = useState<string | null>(null)
   const [togglingItemId, setTogglingItemId] = useState<string | null>(null)
+  const [togglingInClassId, setTogglingInClassId] = useState<string | null>(null)
 
   useEffect(() => {
     if (user === null) router.replace('/login')
@@ -367,6 +370,41 @@ export default function ManagePlansPage() {
       }))
     } finally {
       setTogglingItemId(null)
+    }
+  }
+
+  // In-class days grade into the Participation bucket REGARDLESS of the
+  // lesson's own category — an in-class chapter test would count as
+  // participation, not a test. This toggle is the only place an existing
+  // item's flag can be changed (the Schedule page only creates weeks), so a
+  // mis-flagged test day can be fixed without rebuilding the week.
+  async function toggleInClass(planId: string, item: PlanItem) {
+    const effective = item.isInClass === true || (item.isInClass == null && item.dayOfWeek === 'Friday')
+    const newVal = !effective
+    setTogglingInClassId(item.id)
+    setPlans(prev => prev.map(plan => {
+      if (plan.id !== planId) return plan
+      return {
+        ...plan,
+        items: { items: (plan.items?.items ?? []).map(i => i.id === item.id ? { ...i, isInClass: newVal } : i) }
+      }
+    }))
+    try {
+      await (client.graphql({
+        query: UPDATE_PLAN_ITEM,
+        variables: { input: { id: item.id, isInClass: newVal } as any }
+      }) as any)
+    } catch (err) {
+      console.error('Error toggling in-class:', err)
+      setPlans(prev => prev.map(plan => {
+        if (plan.id !== planId) return plan
+        return {
+          ...plan,
+          items: { items: (plan.items?.items ?? []).map(i => i.id === item.id ? { ...i, isInClass: item.isInClass } : i) }
+        }
+      }))
+    } finally {
+      setTogglingInClassId(null)
     }
   }
 
@@ -584,6 +622,38 @@ export default function ManagePlansPage() {
                               <span style={{ fontSize: '13px', color: 'var(--gray-mid)', whiteSpace: 'nowrap', minWidth: '80px', textAlign: 'right' }}>
                                 {formatDueLabel(item.dueTime)}
                               </span>
+
+                              {/* In-class toggle — decides the grading bucket:
+                                  in-class counts as Participation regardless of
+                                  the lesson's category; due-dated follows the
+                                  category (a test grades into Tests). */}
+                              {(() => {
+                                const inClass = item.isInClass === true || (item.isInClass == null && item.dayOfWeek === 'Friday')
+                                return (
+                                  <button
+                                    onClick={() => toggleInClass(plan.id, item)}
+                                    disabled={togglingInClassId === item.id}
+                                    title={inClass
+                                      ? 'In-class day: grades count toward Participation, even for a test. Click to make it a due-dated assignment (grades follow the lesson\'s category).'
+                                      : 'Due-dated: grades follow the lesson\'s category (tests count in the Tests bucket). Click to make it an in-class participation day.'}
+                                    style={{
+                                      padding: '4px 12px',
+                                      borderRadius: '20px',
+                                      fontSize: '12px',
+                                      fontWeight: 600,
+                                      cursor: togglingInClassId === item.id ? 'default' : 'pointer',
+                                      border: inClass ? '1px solid #f59e0b' : '1px solid var(--gray-light)',
+                                      background: inClass ? '#FEF3C7' : 'transparent',
+                                      color: inClass ? '#92400e' : 'var(--gray-mid)',
+                                      whiteSpace: 'nowrap',
+                                      opacity: togglingInClassId === item.id ? 0.6 : 1,
+                                      flexShrink: 0,
+                                    }}
+                                  >
+                                    {inClass ? '🏫 In Class' : 'Due-dated'}
+                                  </button>
+                                )
+                              })()}
 
                               {/* Publish toggle */}
                               <button
