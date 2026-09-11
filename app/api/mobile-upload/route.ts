@@ -63,9 +63,13 @@ export async function POST(request: NextRequest) {
     // S3 key: same pattern as /api/submit for consistency
     // studentId and lessonId come from the validated token, so they're trusted.
     // filename is the uploader's, and a `../` in it would escape the namespace.
+    // Ticket-purpose tokens (staff-minted, studentId = staff sub) land under
+    // tickets/ instead — same namespace as /api/ticket-upload.
     const { studentId, lessonId } = tokenCheck
     const safeFilename = sanitizeKeySegment(filename) || 'upload'
-    const key = `submissions/${studentId}/${lessonId}/${Date.now()}-${safeFilename}`
+    const key = tokenCheck.purpose === 'ticket'
+      ? `tickets/${sanitizeKeySegment(studentId!)}/${Date.now()}-${safeFilename}`
+      : `submissions/${studentId}/${lessonId}/${Date.now()}-${safeFilename}`
 
     await s3.send(new PutObjectCommand({
       Bucket: 'mathwithmelinda-submissions',

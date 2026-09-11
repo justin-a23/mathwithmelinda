@@ -6,6 +6,7 @@ import { generateClient } from 'aws-amplify/api'
 import TeacherNav from '../../../components/TeacherNav'
 import { useRoleGuard } from '../../../hooks/useRoleGuard'
 import { useResolvedUser } from '../../../hooks/useResolvedUser'
+import { useQrUploadToken } from '../../../hooks/useQrUploadToken'
 import { apiFetch } from '@/app/lib/apiFetch'
 import {
   SUPPORT_INBOX, CATEGORY_LABELS, SEVERITY_LABELS, KNOWN_PAGES,
@@ -70,7 +71,27 @@ export default function NewSupportTicketPage() {
   const [uploadError, setUploadError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
+  const [shotTab, setShotTab] = useState<'upload' | 'phone'>('upload')
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Phone-QR path: keys arrive from the poll as the phone uploads them.
+  const qr = useQrUploadToken({
+    body: { purpose: 'ticket' },
+    onNewKeys: keys => keys.forEach(key => addShotFromKey(key)),
+  })
+
+  function addShotFromKey(key: string) {
+    const name = key.split('/').pop() || 'photo'
+    setShots(prev => prev.some(s => s.key === key) ? prev : [...prev, { key, url: null, name }])
+    apiFetch('/api/view-submission', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key }),
+    })
+      .then(r => r.json())
+      .then(d => { if (d.url) setShots(prev => prev.map(s => s.key === key ? { ...s, url: d.url } : s)) })
+      .catch(() => { /* thumbnail is optional */ })
+  }
 
   const isBroken = category === 'broken'
   const isImprovement = category === 'improvement'
@@ -299,18 +320,63 @@ export default function NewSupportTicketPage() {
             {/* Screenshots */}
             <div style={{ marginBottom: '24px' }}>
               <label style={labelStyle}>Screenshots (optional)</label>
-              <p style={{ color: 'var(--gray-mid)', fontSize: '13px', margin: '0 0 10px' }}>
-                On a Mac, press <strong>Shift + Command + 4</strong> and drag over the problem, then upload the
-                picture it saves to your Desktop. Photos from your phone work too.
-              </p>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*,.heic,.heif,.pdf,application/pdf"
-                multiple
-                onChange={e => handleFiles(e.target.files)}
-                style={{ fontSize: '13px', color: 'var(--foreground)' }}
-              />
+              <div style={{ display: 'flex', gap: '6px', margin: '8px 0 12px' }}>
+                {([['upload', '📁 Upload files'], ['phone', '📱 Phone camera']] as const).map(([key, label]) => (
+                  <button key={key} onClick={() => setShotTab(key)}
+                    style={{
+                      padding: '6px 14px', borderRadius: '20px', fontSize: '12px', fontWeight: 600, cursor: 'pointer',
+                      border: shotTab === key ? '1px solid var(--plum)' : '1px solid var(--gray-light)',
+                      background: shotTab === key ? 'var(--plum)' : 'transparent',
+                      color: shotTab === key ? 'white' : 'var(--gray-mid)', fontFamily: 'var(--font-body)',
+                    }}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {shotTab === 'upload' && (
+                <>
+                  <p style={{ color: 'var(--gray-mid)', fontSize: '13px', margin: '0 0 10px' }}>
+                    On a Mac, press <strong>Shift + Command + 4</strong> and drag over the problem, then upload the
+                    picture it saves to your Desktop.
+                  </p>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*,.heic,.heif,.pdf,application/pdf"
+                    multiple
+                    onChange={e => handleFiles(e.target.files)}
+                    style={{ fontSize: '13px', color: 'var(--foreground)' }}
+                  />
+                </>
+              )}
+
+              {shotTab === 'phone' && (
+                <div>
+                  <p style={{ color: 'var(--gray-mid)', fontSize: '13px', margin: '0 0 10px' }}>
+                    Scan the code with your phone, then snap a photo of the problem screen — it lands here automatically.
+                  </p>
+                  {!qr.tokenState && (
+                    <button onClick={qr.generate} disabled={qr.loading}
+                      style={{ background: 'transparent', color: 'var(--plum)', border: '1px solid var(--plum)', borderRadius: '8px', padding: '9px 18px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
+                      {qr.loading ? 'Creating link…' : '📱 Show QR code'}
+                    </button>
+                  )}
+                  {qr.error && <p style={{ color: '#ef4444', fontSize: '13px', margin: '8px 0 0' }}>{qr.error}</p>}
+                  {qr.tokenState && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={qr.tokenState.qrDataUrl} alt="Scan to upload from your phone"
+                        style={{ width: '160px', height: '160px', borderRadius: '8px', border: '1px solid var(--gray-light)', background: 'white' }} />
+                      <div style={{ fontSize: '13px', color: 'var(--gray-mid)' }}>
+                        <div>Code expires in <strong style={{ color: 'var(--foreground)' }}>{Math.floor(qr.timeLeft / 60)}:{(qr.timeLeft % 60).toString().padStart(2, '0')}</strong></div>
+                        <div style={{ marginTop: '6px' }}>Photos appear below as you take them.</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {uploading && <p style={{ color: 'var(--gray-mid)', fontSize: '13px', margin: '8px 0 0' }}>Uploading…</p>}
               {uploadError && <p style={{ color: '#ef4444', fontSize: '13px', margin: '8px 0 0' }}>{uploadError}</p>}
               {shots.length > 0 && (

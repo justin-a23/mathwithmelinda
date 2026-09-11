@@ -52,10 +52,18 @@ function makeDynamoClient() {
 
 const ddb = DynamoDBDocumentClient.from(makeDynamoClient())
 
+/**
+ * What the phone upload is for — decides the S3 key prefix in mobile-upload.
+ * Rows written before this field existed lack the attribute; treat missing
+ * as 'submission' (DynamoDB is schemaless, no table change needed).
+ */
+export type UploadPurpose = 'submission' | 'ticket'
+
 export type UploadToken = {
   tokenId: string
   studentId: string
   lessonId: string
+  purpose?: UploadPurpose
   expiresAt: number
   maxUploads: number
   uploadCount: number
@@ -67,13 +75,18 @@ export type UploadToken = {
  * Create a new upload token for a student + lesson.
  * Returns the token ID (64 hex chars, 128-bit entropy).
  */
-export async function createToken(studentId: string, lessonId: string): Promise<UploadToken> {
+export async function createToken(
+  studentId: string,
+  lessonId: string,
+  purpose: UploadPurpose = 'submission'
+): Promise<UploadToken> {
   const tokenId = crypto.randomBytes(32).toString('hex')
   const now = Math.floor(Date.now() / 1000)
   const token: UploadToken = {
     tokenId,
     studentId,
     lessonId,
+    purpose,
     expiresAt: now + TOKEN_TTL_SECONDS,
     maxUploads: DEFAULT_MAX_UPLOADS,
     uploadCount: 0,
@@ -95,6 +108,7 @@ export type TokenValidation = {
   reason?: string
   studentId?: string
   lessonId?: string
+  purpose?: UploadPurpose
   uploadCount?: number
   maxUploads?: number
   remainingUploads?: number
@@ -131,6 +145,7 @@ export async function validateToken(tokenId: string): Promise<TokenValidation> {
     valid: true,
     studentId: token.studentId,
     lessonId: token.lessonId,
+    purpose: token.purpose || 'submission',
     uploadCount: token.uploadCount,
     maxUploads: token.maxUploads,
     remainingUploads: token.maxUploads - token.uploadCount,

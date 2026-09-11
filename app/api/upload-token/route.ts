@@ -14,7 +14,25 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { lessonId, forStudentEmail } = await request.json()
+    const { lessonId, forStudentEmail, purpose } = await request.json()
+
+    // IT-ticket screenshots: staff-only, no lesson involved. The phone
+    // uploads land under tickets/{sub}/ (see /api/mobile-upload), so the
+    // owner is the sub — matching /api/ticket-upload's namespace.
+    if (purpose === 'ticket') {
+      if (auth.role !== 'teacher') {
+        return NextResponse.json({ error: 'Only staff can attach ticket screenshots' }, { status: 403 })
+      }
+      const token = await createToken(auth.userId, 'ticket', 'ticket')
+      const base = process.env.NEXT_PUBLIC_BASE_URL || 'https://mathwithmelinda.com'
+      return NextResponse.json({
+        tokenId: token.tokenId,
+        expiresAt: token.expiresAt,
+        maxUploads: token.maxUploads,
+        url: `${base}/snap?token=${token.tokenId}`,
+      })
+    }
+
     if (!lessonId || typeof lessonId !== 'string') {
       return NextResponse.json({ error: 'lessonId is required' }, { status: 400 })
     }
