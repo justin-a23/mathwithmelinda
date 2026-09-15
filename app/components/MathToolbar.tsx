@@ -2,6 +2,7 @@
 
 import { useState, useRef } from 'react'
 import MathRenderer from './MathRenderer'
+import { stackVertical, StackResult } from '../lib/verticalStack'
 
 const SYMBOLS = [
   { label: '²', insert: '\\(^2\\)', title: 'Squared' },
@@ -23,10 +24,16 @@ type Props = {
   textareaRef: React.RefObject<HTMLTextAreaElement | null>
   value: string
   onChange: (val: string) => void
+  // Shows the "Stack" button that rewrites a horizontal problem as vertical
+  // column arithmetic. Only enabled on question-text fields — it replaces
+  // text, which makes no sense for answers or student inputs.
+  showStack?: boolean
 }
 
-export default function MathToolbar({ textareaRef, value, onChange }: Props) {
+export default function MathToolbar({ textareaRef, value, onChange, showStack }: Props) {
   const [showFractionPopup, setShowFractionPopup] = useState(false)
+  const [showStackPopup, setShowStackPopup] = useState(false)
+  const [stackRange, setStackRange] = useState<{ start: number; end: number } | null>(null)
   const [showExponentPopup, setShowExponentPopup] = useState(false)
   const [showOverlinePopup, setShowOverlinePopup] = useState(false)
   const [showRootPopup, setShowRootPopup] = useState(false)
@@ -91,6 +98,24 @@ export default function MathToolbar({ textareaRef, value, onChange }: Props) {
     setShowRootPopup(false)
   }
 
+  function openStackPopup() {
+    if (showStackPopup) { setShowStackPopup(false); return }
+    const ta = textareaRef.current
+    // Stack the selected text, or the whole field when nothing is selected
+    let start = 0
+    let end = value.length
+    if (ta && ta.selectionStart !== ta.selectionEnd) {
+      start = ta.selectionStart
+      end = ta.selectionEnd
+    }
+    setStackRange({ start, end })
+    setShowFractionPopup(false)
+    setShowExponentPopup(false)
+    setShowOverlinePopup(false)
+    setShowRootPopup(false)
+    setShowStackPopup(true)
+  }
+
   function insertExponent() {
     if (!expBase.trim() || !expPower.trim()) return
     const latex = `\\(${expBase}^{${expPower}}\\)`
@@ -134,6 +159,16 @@ export default function MathToolbar({ textareaRef, value, onChange }: Props) {
     ? `\\(\\overline{${overlineDigits}}\\)`
     : null
 
+  const stackSource = stackRange ? value.slice(stackRange.start, stackRange.end) : ''
+  const stackResult: StackResult | null = showStackPopup && stackRange ? stackVertical(stackSource) : null
+
+  function applyStack() {
+    if (!stackRange || !stackResult || 'error' in stackResult) return
+    onChange(value.slice(0, stackRange.start) + stackResult.latex + value.slice(stackRange.end))
+    setShowStackPopup(false)
+    setStackRange(null)
+  }
+
   const rootInside = rootContent + (rootInsidePower.trim() ? `^{${rootInsidePower.trim()}}` : '')
   const rootPreview = rootContent
     ? (rootDegree.trim() && rootDegree.trim() !== '2'
@@ -149,7 +184,7 @@ export default function MathToolbar({ textareaRef, value, onChange }: Props) {
         <button
           type="button"
           title="Insert fraction"
-          onClick={() => { setShowFractionPopup(v => !v); setShowExponentPopup(false); setTimeout(() => numerRef.current?.focus(), 50) }}
+          onClick={() => { setShowFractionPopup(v => !v); setShowExponentPopup(false); setShowStackPopup(false); setTimeout(() => numerRef.current?.focus(), 50) }}
           style={{ ...btnStyle, background: showFractionPopup ? 'var(--plum)' : 'var(--background)', color: showFractionPopup ? 'white' : 'var(--foreground)', fontWeight: 700 }}
         >
           a/b
@@ -187,7 +222,7 @@ export default function MathToolbar({ textareaRef, value, onChange }: Props) {
         <button
           type="button"
           title="Insert exponent"
-          onClick={() => { setShowExponentPopup(v => !v); setShowFractionPopup(false); setTimeout(() => baseRef.current?.focus(), 50) }}
+          onClick={() => { setShowExponentPopup(v => !v); setShowFractionPopup(false); setShowStackPopup(false); setTimeout(() => baseRef.current?.focus(), 50) }}
           style={{ ...btnStyle, background: showExponentPopup ? 'var(--plum)' : 'var(--background)', color: showExponentPopup ? 'white' : 'var(--foreground)', fontWeight: 700 }}
         >
           xⁿ
@@ -221,7 +256,7 @@ export default function MathToolbar({ textareaRef, value, onChange }: Props) {
         <button
           type="button"
           title="Insert overline (repeating decimal)"
-          onClick={() => { setShowOverlinePopup(v => !v); setShowFractionPopup(false); setShowExponentPopup(false); setTimeout(() => overlineRef.current?.focus(), 50) }}
+          onClick={() => { setShowOverlinePopup(v => !v); setShowFractionPopup(false); setShowExponentPopup(false); setShowStackPopup(false); setTimeout(() => overlineRef.current?.focus(), 50) }}
           style={{ ...btnStyle, background: showOverlinePopup ? 'var(--plum)' : 'var(--background)', color: showOverlinePopup ? 'white' : 'var(--foreground)', fontWeight: 700 }}
         >
           x̄
@@ -251,7 +286,7 @@ export default function MathToolbar({ textareaRef, value, onChange }: Props) {
         <button
           type="button"
           title="Insert square root or cube root"
-          onClick={() => { setShowRootPopup(v => !v); setShowFractionPopup(false); setShowExponentPopup(false); setShowOverlinePopup(false); setTimeout(() => rootContentRef.current?.focus(), 50) }}
+          onClick={() => { setShowRootPopup(v => !v); setShowFractionPopup(false); setShowExponentPopup(false); setShowOverlinePopup(false); setShowStackPopup(false); setTimeout(() => rootContentRef.current?.focus(), 50) }}
           style={{ ...btnStyle, background: showRootPopup ? 'var(--plum)' : 'var(--background)', color: showRootPopup ? 'white' : 'var(--foreground)', fontWeight: 700 }}
         >
           {'√'}
@@ -304,6 +339,50 @@ export default function MathToolbar({ textareaRef, value, onChange }: Props) {
           </div>
         )}
       </div>
+
+      {/* Stack vertically button — question-text fields only */}
+      {showStack && (
+        <div style={{ position: 'relative' }}>
+          <button
+            type="button"
+            title="Stack a problem vertically (line up columns for adding, subtracting, multiplying, or dividing)"
+            onClick={openStackPopup}
+            style={{ ...btnStyle, background: showStackPopup ? 'var(--plum)' : 'var(--background)', color: showStackPopup ? 'white' : 'var(--foreground)', fontWeight: 700 }}
+          >
+            Stack ↓
+          </button>
+          {showStackPopup && (
+            <div style={{ ...popupStyle, minWidth: '300px', maxWidth: '360px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--gray-dark)', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Stack Vertically</div>
+              {stackResult && 'latex' in stackResult ? (
+                <>
+                  <div style={{ fontSize: '12px', color: 'var(--gray-dark)', marginBottom: '8px' }}>
+                    <span style={{ color: 'var(--gray-mid)' }}>This problem:</span> {stackSource.trim()}
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginBottom: '4px' }}>becomes:</div>
+                  <div style={{ textAlign: 'center', fontSize: '16px', marginBottom: '12px', padding: '10px', background: 'var(--page-bg)', borderRadius: '6px', border: '1px solid var(--plum-mid)' }}>
+                    <MathRenderer text={stackResult.latex} />
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button onClick={applyStack} style={{ flex: 1, background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '6px', padding: '7px', cursor: 'pointer', fontSize: '13px', fontWeight: 500, fontFamily: 'var(--font-body)' }}>Replace</button>
+                    <button onClick={() => { setShowStackPopup(false); setStackRange(null) }} style={{ flex: 1, background: 'none', border: '1px solid var(--gray-light)', color: 'var(--gray-dark)', borderRadius: '6px', padding: '7px', cursor: 'pointer', fontSize: '13px', fontFamily: 'var(--font-body)' }}>Cancel</button>
+                  </div>
+                  <p style={{ fontSize: '11px', color: 'var(--gray-mid)', margin: '8px 0 0' }}>
+                    Tip: to stack only part of the question, highlight just the problem in the box below before clicking Stack.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontSize: '13px', color: 'var(--gray-dark)', marginBottom: '12px', lineHeight: 1.5 }}>
+                    {stackResult && 'error' in stackResult ? stackResult.error : 'Type a problem first.'}
+                  </div>
+                  <button onClick={() => { setShowStackPopup(false); setStackRange(null) }} style={{ width: '100%', background: 'none', border: '1px solid var(--gray-light)', color: 'var(--gray-dark)', borderRadius: '6px', padding: '7px', cursor: 'pointer', fontSize: '13px', fontFamily: 'var(--font-body)' }}>Close</button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Symbol buttons */}
       {SYMBOLS.map(({ label, insert: sym, title }) => (

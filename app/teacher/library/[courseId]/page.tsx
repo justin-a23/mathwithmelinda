@@ -1999,6 +1999,7 @@ export default function LessonLibraryPage() {
                                                     textareaRef={editQuestionTextareaRef}
                                                     value={editingQuestionForm.questionText}
                                                     onChange={val => setEditingQuestionForm(f => ({ ...f, questionText: val }))}
+                                                    showStack
                                                   />
                                                   <textarea
                                                     ref={editQuestionTextareaRef}
@@ -2257,6 +2258,7 @@ export default function LessonLibraryPage() {
                                           textareaRef={questionTextareaRef}
                                           value={newQuestion.questionText}
                                           onChange={val => setNewQuestion(q => ({ ...q, questionText: val }))}
+                                          showStack
                                         />
                                         <textarea
                                           ref={questionTextareaRef}
