@@ -30,7 +30,7 @@ const GET_SUPPORT_TICKET = /* GraphQL */ `
 const LIST_TICKET_NOTES = /* GraphQL */ `
   query ListTicketNotes($ticketId: String!, $nextToken: String) {
     listSupportTicketNotes(limit: 200, filter: { ticketId: { eq: $ticketId } }, nextToken: $nextToken) {
-      items { id ticketId authorId authorName body createdAtIso }
+      items { id ticketId authorId authorName body createdAtIso internal }
       nextToken
     }
   }
@@ -44,7 +44,7 @@ const UPDATE_SUPPORT_TICKET = /* GraphQL */ `
 
 const CREATE_TICKET_NOTE = /* GraphQL */ `
   mutation CreateTicketNote($input: CreateSupportTicketNoteInput!) {
-    createSupportTicketNote(input: $input) { id ticketId authorId authorName body createdAtIso }
+    createSupportTicketNote(input: $input) { id ticketId authorId authorName body createdAtIso internal }
   }
 `
 
@@ -79,6 +79,7 @@ export default function SupportTicketDetailPage() {
   const [savingAdmin, setSavingAdmin] = useState(false)
   const [adminSaved, setAdminSaved] = useState(false)
   const [noteDraft, setNoteDraft] = useState('')
+  const [noteInternal, setNoteInternal] = useState(false)
   const [savingNote, setSavingNote] = useState(false)
   const [actionError, setActionError] = useState('')
 
@@ -158,6 +159,7 @@ export default function SupportTicketDetailPage() {
         authorName: loginId || null,
         body: noteDraft.trim(),
         createdAtIso: new Date().toISOString(),
+        internal: isAdmin && noteInternal,
       }
       const res = await (client.graphql({ query: CREATE_TICKET_NOTE, variables: { input } }) as any)
       const created = res?.data?.createSupportTicketNote
@@ -173,6 +175,9 @@ export default function SupportTicketDetailPage() {
   if (checking) return null
 
   const shotKeys = ticket ? parseScreenshotKeys(ticket.screenshotKeys) : []
+  // Internal notes (agent drafts, IT working notes) are for admins only;
+  // everyone else sees the plain-language updates.
+  const visibleNotes = isAdmin ? notes : notes.filter(n => !n.internal)
   const pageLabel = ticket?.pageUrl
     ? (KNOWN_PAGES.find(p => p.value === ticket.pageUrl)?.label || ticket.pageUrl)
     : null
@@ -278,13 +283,21 @@ export default function SupportTicketDetailPage() {
             {/* Notes thread */}
             <div style={{ background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: '12px', padding: '20px' }}>
               <div style={fieldLabel}>Updates</div>
-              {notes.length === 0 && (
+              {visibleNotes.length === 0 && (
                 <p style={{ color: 'var(--gray-mid)', fontSize: '13px', margin: '8px 0 0' }}>No updates yet.</p>
               )}
-              {notes.map(n => (
-                <div key={n.id} style={{ borderTop: '1px solid var(--gray-light)', padding: '12px 0', marginTop: '10px' }}>
+              {visibleNotes.map(n => (
+                <div key={n.id} style={{
+                  borderTop: '1px solid var(--gray-light)', padding: '12px 0', marginTop: '10px',
+                  ...(n.internal ? { background: 'rgba(123,79,166,0.06)', borderLeft: '3px solid var(--plum)', paddingLeft: '12px' } : {}),
+                }}>
                   <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginBottom: '4px' }}>
                     <strong style={{ color: 'var(--foreground)' }}>{n.authorName || 'staff'}</strong> · {fmtDateTime(n.createdAtIso)}
+                    {n.internal && (
+                      <span style={{ marginLeft: '8px', fontSize: '10px', fontWeight: 700, color: 'var(--plum)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        Internal · IT only
+                      </span>
+                    )}
                   </div>
                   <div style={{ fontSize: '14px', color: 'var(--foreground)', whiteSpace: 'pre-wrap' }}>{n.body}</div>
                 </div>
@@ -299,6 +312,12 @@ export default function SupportTicketDetailPage() {
                   {savingNote ? '…' : 'Post'}
                 </button>
               </div>
+              {isAdmin && (
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '8px', fontSize: '12px', color: 'var(--gray-mid)', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={noteInternal} onChange={e => setNoteInternal(e.target.checked)} />
+                  Internal (IT only, hidden from the reporter)
+                </label>
+              )}
             </div>
 
             {actionError && <p style={{ color: '#ef4444', fontSize: '13px', marginTop: '12px' }}>{actionError}</p>}

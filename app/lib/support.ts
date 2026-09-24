@@ -86,6 +86,7 @@ export type SupportTicketNote = {
   authorName: string | null
   body: string
   createdAtIso: string
+  internal: boolean | null
 }
 
 export function parseScreenshotKeys(raw: string | null | undefined): string[] {

@@ -645,6 +645,11 @@ const schema = a.schema({
       authorName: a.string(),
       body: a.string().required(),
       createdAtIso: a.string().required(),
+      // true = IT-only (the Mac mini agent's technical draft, Justin's
+      // working notes). Hidden from non-admin staff in the UI so Melinda sees
+      // only plain-language updates. UI filter, NOT a security boundary:
+      // teacherOnly still lets any staff token read the row.
+      internal: a.boolean(),
     })
     .authorization(teacherOnly),
 
