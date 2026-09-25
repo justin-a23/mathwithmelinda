@@ -81,8 +81,11 @@ type InClassOption = {
 type StudentRow = {
   student: Student
   // none: no submission — eligible for credit
-  // credited: has a teacher-given participation credit (can be undone)
-  // submitted: turned the work in themselves (absent-student path) — hands off
+  // credited: has a teacher-given participation credit, either from Give
+  //   Credit or from marking an existing submission present (can be undone)
+  // submitted: turned the work in themselves, not yet marked present —
+  //   the default assumption is the absent-student makeup path, but Melinda
+  //   can mark them present too if they were actually there
   state: 'none' | 'credited' | 'submitted'
   submissionId: string | null
   grade: string | null
@@ -112,6 +115,7 @@ export default function ParticipationPage() {
   const [saveError, setSaveError] = useState('')
   const [justCredited, setJustCredited] = useState(0)
   const [undoingId, setUndoingId] = useState<string | null>(null)
+  const [markingId, setMarkingId] = useState<string | null>(null)
 
   useEffect(() => {
     if (user === null) router.replace('/login')
@@ -355,19 +359,64 @@ export default function ParticipationPage() {
 
   async function undoCredit(row: StudentRow) {
     if (!row.submissionId || row.state !== 'credited' || undoingId) return
+    const sub = subs.find(s => s.id === row.submissionId)
+    let content: any = {}
+    try { content = JSON.parse(sub?.content || '{}') } catch { /* ignore */ }
     setUndoingId(row.submissionId)
     try {
-      const { deleteSubmission } = await import('../../../src/graphql/mutations')
-      await client.graphql({
-        query: deleteSubmission,
-        variables: { input: { id: row.submissionId } }
-      })
-      setSubs(prev => prev.filter(s => s.id !== row.submissionId))
+      if (content.retroactivePresentMark) {
+        // This was a real submission we merely flagged as present — unflag
+        // it, don't delete the student's actual turned-in work and grade.
+        const { updateSubmission } = await import('../../../src/graphql/mutations')
+        const { retroactivePresentMark, ...rest } = content
+        const newContent = JSON.stringify({ ...rest, participationCredit: false })
+        await client.graphql({
+          query: updateSubmission,
+          variables: { input: { id: row.submissionId, content: newContent } }
+        })
+        setSubs(prev => prev.map(s => s.id === row.submissionId ? { ...s, content: newContent } : s))
+      } else {
+        // Submission exists only to record credit — safe to remove entirely.
+        const { deleteSubmission } = await import('../../../src/graphql/mutations')
+        await client.graphql({
+          query: deleteSubmission,
+          variables: { input: { id: row.submissionId } }
+        })
+        setSubs(prev => prev.filter(s => s.id !== row.submissionId))
+      }
     } catch (err) {
       console.error('Error undoing credit:', err)
       setSaveError('Could not remove that credit. Try again.')
     } finally {
       setUndoingId(null)
+    }
+  }
+
+  // A student can turn in in-class work themselves (e.g. photographing a
+  // worksheet) instead of Melinda checking them off before/during class.
+  // That's real attendance too, but it doesn't set participationCredit, so
+  // it was invisible to the season attendance count, gradebook attendance
+  // column, and report card. Let Melinda mark it after the fact without
+  // touching the grade or the work that was actually turned in.
+  async function markPresentToo(row: StudentRow) {
+    if (!row.submissionId || row.state !== 'submitted' || markingId) return
+    const sub = subs.find(s => s.id === row.submissionId)
+    let content: any = {}
+    try { content = JSON.parse(sub?.content || '{}') } catch { /* ignore */ }
+    setMarkingId(row.submissionId)
+    try {
+      const { updateSubmission } = await import('../../../src/graphql/mutations')
+      const newContent = JSON.stringify({ ...content, participationCredit: true, retroactivePresentMark: true })
+      await client.graphql({
+        query: updateSubmission,
+        variables: { input: { id: row.submissionId, content: newContent } }
+      })
+      setSubs(prev => prev.map(s => s.id === row.submissionId ? { ...s, content: newContent } : s))
+    } catch (err) {
+      console.error('Error marking present:', err)
+      setSaveError('Could not mark that student present. Try again.')
+    } finally {
+      setMarkingId(null)
     }
   }
 
@@ -475,9 +524,16 @@ export default function ParticipationPage() {
                                     </button>
                                   </>
                                 ) : (
-                                  <span style={{ fontSize: '12px', fontWeight: 600, background: 'var(--plum-light)', color: 'var(--plum)', border: '1px solid var(--plum-mid)', borderRadius: '20px', padding: '2px 10px' }}>
-                                    {row.grade ? `Turned in — graded ${row.grade}` : 'Turned in — needs grading'}
-                                  </span>
+                                  <>
+                                    <span style={{ fontSize: '12px', fontWeight: 600, background: 'var(--plum-light)', color: 'var(--plum)', border: '1px solid var(--plum-mid)', borderRadius: '20px', padding: '2px 10px' }}>
+                                      {row.grade ? `Turned in — graded ${row.grade}` : 'Turned in — needs grading'}
+                                    </span>
+                                    <button onClick={() => markPresentToo(row)} disabled={markingId === row.submissionId}
+                                      title="They turned this in themselves but were also physically here — count the day as attended."
+                                      style={{ background: 'transparent', border: 'none', color: 'var(--gray-mid)', cursor: 'pointer', fontSize: '12px', textDecoration: 'underline', padding: 0 }}>
+                                      {markingId === row.submissionId ? 'Marking…' : 'Also mark present'}
+                                    </button>
+                                  </>
                                 )}
                               </div>
                             )}
