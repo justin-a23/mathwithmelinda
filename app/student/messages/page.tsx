@@ -220,6 +220,16 @@ function StudentMessagesPageInner() {
           text: `New message from ${studentDisplayName}:\n\n${content.replace(/^\[ref:sub=[^\]]+\]\n/, '')}\n\nReply at https://mathwithmelinda.com/teacher/messages`,
         }),
       }).catch(() => {}) // silently ignore email errors — message was still sent
+
+      // Notify Melinda by text — fire and forget, no-op until TEACHER_SMS_NUMBER is set
+      apiFetch('/api/notify-sms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          from: studentDisplayName,
+          preview: content.replace(/^\[ref:sub=[^\]]+\]\n/, ''),
+        }),
+      }).catch(() => {})
     } catch (err) {
       console.error('Error sending message:', err)
     } finally {

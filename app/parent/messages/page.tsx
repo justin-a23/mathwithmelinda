@@ -164,6 +164,18 @@ export default function ParentMessagesPage() {
           }),
         })
       } catch { /* email notification is best-effort */ }
+
+      // Notify teacher by text — fire and forget, no-op until TEACHER_SMS_NUMBER is set
+      try {
+        await apiFetch('/api/notify-sms', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            from: `parent: ${displayName}`,
+            preview: compose.trim(),
+          }),
+        })
+      } catch { /* sms notification is best-effort */ }
     } catch (err) {
       console.error('Error sending message:', err)
     } finally {
