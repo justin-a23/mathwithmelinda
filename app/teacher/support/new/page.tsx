@@ -97,7 +97,15 @@ export default function NewSupportTicketPage() {
   const isImprovement = category === 'improvement'
   const asksPage = isBroken || isImprovement
   const pageUrl = pageChoice === 'other' ? pageOther.trim() : pageChoice
-  const canSubmit = !!category && title.trim().length > 0 && description.trim().length > 0 && !submitting && !uploading
+  // The free-form box is labeled optional ("as much or as little as you like"), so the guided
+  // answers count as the description when it's left empty. Melinda was blocked on 9/28 with every
+  // guided field filled and "Send to Justin" greyed out. The model still requires a non-empty description.
+  const guidedDescription = isBroken
+    ? [['What I was doing', stepsTaken], ['What happened', actualBehavior], ['What I expected', expectedBehavior]]
+        .filter(([, v]) => v.trim()).map(([k, v]) => `${k}: ${v.trim()}`).join('\n')
+    : ''
+  const effectiveDescription = description.trim() || guidedDescription
+  const canSubmit = !!category && title.trim().length > 0 && effectiveDescription.length > 0 && !submitting && !uploading
 
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return
@@ -152,7 +160,7 @@ export default function NewSupportTicketPage() {
         category,
         severity,
         title: title.trim(),
-        description: description.trim(),
+        description: effectiveDescription,
         pageUrl: asksPage && pageUrl ? pageUrl : null,
         stepsTaken: isBroken && stepsTaken.trim() ? stepsTaken.trim() : null,
         actualBehavior: isBroken && actualBehavior.trim() ? actualBehavior.trim() : null,
