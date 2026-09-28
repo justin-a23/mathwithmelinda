@@ -1008,7 +1008,7 @@ function LessonPageInner() {
         const nextKey = (i + 1 < showWorkQuestions.length) ? (swSortKeys.get(showWorkQuestions[i + 1].id) ?? showWorkQuestions[i + 1].order) : q.order
         swSortKeys.set(q.id, nextKey - 0.5)
       } else {
-        const num = parseInt(q.questionText.match(/^(\d+)\./)?.[1] || '0')
+        const num = parseInt(q.questionText.match(/^(\d+)\.\s/)?.[1] || '0')  // "12. text" only: a bare decimal like "2.5%" is not a book number
         swSortKeys.set(q.id, num > 0 ? num : q.order + 10000)
       }
     }

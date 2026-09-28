@@ -910,7 +910,7 @@ export default function LessonLibraryPage() {
         const nextKey = (i + 1 < displayQuestions.length) ? (sortKeys.get(displayQuestions[i + 1].id) ?? displayQuestions[i + 1].order) : q.order
         sortKeys.set(q.id, nextKey - 0.5)
       } else {
-        const num = parseInt(q.questionText.match(/^(\d+)\./)?.[1] || '0')
+        const num = parseInt(q.questionText.match(/^(\d+)\.\s/)?.[1] || '0')  // "12. text" only: a bare decimal like "2.5%" is not a book number
         sortKeys.set(q.id, num > 0 ? num : q.order + 10000)
       }
     }
