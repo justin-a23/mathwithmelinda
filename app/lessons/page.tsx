@@ -942,8 +942,12 @@ function LessonPageInner() {
     const isWorksheetType = aType === 'worksheet' || aType === 'upload'
     // For worksheet/upload type, print ALL questions (it's a paper-only assignment)
     // For digital questions or both, only print show_work questions
+    // Paper worksheets keep their section headers: they carry Melinda's instructions
+    // ("Write each number as a percent."), and without them students printed bare
+    // numbers like "0.05" with no idea what to do (MS Math Test 2, 2026-09-28). This
+    // matches the teacher's Participation Worksheet. Digital lessons are unchanged.
     const showWorkQuestions = isWorksheetType
-      ? allQuestions.filter(q => q.questionType !== 'section_header')
+      ? [...allQuestions]
       : allQuestions.filter(q => q.questionType === 'show_work')
     if (showWorkQuestions.length === 0) return
 
@@ -1027,6 +1031,9 @@ function LessonPageInner() {
 
     // Build question HTML — each question shows its text, diagram (if any), and work box
     const questionsHTML = showWorkQuestions.map(q => {
+      if (q.questionType === 'section_header') {
+        return `<div class="section-header">${renderMath(q.questionText || '')}</div>`
+      }
       const bookNumMatch = q.questionText.match(/^(\d+\.)\s/)
       const qNumLabel = bookNumMatch ? bookNumMatch[1]
         : q.order >= 1000 ? `#${q.order % 1000}.`
@@ -1060,6 +1067,7 @@ function LessonPageInner() {
         .diagram{margin:8px 0 12px;max-width:320px}
         .diagram-img{width:100%;border:1px solid #ccc;border-radius:4px;display:block}
         .work-item{margin-bottom:18px;page-break-inside:avoid}
+        .section-header{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#5b2d8e;border-bottom:2px solid #d8b4fe;padding-bottom:5px;margin:28px 0 16px;page-break-after:avoid}
         /* Normal inline flow, NOT flex: the body is raw text nodes mixed with
            KaTeX spans, and flex promotes each fragment to its own column —
            long questions with inline math shattered into a broken grid. */
