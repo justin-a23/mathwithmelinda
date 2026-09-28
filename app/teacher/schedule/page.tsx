@@ -4,10 +4,15 @@ import { useAuthenticator } from '@aws-amplify/ui-react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState, useRef, Suspense } from 'react'
 import { generateClient } from 'aws-amplify/api'
-import { listCourses, listStudentProfiles } from '../../../src/graphql/queries'
+import { listCourses, listStudentProfiles, listAssignmentQuestions } from '../../../src/graphql/queries'
 import TeacherNav from '../../components/TeacherNav'
 import { useRoleGuard } from '../../hooks/useRoleGuard'
 import { lessonDisplayTitle } from '@/app/lib/lessonTitle'
+import { apiFetch } from '@/app/lib/apiFetch'
+import { MATH_DELIMITER_SPLIT } from '../../components/MathRenderer'
+import { checkLesson, checkWeek, lessonContentKey, type CheckLesson, type CheckQuestion, type CheckSlot, type Finding } from '@/app/lib/weekCheck'
+import type { ClaudeFinding } from '@/app/lib/weekCheckCore'
+import outputs from '../../../amplify_outputs.json'
 
 const client = generateClient()
 
@@ -16,7 +21,41 @@ type LessonTemplate = {
   id: string; lessonNumber: number; title: string; instructions: string | null
   worksheetUrl: string | null; videoUrl: string | null
   assignmentType: string | null
+  teachingNotes: string | null
   questions?: { items: { id: string }[] } | null
+}
+
+/**
+ * "Check my week": the Claude review runs in a Lambda behind a function URL
+ * (outputs.custom.weekCheckUrl) because Amplify Hosting kills /api routes at
+ * 30 s and Opus working a chapter test takes longer. The /api route is the
+ * local-dev fallback. apiFetch attaches the teacher's Bearer token either way.
+ */
+const WEEK_CHECK_ENDPOINT: string =
+  (outputs as { custom?: { weekCheckUrl?: string } }).custom?.weekCheckUrl || '/api/week-check'
+const WEEK_CHECK_CACHE_PREFIX = 'mwm-week-check:v1:'
+
+type LessonReport = {
+  templateId: string
+  title: string
+  slotLabel: string
+  checks: Finding[]
+  claude: 'pending' | 'running' | 'done' | 'error'
+  claudeFindings: ClaudeFinding[]
+  claudeSummary: string
+  claudeError: string
+  fromCache: boolean
+}
+type WeekReport = { weekFindings: Finding[]; lessons: LessonReport[]; finished: boolean }
+
+async function sha256Hex(text: string): Promise<string> {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('')
+}
+
+function localToday(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 // Local query instead of the generated one: the mode chip under each day needs
@@ -25,7 +64,7 @@ const listLessonTemplatesForSchedule = /* GraphQL */ `
   query ListLessonTemplatesForSchedule($filter: ModelLessonTemplateFilterInput, $limit: Int, $nextToken: String) {
     listLessonTemplates(filter: $filter, limit: $limit, nextToken: $nextToken) {
       items {
-        id lessonNumber title instructions worksheetUrl videoUrl assignmentType
+        id lessonNumber title instructions worksheetUrl videoUrl assignmentType teachingNotes
         questions { items { id } }
       }
       nextToken
@@ -132,6 +171,10 @@ function ScheduleWeekInner() {
   // not enough: two rapid clicks both read saving=false before React commits
   // the state update, and each created a full week of duplicate assignments.
   const savingRef = useRef(false)
+  // "Check my week" (advisory pre-send review; never blocks saving)
+  const [report, setReport] = useState<WeekReport | null>(null)
+  const [checkingWeek, setCheckingWeek] = useState(false)
+  const reportRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (user === null) router.replace('/login')
@@ -295,6 +338,152 @@ function ScheduleWeekInner() {
     setExtras([])
     setSaveError('')
     setSaved(false)
+    setReport(null)
+  }
+
+  /**
+   * "Check my week": two layers, both advisory.
+   *   1. Instant, in the browser: the checks in app/lib/weekCheck.ts (paper
+   *      order vs. screen order, blank or duplicate questions, math that will
+   *      not render, missing answer keys, dates, video, publish flag).
+   *   2. Claude reads each lesson like a student and works every problem to
+   *      verify the answer key. One call per lesson, in parallel, and the
+   *      verdict is remembered in localStorage by content hash so an
+   *      unchanged lesson is never sent twice.
+   */
+  async function checkMyWeek() {
+    if (checkingWeek) return
+    const rows = [...days, ...extras].map((d, i) => ({
+      slotLabel: d.day === 'Additional' ? `Additional Assignment${extras.length > 1 ? ` ${i - days.length + 1}` : ''}` : d.day,
+      day: d,
+      template: d.lessonTemplateId ? lessonTemplates.find(t => t.id === d.lessonTemplateId) : undefined,
+    }))
+    setCheckingWeek(true)
+    setReport(null)
+    try {
+      // Questions (with the answer key: the teacher may read correctAnswer)
+      const questionsByTemplate = new Map<string, CheckQuestion[]>()
+      await Promise.all([...new Set(rows.filter(r => r.template).map(r => r.template!.id))].map(async templateId => {
+        let items: CheckQuestion[] = []
+        let nextToken: string | null = null
+        do {
+          const result: any = await client.graphql({
+            query: listAssignmentQuestions,
+            variables: { filter: { lessonTemplateQuestionsId: { eq: templateId } }, limit: 200, nextToken },
+          })
+          items = [...items, ...result.data.listAssignmentQuestions.items]
+          nextToken = result.data.listAssignmentQuestions.nextToken
+        } while (nextToken)
+        questionsByTemplate.set(templateId, items)
+      }))
+
+      // KaTeX errors: render every math run the way MathRenderer does, but with
+      // throwOnError so a broken formula is reported instead of shown in red.
+      const { default: katex } = await import('katex')
+      const mathErrors = (text: string): string[] => {
+        const errs: string[] = []
+        for (const part of text.split(MATH_DELIMITER_SPLIT)) {
+          let tex: string | null = null
+          if (part.startsWith('\\[') && part.endsWith('\\]')) tex = part.slice(2, -2)
+          else if (part.startsWith('\\(') && part.endsWith('\\)')) tex = part.slice(2, -2)
+          else if (part.startsWith('$$') && part.endsWith('$$') && part.length >= 4) tex = part.slice(2, -2)
+          else if (part.startsWith('$') && part.endsWith('$') && part.length >= 2) tex = part.slice(1, -1)
+          if (tex === null) continue
+          try { katex.renderToString(tex, { throwOnError: true }) }
+          catch (e: any) { errs.push(String(e?.message || e).replace(/^KaTeX parse error:\s*/, '')) }
+        }
+        return errs
+      }
+
+      const ctx = { weekStartDate, today: localToday(), mathErrors }
+      const toLesson = (t: LessonTemplate): CheckLesson => ({
+        id: t.id, title: t.title, lessonNumber: t.lessonNumber, instructions: t.instructions,
+        assignmentType: t.assignmentType, worksheetUrl: t.worksheetUrl, videoUrl: t.videoUrl,
+        teachingNotes: t.teachingNotes, questions: questionsByTemplate.get(t.id) || [],
+      })
+      const toSlot = (d: DayPlan): CheckSlot => ({
+        day: d.day, dueDate: d.dueDate, dueTime: d.dueTime, isPublished: d.isPublished,
+        isInClass: d.isInClass, instructions: d.instructions, videoUrl: d.videoUrl,
+      })
+
+      const weekFindings = checkWeek(rows.map(r => ({ slot: toSlot(r.day), lesson: r.template ? toLesson(r.template) : null })), ctx)
+      const lessons: LessonReport[] = rows.filter(r => r.template).map(r => ({
+        templateId: r.template!.id,
+        title: lessonDisplayTitle(r.template!.lessonNumber, r.template!.title),
+        slotLabel: r.slotLabel,
+        checks: checkLesson(toLesson(r.template!), toSlot(r.day), ctx),
+        claude: 'pending',
+        claudeFindings: [], claudeSummary: '', claudeError: '', fromCache: false,
+      }))
+
+      // Worksheet file reachable? (S3 keys only; outside links are not probed)
+      await Promise.all(lessons.map(async (l, i) => {
+        const t = rows.filter(r => r.template)[i].template!
+        const ws = t.worksheetUrl || ''
+        let key: string | null = null
+        if (ws.startsWith('[')) { try { key = (JSON.parse(ws) as string[])[0] || null } catch { key = null } }
+        else if (ws && !ws.startsWith('http')) key = ws
+        if (!key) return
+        try {
+          const res = await apiFetch('/api/view-submission', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key }) })
+          if (!res.ok) throw new Error(String(res.status))
+          const { url } = await res.json()
+          const head = await fetch(url, { method: 'HEAD' })
+          if (!head.ok) throw new Error(String(head.status))
+        } catch {
+          l.checks.push({ questionId: null, severity: 'warn', message: 'The attached worksheet file could not be opened. Students may not be able to print it.' })
+        }
+      }))
+
+      setReport({ weekFindings, lessons, finished: lessons.length === 0 })
+      setTimeout(() => reportRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 50)
+      if (lessons.length === 0) return
+
+      // Layer 2: Claude, once per distinct lesson, cached by content hash
+      const update = (templateId: string, patch: Partial<LessonReport>) =>
+        setReport(prev => prev ? { ...prev, lessons: prev.lessons.map(l => l.templateId === templateId ? { ...l, ...patch } : l) } : prev)
+      const distinct = [...new Set(lessons.map(l => l.templateId))]
+      const queue = [...distinct]
+      const worker = async () => {
+        while (queue.length > 0) {
+          const templateId = queue.shift()!
+          const template = lessonTemplates.find(t => t.id === templateId)!
+          const lesson = toLesson(template)
+          const cacheKey = WEEK_CHECK_CACHE_PREFIX + await sha256Hex(lessonContentKey(lesson))
+          try {
+            const cached = localStorage.getItem(cacheKey)
+            if (cached) {
+              const parsed = JSON.parse(cached)
+              update(templateId, { claude: 'done', claudeFindings: parsed.findings || [], claudeSummary: parsed.summary || '', fromCache: true })
+              continue
+            }
+          } catch { /* no cache, no problem */ }
+          update(templateId, { claude: 'running' })
+          try {
+            const res = await apiFetch(WEEK_CHECK_ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lesson }) })
+            const text = await res.text()
+            let data: any = null
+            try { data = JSON.parse(text) } catch { data = null }
+            if (!res.ok || !data) throw new Error(data?.error || `The review did not finish (status ${res.status}).`)
+            update(templateId, { claude: 'done', claudeFindings: data.findings || [], claudeSummary: data.summary || '' })
+            try { localStorage.setItem(cacheKey, JSON.stringify({ findings: data.findings || [], summary: data.summary || '', at: Date.now() })) } catch { /* storage full or blocked */ }
+          } catch (err: any) {
+            update(templateId, { claude: 'error', claudeError: err?.message || 'The review did not finish.' })
+          }
+        }
+      }
+      await Promise.all(Array.from({ length: Math.min(3, distinct.length) }, worker))
+      setReport(prev => prev ? { ...prev, finished: true } : prev)
+    } catch (err: any) {
+      console.error('Check my week failed:', err)
+      setReport({ weekFindings: [{ questionId: null, severity: 'warn', message: `The check could not run: ${err?.errors?.[0]?.message || err?.message || 'unknown error'}` }], lessons: [], finished: true })
+    } finally {
+      setCheckingWeek(false)
+    }
+  }
+
+  function editorLink(templateId: string, questionId: string | null): string {
+    return `/teacher/library/${selectedCourseId}?lesson=${templateId}${questionId ? `&q=${questionId}` : ''}`
   }
 
   /**
@@ -685,10 +874,15 @@ function ScheduleWeekInner() {
         </div>
 
         {/* Save */}
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
           <button onClick={saveSchedule} disabled={saving || !selectedCourseId || !weekStartDate}
             style={{ background: saving || !selectedCourseId || !weekStartDate ? 'var(--gray-light)' : 'var(--plum)', color: saving || !selectedCourseId || !weekStartDate ? 'var(--gray-mid)' : 'white', padding: '12px 32px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '15px', fontWeight: 500 }}>
             {saving ? 'Saving...' : 'Save Week Schedule'}
+          </button>
+          <button onClick={checkMyWeek} disabled={checkingWeek || saving || !selectedCourseId}
+            title="Looks over every lesson for this week before you send it. Never blocks saving."
+            style={{ background: 'transparent', color: checkingWeek || !selectedCourseId ? 'var(--gray-mid)' : 'var(--plum)', border: `1px solid ${checkingWeek || !selectedCourseId ? 'var(--gray-light)' : 'var(--plum-mid)'}`, borderRadius: '8px', padding: '12px 20px', cursor: checkingWeek || !selectedCourseId ? 'default' : 'pointer', fontSize: '14px', fontWeight: 500 }}>
+            {checkingWeek ? 'Checking...' : 'Check my week'}
           </button>
           <button
             onClick={() => {
@@ -702,6 +896,78 @@ function ScheduleWeekInner() {
           {saved && <span style={{ color: 'var(--plum)', fontSize: '14px' }}>✓ Saved! Redirecting...</span>}
           {saveError && <span style={{ color: '#dc2626', fontSize: '14px' }}>Error: {saveError}</span>}
         </div>
+
+        {/* Check my week results */}
+        {report && (
+          <div ref={reportRef} style={{ marginTop: '32px', background: 'var(--background)', border: '1px solid var(--gray-light)', borderRadius: 'var(--radius)', padding: '20px 24px' }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', marginBottom: '6px' }}>
+              <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '20px', color: 'var(--foreground)', margin: 0 }}>Check my week</h2>
+              <span style={{ fontSize: '13px', color: 'var(--gray-mid)' }}>
+                {report.finished
+                  ? 'Done. These are suggestions only; you can still save the week as it is.'
+                  : `Reading ${report.lessons.filter(l => l.claude === 'running' || l.claude === 'pending').length} lesson${report.lessons.filter(l => l.claude === 'running' || l.claude === 'pending').length === 1 ? '' : 's'} the way a student would...`}
+              </span>
+            </div>
+            <p style={{ fontSize: '13px', color: 'var(--gray-mid)', margin: '0 0 16px' }}>Links open the lesson editor in a new tab, so your week stays here.</p>
+
+            {report.weekFindings.length > 0 && (
+              <ul style={{ margin: '0 0 16px', paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {report.weekFindings.map((f, i) => (
+                  <li key={i} style={{ fontSize: '14px', color: 'var(--foreground)' }}>{f.severity === 'warn' ? '⚠️ ' : 'ℹ️ '}{f.message}</li>
+                ))}
+              </ul>
+            )}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {report.lessons.map((l, idx) => {
+                const warnCount = l.checks.filter(f => f.severity === 'warn').length + l.claudeFindings.length
+                const noteCount = l.checks.filter(f => f.severity === 'info').length
+                const settled = l.claude === 'done' || l.claude === 'error'
+                const verdict = !settled
+                  ? (l.claude === 'running' ? 'Reading...' : 'Waiting...')
+                  : warnCount === 0 && noteCount === 0 ? '✅ Looks good'
+                  : warnCount === 0 ? `✅ Looks good, ${noteCount} note${noteCount === 1 ? '' : 's'}`
+                  : `⚠️ ${warnCount} thing${warnCount === 1 ? '' : 's'} to check`
+                return (
+                  <div key={`${l.templateId}-${idx}`} style={{ border: '1px solid var(--gray-light)', borderRadius: '8px', padding: '14px 16px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '12px', flexWrap: 'wrap' }}>
+                      <div style={{ fontSize: '15px', color: 'var(--foreground)' }}>
+                        <span style={{ fontWeight: 600 }}>{l.slotLabel}:</span> {l.title}
+                        {' '}<a href={editorLink(l.templateId, null)} target="_blank" rel="noopener" style={{ fontSize: '13px', color: 'var(--plum)', textDecoration: 'underline' }}>Open lesson</a>
+                      </div>
+                      <span style={{ fontSize: '13px', fontWeight: 600, color: !settled ? 'var(--gray-mid)' : warnCount > 0 ? '#B45309' : '#059669', whiteSpace: 'nowrap' }}>{verdict}</span>
+                    </div>
+                    {(l.checks.length > 0 || l.claudeFindings.length > 0 || l.claude === 'error' || (l.claude === 'done' && l.claudeSummary)) && (
+                      <ul style={{ margin: '10px 0 0', paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        {l.checks.map((f, i) => (
+                          <li key={`c${i}`} style={{ fontSize: '14px', color: 'var(--foreground)', lineHeight: 1.5 }}>
+                            {f.severity === 'warn' ? '⚠️ ' : 'ℹ️ '}{f.message}
+                            {f.questionId && <>{' '}<a href={editorLink(l.templateId, f.questionId)} target="_blank" rel="noopener" style={{ color: 'var(--plum)', textDecoration: 'underline', fontSize: '13px' }}>Open question</a></>}
+                          </li>
+                        ))}
+                        {l.claudeFindings.map((f, i) => (
+                          <li key={`a${i}`} style={{ fontSize: '14px', color: 'var(--foreground)', lineHeight: 1.5 }}>
+                            {f.kind === 'answer_key' ? '🔢 ' : '✏️ '}{f.message}
+                            {f.kind === 'answer_key' && f.suggestedAnswer && <span style={{ color: 'var(--gray-dark)' }}> (Claude got: {f.suggestedAnswer})</span>}
+                            {f.questionId && <>{' '}<a href={editorLink(l.templateId, f.questionId)} target="_blank" rel="noopener" style={{ color: 'var(--plum)', textDecoration: 'underline', fontSize: '13px' }}>Open question</a></>}
+                          </li>
+                        ))}
+                        {l.claude === 'error' && (
+                          <li style={{ fontSize: '14px', color: '#B45309', lineHeight: 1.5 }}>The read-through did not finish: {l.claudeError} Click Check my week again to retry.</li>
+                        )}
+                        {l.claude === 'done' && l.claudeSummary && (
+                          <li style={{ fontSize: '13px', color: 'var(--gray-mid)', lineHeight: 1.5, listStyle: 'none', marginLeft: '-20px' }}>
+                            Read-through: {l.claudeSummary}{l.fromCache ? ' (unchanged since last check)' : ''}
+                          </li>
+                        )}
+                      </ul>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
       </main>
     </div>
   )

@@ -5,6 +5,7 @@ import { PolicyStatement } from 'aws-cdk-lib/aws-iam'
 import { auth } from './auth/resource.ts'
 import { data } from './data/resource.ts'
 import { gradeSuggestion } from './functions/grade-suggestion/resource.ts'
+import { weekCheck } from './functions/week-check/resource.ts'
 
 /**
  * Amplify Gen 2 backend entry point.
@@ -25,6 +26,7 @@ export const backend = defineBackend({
   auth,
   data,
   gradeSuggestion,
+  weekCheck,
 })
 
 /**
@@ -61,11 +63,30 @@ backend.gradeSuggestion.resources.lambda.addToRolePolicy(new PolicyStatement({
   resources: ['arn:aws:s3:::mathwithmelinda-submissions/*'],
 }))
 
-// Surface the URL to the client through amplify_outputs.json — the grades page
-// reads outputs.custom.gradeSuggestionUrl and falls back to the (30s-capped)
-// /api/grade-suggestion route when absent.
+// "Check my week" Claude review: same shape as grade-suggestion (function URL,
+// NONE auth type, the handler verifies the teacher token itself). Opus working
+// through a chapter test outruns the 30-second SSR cap just like grading does.
+const weekCheckUrl = backend.weekCheck.resources.lambda.addFunctionUrl({
+  authType: FunctionUrlAuthType.NONE,
+  cors: {
+    allowedOrigins: [
+      'https://www.mathwithmelinda.com',
+      'https://mathwithmelinda.com',
+      'http://localhost:3000',
+    ],
+    allowedMethods: [HttpMethod.POST],
+    allowedHeaders: ['authorization', 'content-type'],
+    maxAge: Duration.hours(1),
+  },
+})
+
+// Surface the URLs to the client through amplify_outputs.json — the grades
+// page reads outputs.custom.gradeSuggestionUrl and the schedule page reads
+// outputs.custom.weekCheckUrl; each falls back to its (30s-capped) /api route
+// when absent.
 backend.addOutput({
   custom: {
     gradeSuggestionUrl: gradeSuggestionUrl.url,
+    weekCheckUrl: weekCheckUrl.url,
   },
 })
