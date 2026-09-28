@@ -9,6 +9,7 @@ import { useTheme } from '../../ThemeProvider'
 import MathRenderer from '../../components/MathRenderer'
 import DiagramRenderer from '../../components/DiagramRenderer'
 import TeacherNav from '../../components/TeacherNav'
+import TurnInForStudent from '../../components/TurnInForStudent'
 import { useRoleGuard } from '../../hooks/useRoleGuard'
 import { apiFetch } from '@/app/lib/apiFetch'
 import { fetchAllPages } from '@/app/lib/fetchAllPages'
@@ -522,6 +523,7 @@ function GradingPageInner() {
   const [expandedStudents, setExpandedStudents] = useState<Set<string>>(new Set())
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date())
   const [refreshing, setRefreshing] = useState(false)
+  const [showTurnIn, setShowTurnIn] = useState(false)
   useEffect(() => setMounted(true), [])
 
   useEffect(() => {
@@ -573,6 +575,20 @@ function GradingPageInner() {
       setLastRefreshed(new Date())
     } catch (err) { console.error(err) }
     finally { setRefreshing(false) }
+  }
+
+  // After turning work in on a student's behalf, reload and open it so she
+  // can grade it straight away.
+  async function handleTurnedIn(submissionId: string) {
+    setShowTurnIn(false)
+    try {
+      const items = await fetchAllPages<Submission>(client, listSubmissionsWithDetails, 'listSubmissions')
+      setSubmissions(items)
+      setLastRefreshed(new Date())
+      setShowArchived(false)
+      const created = items.find(s => s.id === submissionId)
+      if (created) openSubmission(created)
+    } catch (err) { console.error(err) }
   }
 
   async function fetchStudentProfiles() {
@@ -1435,6 +1451,13 @@ function GradingPageInner() {
               {showArchived ? '← Active' : `Archive${archivedCount > 0 ? ` (${archivedCount})` : ''}`}
             </button>
           </div>
+
+          <button onClick={() => setShowTurnIn(true)}
+            title="Upload paper work a student did with you in person"
+            style={{ width: '100%', marginBottom: '12px', background: 'var(--plum-light)', color: 'var(--plum)', border: '1px solid var(--plum-mid)', borderRadius: '8px', padding: '8px 12px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
+            📥 Turn in for a student
+          </button>
+          {showTurnIn && <TurnInForStudent onClose={() => setShowTurnIn(false)} onCreated={handleTurnedIn} />}
 
           {/* Search */}
           <input
