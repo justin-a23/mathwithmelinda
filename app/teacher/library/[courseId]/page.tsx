@@ -44,6 +44,7 @@ import MathRenderer, { MATH_DELIMITER_SPLIT } from '../../../components/MathRend
 import DiagramRenderer from '../../../components/DiagramRenderer'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { lessonBareTitle } from '@/app/lib/lessonTitle'
+import { sortForPrint, teacherPrintSubset } from '@/app/lib/printOrder'
 import { playableVideoUrl } from '@/app/lib/videoUrl'
 
 const client = generateClient()
@@ -213,6 +214,41 @@ export default function LessonLibraryPage() {
       fetchLessons()
     }
   }, [courseId])
+
+  // Deep link from "Check my week" (/teacher/schedule): ?lesson=<templateId>
+  // opens that lesson's editor on the Questions tab, and &q=<questionId>
+  // scrolls to and highlights the question the finding is about. Read from
+  // window.location rather than useSearchParams so this page needs no
+  // Suspense boundary.
+  const deepLinkRef = useRef<{ lesson: string; q: string | null } | null>(null)
+  const [highlightQuestionId, setHighlightQuestionId] = useState<string | null>(null)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const lesson = params.get('lesson')
+    if (lesson) deepLinkRef.current = { lesson, q: params.get('q') }
+  }, [])
+  useEffect(() => {
+    const link = deepLinkRef.current
+    if (!link || lessons.length === 0) return
+    const lesson = lessons.find(l => l.id === link.lesson)
+    if (!lesson) { deepLinkRef.current = null; return }
+    startEdit(lesson)
+    setActiveTab('questions')
+    deepLinkRef.current = { lesson: '', q: link.q }
+    if (!link.q) {
+      setTimeout(() => document.getElementById(`lesson-${lesson.id}`)?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 100)
+    }
+  }, [lessons]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const link = deepLinkRef.current
+    if (!link?.q || loadingQuestions || questions.length === 0) return
+    const target = questions.find(q => q.id === link.q)
+    deepLinkRef.current = null
+    if (!target) return
+    setHighlightQuestionId(target.id)
+    setTimeout(() => document.getElementById(`q-${target.id}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 150)
+    setTimeout(() => setHighlightQuestionId(null), 6000)
+  }, [questions, loadingQuestions])
 
   // Mark dirty whenever editForm changes, but skip the initial population from startEdit
   useEffect(() => {
@@ -819,27 +855,9 @@ export default function LessonLibraryPage() {
       return
     }
 
-    const aType = editForm.assignmentType === 'worksheet' ? 'upload' : (editForm.assignmentType || lesson.assignmentType || 'upload')
-    const isWorksheetType = aType === 'upload'
-
-    // For worksheet/upload type, show ALL questions (paper-only assignment)
-    // For digital or both, only show show_work questions
-    const filteredQuestions = isWorksheetType
-      ? allQuestions.filter(q => q.questionType !== 'section_header' || true) // keep headers + all question types
-      : (() => {
-          const result: typeof allQuestions = []
-          let pendingHeader: (typeof allQuestions[0]) | null = null
-          for (const q of allQuestions) {
-            if (q.questionType === 'section_header') { pendingHeader = q }
-            else if (q.questionType === 'show_work') {
-              if (pendingHeader) { result.push(pendingHeader); pendingHeader = null }
-              result.push(q)
-            }
-          }
-          return result
-        })()
-
-    const displayQuestions = filteredQuestions.filter(q => q.questionType !== 'section_header' || true)
+    // Which questions print, and in what order, lives in app/lib/printOrder.ts
+    // (shared with the student's print button and "Check my week").
+    const displayQuestions = sortForPrint(teacherPrintSubset(allQuestions, editForm.assignmentType || lesson.assignmentType))
     if (displayQuestions.length === 0) {
       alert('No questions to preview.')
       return
@@ -898,23 +916,6 @@ export default function LessonLibraryPage() {
     for (const q of allQuestions) {
       if (q.questionType !== 'section_header') { fullQNum++; origNums.set(q.id, fullQNum) }
     }
-
-    // Sort by problem number, keeping headers attached to the questions that follow them.
-    // Each header gets the sort key of the next non-header question minus 0.5
-    // so it appears right before its questions.
-    const sortKeys = new Map<string, number>()
-    for (let i = displayQuestions.length - 1; i >= 0; i--) {
-      const q = displayQuestions[i]
-      if (q.questionType === 'section_header') {
-        // Look ahead for the next non-header's sort key
-        const nextKey = (i + 1 < displayQuestions.length) ? (sortKeys.get(displayQuestions[i + 1].id) ?? displayQuestions[i + 1].order) : q.order
-        sortKeys.set(q.id, nextKey - 0.5)
-      } else {
-        const num = parseInt(q.questionText.match(/^(\d+)\.\s/)?.[1] || '0')  // "12. text" only: a bare decimal like "2.5%" is not a book number
-        sortKeys.set(q.id, num > 0 ? num : q.order + 10000)
-      }
-    }
-    displayQuestions.sort((a, b) => (sortKeys.get(a.id) ?? 0) - (sortKeys.get(b.id) ?? 0))
 
     // JSON-spec diagrams (e.g. a blank grid for a graphing problem) render as
     // inline SVG so they print with the worksheet
@@ -1447,7 +1448,7 @@ export default function LessonLibraryPage() {
               <div style={{ padding: '40px', textAlign: 'center', color: 'var(--gray-mid)' }}>No lessons match your filter.</div>
             ) : (
               filtered.map((lesson, idx) => (
-                <div key={lesson.id}>
+                <div key={lesson.id} id={`lesson-${lesson.id}`}>
                   {/* Row */}
                   <div style={{
                     display: 'grid', gridTemplateColumns: '80px 1fr 160px 80px 100px',
@@ -1945,6 +1946,7 @@ export default function LessonLibraryPage() {
                                         return (
                                           <div
                                             key={q.id}
+                                            id={`q-${q.id}`}
                                             onDragOver={e => { e.preventDefault(); setDragOverIndex(i) }}
                                             onDrop={() => { if (dragIndex !== null && dragIndex !== i) reorderQuestions(dragIndex, i); setDragIndex(null); setDragOverIndex(null) }}
                                             onDragEnd={() => { setDragIndex(null); setDragOverIndex(null) }}
@@ -1952,6 +1954,8 @@ export default function LessonLibraryPage() {
                                               background: isHeader ? 'var(--background)' : 'var(--white)',
                                               border: `1px solid ${editingQuestionId === q.id ? 'var(--plum)' : isHeader ? 'var(--plum-mid)' : 'var(--gray-light)'}`,
                                               borderTop: dragOverIndex === i ? '3px solid var(--plum)' : undefined,
+                                              boxShadow: highlightQuestionId === q.id ? '0 0 0 3px var(--accent)' : undefined,
+                                              transition: 'box-shadow 0.6s',
                                               borderRadius: '8px',
                                               padding: '14px 16px',
                                               cursor: 'default',

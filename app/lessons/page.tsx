@@ -11,6 +11,7 @@ import StudentNav from '../components/StudentNav'
 import SubmissionMethodPicker from '../components/SubmissionMethodPicker'
 import { apiFetch } from '@/app/lib/apiFetch'
 import { lessonDisplayTitle } from '@/app/lib/lessonTitle'
+import { digitalOrder, displayNumbers, printLabel, sortForPrint, studentPrintSubset } from '@/app/lib/printOrder'
 import { playableVideoUrl } from '@/app/lib/videoUrl'
 import { useResolvedStudent } from '@/app/hooks/useResolvedStudent'
 import { useRoleGuard } from '@/app/hooks/useRoleGuard'
@@ -938,17 +939,12 @@ function LessonPageInner() {
     }
 
     if (allQuestions.length === 0) return
-    const aType = lessonTemplate?.assignmentType || 'upload'
-    const isWorksheetType = aType === 'worksheet' || aType === 'upload'
-    // For worksheet/upload type, print ALL questions (it's a paper-only assignment)
-    // For digital questions or both, only print show_work questions
-    // Paper worksheets keep their section headers: they carry Melinda's instructions
+    // Which questions print, and in what order, is decided in app/lib/printOrder.ts
+    // so this page, the teacher's preview and "Check my week" all agree. Paper
+    // worksheets keep their section headers: they carry Melinda's instructions
     // ("Write each number as a percent."), and without them students printed bare
-    // numbers like "0.05" with no idea what to do (MS Math Test 2, 2026-09-28). This
-    // matches the teacher's Participation Worksheet. Digital lessons are unchanged.
-    const showWorkQuestions = isWorksheetType
-      ? [...allQuestions]
-      : allQuestions.filter(q => q.questionType === 'show_work')
+    // numbers like "0.05" with no idea what to do (MS Math Test 2, 2026-09-28).
+    const showWorkQuestions = sortForPrint(studentPrintSubset(digitalOrder(allQuestions), lessonTemplate?.assignmentType))
     if (showWorkQuestions.length === 0) return
 
     // Get diagram image URLs for embedding in print
@@ -1004,40 +1000,16 @@ function LessonPageInner() {
     const courseName = planItem?.weeklyPlan?.course?.title || ''
     const printDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
 
-    // Sort by problem number, keeping headers attached to their following questions
-    const swSortKeys = new Map<string, number>()
-    for (let i = showWorkQuestions.length - 1; i >= 0; i--) {
-      const q = showWorkQuestions[i]
-      if (q.questionType === 'section_header') {
-        const nextKey = (i + 1 < showWorkQuestions.length) ? (swSortKeys.get(showWorkQuestions[i + 1].id) ?? showWorkQuestions[i + 1].order) : q.order
-        swSortKeys.set(q.id, nextKey - 0.5)
-      } else {
-        const num = parseInt(q.questionText.match(/^(\d+)\.\s/)?.[1] || '0')  // "12. text" only: a bare decimal like "2.5%" is not a book number
-        swSortKeys.set(q.id, num > 0 ? num : q.order + 10000)
-      }
-    }
-    showWorkQuestions.sort((a, b) => (swSortKeys.get(a.id) ?? 0) - (swSortKeys.get(b.id) ?? 0))
-
     // Display numbers must match the digital view and the teacher pages, which
-    // both count questions SKIPPING section headers. The stored `order` is the
-    // raw source position with headers included, so a lesson with 3 headers
-    // printed its 20th question as #23. Legacy scan-imported lessons encode
-    // order as pageIndex*1000 + seq and keep their page-relative fallback.
-    const printQNum = new Map<string, number>()
-    ;[...allQuestions]
-      .filter(q => q.questionType !== 'section_header')
-      .sort((a, b) => a.order - b.order)
-      .forEach((q, i) => printQNum.set(q.id, i + 1))
+    // both count questions SKIPPING section headers (see displayNumbers).
+    const printQNum = displayNumbers(allQuestions)
 
     // Build question HTML — each question shows its text, diagram (if any), and work box
     const questionsHTML = showWorkQuestions.map(q => {
       if (q.questionType === 'section_header') {
         return `<div class="section-header">${renderMath(q.questionText || '')}</div>`
       }
-      const bookNumMatch = q.questionText.match(/^(\d+\.)\s/)
-      const qNumLabel = bookNumMatch ? bookNumMatch[1]
-        : q.order >= 1000 ? `#${q.order % 1000}.`
-        : `#${printQNum.get(q.id) ?? q.order}.`
+      const qNumLabel = printLabel(q, printQNum)
       const qBody = renderMath(q.questionText.replace(/^\d+\.\s+/, ''))
       const diagramSrc = diagramDataUrls[q.id]
       const diagramHTML = diagramSrc
