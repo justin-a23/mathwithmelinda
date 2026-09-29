@@ -442,20 +442,34 @@ export default function TeacherMessagesPage() {
     if (!reply) return
     setSending(prev => ({ ...prev, [msgId]: true }))
     try {
+      const msg = messages.find(m => m.id === msgId)
       const repliedAt = new Date().toISOString()
+      // Message holds one teacherReply field. A second reply used to overwrite
+      // the first, so the student only ever saw the last one. Append instead;
+      // every surface (student, parent, dashboard, nav badge) already reads
+      // this one field and repliedAt, so they all keep working.
+      const fullReply = msg?.teacherReply ? `${msg.teacherReply}\n\n${reply}` : reply
       await (client.graphql({
         query: UPDATE_MESSAGE,
-        variables: { input: { id: msgId, teacherReply: reply, repliedAt, isRead: true } },
+        variables: { input: { id: msgId, teacherReply: fullReply, repliedAt, isRead: true } },
       }) as any)
-      setMessages(prev => prev.map(m => m.id === msgId ? { ...m, teacherReply: reply, repliedAt, isRead: true } : m))
+      setMessages(prev => prev.map(m => m.id === msgId ? { ...m, teacherReply: fullReply, repliedAt, isRead: true } : m))
       setReplyText(prev => ({ ...prev, [msgId]: '' }))
       setExpandedMessageId(null)
 
-      // Email the student — fire and forget
-      const msg = messages.find(m => m.id === msgId)
-      if (msg?.studentId) {
-        const studentEmail = msg.studentId // studentId is loginId (email) for password-auth users
+      // Email just the new reply — fire and forget. Message.studentId is the
+      // Cognito sub (or parent:<sub> for parent threads), not an address, so
+      // look the email up from the loaded rosters.
+      const recipientEmail = msg
+        ? (students.find(s => s.userId === msg.studentId)?.email
+          || parents.find(p => p.threadId === msg.studentId)?.email)
+        : undefined
+      if (msg && recipientEmail) {
+        const studentEmail = recipientEmail
         const studentName = msg.studentName || 'there'
+        const viewUrl = msg.studentId.startsWith('parent:')
+          ? 'https://mathwithmelinda.com/parent/messages'
+          : 'https://mathwithmelinda.com/student/messages'
         apiFetch('/api/send-email', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -469,12 +483,12 @@ export default function TeacherMessagesPage() {
                 <div style="background: #f0fdf4; border-left: 4px solid #22c55e; border-radius: 8px; padding: 16px; margin: 16px 0; font-size: 15px; line-height: 1.6; color: #15803d;">
                   ${reply.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br/>')}
                 </div>
-                <a href="https://mathwithmelinda.com/student/messages" style="display: inline-block; background: #7B4FA6; color: white; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: 600;">
+                <a href="${viewUrl}" style="display: inline-block; background: #7B4FA6; color: white; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: 600;">
                   View in Messages
                 </a>
               </div>
             `,
-            text: `Hi ${studentName},\n\nMelinda replied to your message:\n\n"${reply}"\n\nView it at https://mathwithmelinda.com/student/messages`,
+            text: `Hi ${studentName},\n\nMelinda replied to your message:\n\n"${reply}"\n\nView it at ${viewUrl}`,
           }),
         }).catch(() => {}) // silently ignore — reply was still sent
       }
@@ -1030,7 +1044,7 @@ export default function TeacherMessagesPage() {
                               {msg.teacherReply && (
                                 <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '12px 14px', marginBottom: '16px' }}>
                                   <div style={{ fontSize: '11px', fontWeight: 600, color: '#15803d', marginBottom: '6px', letterSpacing: '1px', textTransform: 'uppercase' }}>Your Reply</div>
-                                  <div style={{ fontSize: '14px', color: '#15803d', lineHeight: '1.6' }}>{msg.teacherReply}</div>
+                                  <div style={{ fontSize: '14px', color: '#15803d', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>{msg.teacherReply}</div>
                                   {msg.repliedAt && (
                                     <div style={{ fontSize: '11px', color: '#16a34a', marginTop: '6px', opacity: 0.7 }}>Sent {fmtDate(msg.repliedAt)}</div>
                                   )}
@@ -1040,7 +1054,7 @@ export default function TeacherMessagesPage() {
                               {tab === 'active' && (
                                 <div>
                                   <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--gray-mid)', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '8px' }}>
-                                    {msg.teacherReply ? 'Update Reply' : 'Reply'}
+                                    {msg.teacherReply ? 'Add Another Reply' : 'Reply'}
                                   </label>
                                   <textarea
                                     value={replyText[msg.id] || ''}

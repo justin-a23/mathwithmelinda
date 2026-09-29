@@ -370,7 +370,7 @@ function StudentMessagesPageInner() {
                       </div>
                       <div style={{ maxWidth: '75%', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                         <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--gray-mid)', paddingLeft: '4px' }}>Melinda</div>
-                        <div style={{ background: 'var(--page-bg)', border: '1px solid var(--gray-light)', color: 'var(--foreground)', borderRadius: '4px 18px 18px 18px', padding: '10px 14px', fontSize: '14px', lineHeight: '1.55' }}>
+                        <div style={{ background: 'var(--page-bg)', border: '1px solid var(--gray-light)', color: 'var(--foreground)', borderRadius: '4px 18px 18px 18px', padding: '10px 14px', fontSize: '14px', lineHeight: '1.55', whiteSpace: 'pre-wrap' }}>
                           {msg.teacherReply}
                         </div>
                         {msg.repliedAt && <span style={{ fontSize: '11px', color: 'var(--gray-mid)', paddingLeft: '4px' }}>{fmtDate(msg.repliedAt)}</span>}
