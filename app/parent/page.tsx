@@ -401,7 +401,10 @@ export default function ParentDashboard() {
     let base: Date | null = null
     try {
       const c = JSON.parse(sub.content || '{}')
-      if (c.dueDateTime) base = new Date(c.dueDateTime)
+      // Teacher turn-ins store no dueDateTime (never late) but keep the assigned
+      // due date, so the work still groups under the week it was assigned.
+      const dueRef = c.dueDateTime || c.assignedDueDateTime
+      if (dueRef) base = new Date(dueRef)
     } catch { /* fall through */ }
     if ((!base || isNaN(base.getTime())) && sub.submittedAt) base = new Date(sub.submittedAt)
     if (!base || isNaN(base.getTime())) return 'unknown'

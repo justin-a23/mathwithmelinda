@@ -13,8 +13,8 @@ import { useQrUploadToken } from '@/app/hooks/useQrUploadToken'
  * participation. Before this the only teacher-created submission was Give
  * Credit, which stamps a 100 and is blocked on tests (ticket a41173eb).
  *
- * The submission is shaped exactly like one from the student's lesson page
- * (lessonId, weeklyPlanItemId, frozen dueDateTime, files[]), so dashboards,
+ * The submission is shaped like one from the student's lesson page
+ * (lessonId, weeklyPlanItemId, files[]; dueDateTime is null, see turnIn), so dashboards,
  * the gradebook, the report card and the parent portal all treat it as the
  * student's own. Photos go through /api/submit's teacher path into the
  * STUDENT's S3 namespace, so the existing ownership rules let the student and
@@ -176,19 +176,26 @@ export default function TurnInForStudent({ onClose, onCreated }: {
 
   // Phone upload: same token flow as the student page and Grade Work's graded
   // pages, scoped to this student + lesson so the files land in the student's
-  // own folder. The QR is tied to the assignment it was made for: if Melinda
-  // switches assignments, photos still arriving for the old one are ignored.
-  const qrItemRef = useRef<string>('')
+  // own folder. A code is tied to the STUDENT and the assignment it was made
+  // for: every student in a course shares the same plan item ids, so after a
+  // student switch the old code's photos would otherwise be listed under the
+  // new student while living in the first student's folder (independent
+  // review, 2026-09-28). Keys are also required to sit in the current
+  // student's folder for the current lesson, whatever token they came from.
+  const qrScopeRef = useRef<string>('')
   const qr = useQrUploadToken({
     body: { lessonId: option?.lessonId || '', forStudentEmail: student?.email || '' },
     onNewKeys: keys => {
-      if (qrItemRef.current !== itemId) return
-      setFiles(prev => [...prev, ...keys.filter(k => !prev.some(f => f.key === k)).map(k => ({ name: k.split('/').pop() || 'phone photo', key: k }))])
+      if (!student || !option || qrScopeRef.current !== `${student.userId}|${option.itemId}`) return
+      const prefix = `submissions/${student.email}/${option.lessonId}/`
+      const mine = keys.filter(k => k.startsWith(prefix))
+      if (mine.length === 0) return
+      setFiles(prev => [...prev, ...mine.filter(k => !prev.some(f => f.key === k)).map(k => ({ name: k.split('/').pop() || 'phone photo', key: k }))])
     },
   })
   function startPhoneUpload() {
-    if (!option) return
-    qrItemRef.current = option.itemId
+    if (!student || !option) return
+    qrScopeRef.current = `${student.userId}|${option.itemId}`
     setShowQr(true)
     qr.generate()
   }
@@ -205,7 +212,7 @@ export default function TurnInForStudent({ onClose, onCreated }: {
   // Picking a student lists their published assignments that have no
   // submission yet, newest first, defaulting to today's.
   useEffect(() => {
-    setOptions([]); setItemId(''); setFiles([]); setError(''); setShowQr(false)
+    setOptions([]); setItemId(''); setFiles([]); setError(''); setShowQr(false); qrScopeRef.current = ''
     if (!student) return
     if (!student.courseId) { setError('This student has no course assigned.'); return }
     let cancelled = false
@@ -360,7 +367,7 @@ export default function TurnInForStudent({ onClose, onCreated }: {
             ) : options.length === 0 ? (
               <div style={{ fontSize: '13px', color: 'var(--gray-mid)' }}>Nothing left to turn in: every assigned lesson already has a submission.</div>
             ) : (
-              <select value={itemId} onChange={e => { setItemId(e.target.value); setFiles([]); setShowQr(false) }} disabled={uploading || saving} style={fieldStyle}>
+              <select value={itemId} onChange={e => { setItemId(e.target.value); setFiles([]); setShowQr(false); qrScopeRef.current = '' }} disabled={uploading || saving} style={fieldStyle}>
                 {options.map(o => <option key={o.itemId} value={o.itemId}>{optionLabel(o)}</option>)}
               </select>
             )}
