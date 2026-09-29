@@ -68,48 +68,9 @@ export default function TeacherNav({ ungradedCount: propUngraded, unreadCount: p
   const [moreOpen, setMoreOpen] = useState(false)
   const moreRef = useRef<HTMLDivElement>(null)
 
-  // The nav mounts once per page, but Melinda can sit on Grade Work for hours
-  // while that page auto-refreshes; a mount-only fetch left the badge frozen.
-  // Refresh on a timer, when the tab regains focus, and when a page signals
-  // that grades changed.
-  useEffect(() => {
-    if (propUngraded !== undefined && propUnread !== undefined) return
-    fetchCounts()
-    const interval = setInterval(fetchCounts, 60_000)
-    const onVisible = () => { if (document.visibilityState === 'visible') fetchCounts() }
-    document.addEventListener('visibilitychange', onVisible)
-    window.addEventListener(NAV_COUNTS_EVENT, fetchCounts)
-    return () => {
-      clearInterval(interval)
-      document.removeEventListener('visibilitychange', onVisible)
-      window.removeEventListener(NAV_COUNTS_EVENT, fetchCounts)
-    }
-  }, [])
-
-  // Re-fetch profile whenever user identity becomes available. Resolved via
-  // getCurrentUser (useResolvedUser) — the raw hook user intermittently never
-  // arrives on fresh sessions, which left the nav nameless/pictureless.
-  useEffect(() => {
-    if (resolvedUserId) fetchProfile()
-  }, [resolvedUserId])
-
-  // After signOut(), `user` becomes null — redirect to login. signOut() itself
-  // is not truly async, so we can't await it; this effect handles the redirect.
-  useEffect(() => {
-    if (user === null) router.replace('/login')
-  }, [user, router])
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (moreRef.current && !moreRef.current.contains(e.target as Node)) {
-        setMoreOpen(false)
-      }
-    }
-    if (moreOpen) document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
-  }, [moreOpen])
-
+  // Declared before the effects that call them (react-hooks/immutability), and
+  // the effects start them via setTimeout so no setState runs synchronously
+  // inside an effect (react-hooks/set-state-in-effect).
   async function fetchCounts() {
     try {
       const [result, subs] = await Promise.all([
@@ -149,6 +110,51 @@ export default function TeacherNav({ ungradedCount: propUngraded, unreadCount: p
       console.warn('fetchProfile error:', err)
     }
   }
+
+  // The nav mounts once per page, but Melinda can sit on Grade Work for hours
+  // while that page auto-refreshes; a mount-only fetch left the badge frozen.
+  // Refresh on a timer, when the tab regains focus, and when a page signals
+  // that grades changed.
+  useEffect(() => {
+    if (propUngraded !== undefined && propUnread !== undefined) return
+    const first = setTimeout(fetchCounts, 0)
+    const interval = setInterval(fetchCounts, 60_000)
+    const onVisible = () => { if (document.visibilityState === 'visible') fetchCounts() }
+    document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener(NAV_COUNTS_EVENT, fetchCounts)
+    return () => {
+      clearTimeout(first)
+      clearInterval(interval)
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener(NAV_COUNTS_EVENT, fetchCounts)
+    }
+  }, [])
+
+  // Re-fetch profile whenever user identity becomes available. Resolved via
+  // getCurrentUser (useResolvedUser) — the raw hook user intermittently never
+  // arrives on fresh sessions, which left the nav nameless/pictureless.
+  useEffect(() => {
+    if (!resolvedUserId) return
+    const t = setTimeout(fetchProfile, 0)
+    return () => clearTimeout(t)
+  }, [resolvedUserId])
+
+  // After signOut(), `user` becomes null — redirect to login. signOut() itself
+  // is not truly async, so we can't await it; this effect handles the redirect.
+  useEffect(() => {
+    if (user === null) router.replace('/login')
+  }, [user, router])
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (moreRef.current && !moreRef.current.contains(e.target as Node)) {
+        setMoreOpen(false)
+      }
+    }
+    if (moreOpen) document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [moreOpen])
 
   const initials = displayName
     ? displayName.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()
