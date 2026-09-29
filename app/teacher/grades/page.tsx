@@ -13,6 +13,7 @@ import TurnInForStudent from '../../components/TurnInForStudent'
 import { useRoleGuard } from '../../hooks/useRoleGuard'
 import { apiFetch } from '@/app/lib/apiFetch'
 import { fetchAllPages } from '@/app/lib/fetchAllPages'
+import { needsGrading, refreshNavCounts } from '@/app/lib/needsGrading'
 import outputs from '../../../amplify_outputs.json'
 
 /**
@@ -554,6 +555,14 @@ function GradingPageInner() {
       openSubmission(target)
     }
   }, [submissions, pendingSubmissionId])
+
+  // Keep the nav's Grade Work badge in step with this page: whenever the
+  // number waiting to be graded changes (new turn-in, grade saved, returned),
+  // tell TeacherNav to re-count instead of waiting for its own timer.
+  const needsGradingCount = submissions.filter(needsGrading).length
+  useEffect(() => {
+    refreshNavCounts()
+  }, [needsGradingCount])
 
   // Auto-refresh submissions every 60 seconds
   useEffect(() => {
@@ -1360,7 +1369,7 @@ function GradingPageInner() {
       if (!!s.isArchived !== showArchived) return false
       if (filterCourse !== 'all' && getSubmissionCourseId(s) !== filterCourse) return false
       if (!showArchived) {
-        if (filterStatus === 'ungraded' && !!s.grade) return false
+        if (filterStatus === 'ungraded' && !needsGrading(s)) return false
         if (filterStatus === 'graded' && !s.grade) return false
       }
       if (searchQuery.trim()) {
@@ -1387,7 +1396,7 @@ function GradingPageInner() {
         studentId: s.studentId,
         name: studentNameMap[s.studentId] || s.studentId,
         submissions: group,
-        ungradedCount: group.filter(x => !x.grade).length,
+        ungradedCount: group.filter(needsGrading).length,
       })
     }
   }
@@ -1398,7 +1407,7 @@ function GradingPageInner() {
     return 0
   })
 
-  const ungradedCount = submissions.filter(s => !s.grade && !s.isArchived).length
+  const ungradedCount = submissions.filter(needsGrading).length
   const archivedCount = submissions.filter(s => s.isArchived).length
   const bulkArchiveCount = submissions.filter(s =>
     !s.isArchived && (filterCourse === 'all' || getSubmissionCourseId(s) === filterCourse)

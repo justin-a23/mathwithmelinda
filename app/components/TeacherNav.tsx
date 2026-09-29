@@ -9,14 +9,13 @@ import { MwmMark } from './MwmLogo'
 import { apiFetch } from '@/app/lib/apiFetch'
 import { useResolvedUser } from '@/app/hooks/useResolvedUser'
 import { hardSignOut } from '@/app/lib/hardSignOut'
+import { fetchAllPages } from '@/app/lib/fetchAllPages'
+import { needsGrading, NAV_COUNTS_EVENT } from '@/app/lib/needsGrading'
 
 const client = generateClient()
 
 const NAV_COUNTS_QUERY = /* GraphQL */`
   query NavCounts {
-    listSubmissions(limit: 1000, filter: { isArchived: { ne: true } }) {
-      items { id grade status }
-    }
     listMessages(limit: 200, filter: { isRead: { eq: false } }) {
       items { id }
     }
@@ -29,7 +28,18 @@ const NAV_COUNTS_QUERY = /* GraphQL */`
   }
 `
 
-const GET_TEACHER_PROFILE = /* GraphQL */`
+// Separate from NAV_COUNTS_QUERY so it can drain every page: a single
+// limit-1000 scan silently undercounts once the table outgrows one page.
+const NAV_SUBMISSIONS_QUERY = /* GraphQL */`
+  query NavSubmissions($nextToken: String) {
+    listSubmissions(limit: 1000, filter: { isArchived: { ne: true } }, nextToken: $nextToken) {
+      items { id grade status isArchived }
+      nextToken
+    }
+  }
+`
+
+const GET_TEACHER_PROFILE =/* GraphQL */`
   query GetTeacherProfile($userId: String!) {
     listTeacherProfiles(filter: { userId: { eq: $userId } }, limit: 500) {
       items { displayName profilePictureKey }
@@ -58,9 +68,21 @@ export default function TeacherNav({ ungradedCount: propUngraded, unreadCount: p
   const [moreOpen, setMoreOpen] = useState(false)
   const moreRef = useRef<HTMLDivElement>(null)
 
+  // The nav mounts once per page, but Melinda can sit on Grade Work for hours
+  // while that page auto-refreshes; a mount-only fetch left the badge frozen.
+  // Refresh on a timer, when the tab regains focus, and when a page signals
+  // that grades changed.
   useEffect(() => {
-    if (propUngraded === undefined || propUnread === undefined) {
-      fetchCounts()
+    if (propUngraded !== undefined && propUnread !== undefined) return
+    fetchCounts()
+    const interval = setInterval(fetchCounts, 60_000)
+    const onVisible = () => { if (document.visibilityState === 'visible') fetchCounts() }
+    document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener(NAV_COUNTS_EVENT, fetchCounts)
+    return () => {
+      clearInterval(interval)
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener(NAV_COUNTS_EVENT, fetchCounts)
     }
   }, [])
 
@@ -90,10 +112,12 @@ export default function TeacherNav({ ungradedCount: propUngraded, unreadCount: p
 
   async function fetchCounts() {
     try {
-      const result = await (client.graphql({ query: NAV_COUNTS_QUERY }) as any)
-      const subs = result.data.listSubmissions.items
+      const [result, subs] = await Promise.all([
+        client.graphql({ query: NAV_COUNTS_QUERY }) as any,
+        fetchAllPages(client, NAV_SUBMISSIONS_QUERY, 'listSubmissions'),
+      ])
       const msgs = result.data.listMessages.items
-      setUngraded(subs.filter((s: any) => !s.grade && s.status !== 'returned').length)
+      setUngraded(subs.filter(needsGrading).length)
       setUnread(msgs.length)
       setPendingStudents(result.data.listStudentProfiles.items.length)
       setOpenTickets(result.data.listSupportTickets.items.filter((t: any) => t.status !== 'resolved').length)

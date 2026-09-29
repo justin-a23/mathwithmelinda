@@ -10,6 +10,7 @@ import { apiFetch } from '@/app/lib/apiFetch'
 import { fetchAllPages } from '@/app/lib/fetchAllPages'
 import { fetchAuthSession } from 'aws-amplify/auth'
 import { OPEN_STATUSES } from '@/app/lib/support'
+import { needsGrading } from '@/app/lib/needsGrading'
 
 const client = generateClient()
 
@@ -225,6 +226,7 @@ const listAllSubmissionsForAlertsQuery = /* GraphQL */`
         id
         studentId
         grade
+        status
         submittedAt
         isArchived
         content
@@ -449,8 +451,8 @@ export default function TeacherDashboard() {
 
       // Ungraded submissions
       const allSubs = subsRes ?? []
-      const ungradedThisWeek = allSubs.filter((s: any) => !s.isArchived && !s.grade && s.submittedAt && new Date(s.submittedAt).getTime() >= weekStartMs)
-      const staleUngraded = allSubs.filter((s: any) => !s.isArchived && !s.grade && s.submittedAt && new Date(s.submittedAt) < new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000))
+      const ungradedThisWeek = allSubs.filter((s: any) => needsGrading(s) && s.submittedAt && new Date(s.submittedAt).getTime() >= weekStartMs)
+      const staleUngraded = allSubs.filter((s: any) => needsGrading(s) && s.submittedAt && new Date(s.submittedAt) < new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000))
 
       // Students who haven't submitted this week
       const submittedThisWeek = new Set(allSubs.filter((s: any) => !s.isArchived && s.submittedAt && new Date(s.submittedAt).getTime() >= weekStartMs).map((s: any) => s.studentId))
@@ -632,7 +634,7 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
       if (hasAnyAssignments) {
         // 1. Ungraded submissions older than 5 days
         const staleUngraded = allSubs.filter((s: any) =>
-          !s.isArchived && !s.grade && s.submittedAt && new Date(s.submittedAt) < fiveDaysAgo
+          needsGrading(s) && s.submittedAt && new Date(s.submittedAt) < fiveDaysAgo
         )
         if (staleUngraded.length > 0) {
           newAlerts.push({
@@ -1149,9 +1151,8 @@ Today's meetings: ${meetsToday.length === 0 ? 'none' : meetsToday.map((m: any) =
       // ── Count overdue: submissions from before this week that are still ungraded ──
       const overdueByCourse: Record<string, number> = {}
       for (const sub of allSubs) {
-        if (sub.isArchived) continue
+        if (!needsGrading(sub)) continue  // graded, archived, or returned to the student
         if (!sub.submittedAt) continue
-        if (sub.grade) continue  // already graded, not overdue
         if (new Date(sub.submittedAt).getTime() >= weekStartMs) continue  // this week, not overdue
 
         let courseId = ''
