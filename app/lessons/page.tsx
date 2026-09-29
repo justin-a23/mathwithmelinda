@@ -1039,7 +1039,7 @@ function LessonPageInner() {
         .diagram{margin:8px 0 12px;max-width:320px}
         .diagram-img{width:100%;border:1px solid #ccc;border-radius:4px;display:block}
         .work-item{margin-bottom:18px;page-break-inside:avoid}
-        .section-header{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#5b2d8e;border-bottom:2px solid #d8b4fe;padding-bottom:5px;margin:28px 0 16px;page-break-after:avoid}
+        .section-header{white-space:pre-line;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#5b2d8e;border-bottom:2px solid #d8b4fe;padding-bottom:5px;margin:28px 0 16px;page-break-after:avoid}
         /* Normal inline flow, NOT flex: the body is raw text nodes mixed with
            KaTeX spans, and flex promotes each fragment to its own column —
            long questions with inline math shattered into a broken grid. */

@@ -968,7 +968,7 @@ export default function LessonLibraryPage() {
         .work-label{margin-bottom:6px;line-height:1.6}
         .qnum{font-weight:bold;font-size:15px;margin-right:6px}
         .work-box{border:1px solid #bbb;border-radius:4px;height:120px}
-        .section-header{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#5b2d8e;border-bottom:2px solid #d8b4fe;padding-bottom:5px;margin:28px 0 16px;page-break-after:avoid}
+        .section-header{white-space:pre-line;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#5b2d8e;border-bottom:2px solid #d8b4fe;padding-bottom:5px;margin:28px 0 16px;page-break-after:avoid}
         @media print{body{padding:20px}@page{margin:.6in}}
       </style>
     </head><body onload="(function(){var done=false;function go(){if(done)return;done=true;setTimeout(function(){window.print()},200)}var waits=[];if(document.fonts&&document.fonts.ready){waits.push(document.fonts.ready)}var imgs=document.images;if(imgs.length>0){waits.push(new Promise(function(res){var n=0;function c(){n++;if(n>=imgs.length)res()}for(var i=0;i<imgs.length;i++){if(imgs[i].complete)c();else{imgs[i].onload=c;imgs[i].onerror=c}}}))}Promise.all(waits).then(go);setTimeout(go,5000)})()">
@@ -1116,7 +1116,7 @@ export default function LessonLibraryPage() {
         .bubble-square{border-radius:2px}
         .choice-letter{font-weight:bold}
         .mc-note{font-size:12px;color:#666;font-style:italic;margin-bottom:5px}
-        .section-header{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#5b2d8e;border-bottom:2px solid #d8b4fe;padding-bottom:5px;margin:28px 0 16px;page-break-after:avoid}
+        .section-header{white-space:pre-line;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#5b2d8e;border-bottom:2px solid #d8b4fe;padding-bottom:5px;margin:28px 0 16px;page-break-after:avoid}
         @media print{body{padding:20px}@page{margin:.6in}}
       </style>
     </head><body onload="(function(){var done=false;function go(){if(done)return;done=true;setTimeout(function(){window.print()},200)}var waits=[];if(document.fonts&&document.fonts.ready){waits.push(document.fonts.ready)}var imgs=document.images;if(imgs.length>0){waits.push(new Promise(function(res){var n=0;function c(){n++;if(n>=imgs.length)res()}for(var i=0;i<imgs.length;i++){if(imgs[i].complete)c();else{imgs[i].onload=c;imgs[i].onerror=c}}}))}Promise.all(waits).then(go);setTimeout(go,5000)})()">
@@ -1248,7 +1248,7 @@ export default function LessonLibraryPage() {
         .header h1{font-size:22px;font-weight:700;font-family:'DM Serif Display',serif;margin-bottom:4px}
         .header .course{font-size:13px;color:#666}
         .header .instructions{font-size:13px;color:#555;margin-top:12px;padding:10px 14px;background:#fff;border:1px solid #e5e5e5;border-radius:8px;line-height:1.6}
-        .section-header{font-size:13px;font-weight:700;color:#7B4FA6;text-transform:uppercase;letter-spacing:0.8px;border-bottom:2px solid #d8b4fe;padding-bottom:6px;padding-top:4px;margin-top:28px;margin-bottom:16px}
+        .section-header{white-space:pre-line;font-size:13px;font-weight:700;color:#7B4FA6;text-transform:uppercase;letter-spacing:0.8px;border-bottom:2px solid #d8b4fe;padding-bottom:6px;padding-top:4px;margin-top:28px;margin-bottom:16px}
         .question{margin-bottom:24px;padding-bottom:24px;border-bottom:1px solid #e5e5e5}
         .q-row{display:flex;gap:12px;margin-bottom:12px}
         .q-num{font-weight:700;color:#7B4FA6;font-size:16px;min-width:28px;flex-shrink:0}
