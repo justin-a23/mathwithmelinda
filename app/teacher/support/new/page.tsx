@@ -330,7 +330,13 @@ export default function NewSupportTicketPage() {
               <label style={labelStyle}>Screenshots (optional)</label>
               <div style={{ display: 'flex', gap: '6px', margin: '8px 0 12px' }}>
                 {([['upload', '📁 Upload files'], ['phone', '📱 Phone camera']] as const).map(([key, label]) => (
-                  <button key={key} onClick={() => setShotTab(key)}
+                  <button key={key} type="button"
+                    onClick={() => {
+                      setShotTab(key)
+                      // "Upload files" is already the selected tab on load, so a
+                      // plain tab switch looked like a dead button. Open the picker.
+                      if (key === 'upload') fileInputRef.current?.click()
+                    }}
                     style={{
                       padding: '6px 14px', borderRadius: '20px', fontSize: '12px', fontWeight: 600, cursor: 'pointer',
                       border: shotTab === key ? '1px solid var(--plum)' : '1px solid var(--gray-light)',
@@ -342,20 +348,27 @@ export default function NewSupportTicketPage() {
                 ))}
               </div>
 
+              {/* Always mounted (hidden) so the Upload files pill can open it
+                  even while the Phone camera tab is showing. */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,.heic,.heif,.pdf,application/pdf"
+                multiple
+                onChange={e => handleFiles(e.target.files)}
+                style={{ display: 'none' }}
+              />
+
               {shotTab === 'upload' && (
                 <>
                   <p style={{ color: 'var(--gray-mid)', fontSize: '13px', margin: '0 0 10px' }}>
                     On a Mac, press <strong>Shift + Command + 4</strong> and drag over the problem, then upload the
                     picture it saves to your Desktop.
                   </p>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*,.heic,.heif,.pdf,application/pdf"
-                    multiple
-                    onChange={e => handleFiles(e.target.files)}
-                    style={{ fontSize: '13px', color: 'var(--foreground)' }}
-                  />
+                  <button type="button" onClick={() => fileInputRef.current?.click()} disabled={uploading}
+                    style={{ background: 'var(--plum)', color: 'white', border: 'none', borderRadius: '8px', padding: '9px 18px', fontSize: '13px', fontWeight: 600, cursor: uploading ? 'default' : 'pointer', fontFamily: 'var(--font-body)' }}>
+                    📁 Choose pictures
+                  </button>
                 </>
               )}
 
