@@ -283,16 +283,18 @@ function WatchBadge({ watch }: { watch: VideoWatchRecord | undefined | null }) {
 function NotesSection({ content }: { content: string | null }) {
   if (!content) return null
   let notes = ''
+  let byTeacher = false
   try {
     const parsed = JSON.parse(content)
     notes = parsed.notes || ''
+    byTeacher = parsed.submittedByTeacher === true
   } catch (e) {
     return null
   }
   if (!notes) return null
   return (
     <div style={{ background: 'var(--gray-light)', borderRadius: '6px', padding: '12px 16px', marginBottom: '24px' }}>
-      <div style={{ fontSize: '11px', fontWeight: 500, color: 'var(--gray-mid)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '1px' }}>Student notes</div>
+      <div style={{ fontSize: '11px', fontWeight: 500, color: 'var(--gray-mid)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '1px' }}>{byTeacher ? 'Turned in by teacher' : 'Student notes'}</div>
       <p style={{ fontSize: '14px', color: 'var(--foreground)' }}>{notes}</p>
     </div>
   )

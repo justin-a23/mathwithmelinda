@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { generateClient } from 'aws-amplify/api'
 import { apiFetch } from '@/app/lib/apiFetch'
 import { fetchAllPages } from '@/app/lib/fetchAllPages'
+import { useQrUploadToken } from '@/app/hooks/useQrUploadToken'
 
 /**
  * Teacher turns work in on a student's behalf: the student sat a test in
@@ -17,7 +18,16 @@ import { fetchAllPages } from '@/app/lib/fetchAllPages'
  * the gradebook, the report card and the parent portal all treat it as the
  * student's own. Photos go through /api/submit's teacher path into the
  * STUDENT's S3 namespace, so the existing ownership rules let the student and
- * their parents view them.
+ * their parents view them. Photos can come from the computer or, like the
+ * student's own page, from Melinda's phone via a QR upload link scoped to the
+ * same student + lesson.
+ *
+ * Follow-ups from the independent review of the first version (2026-09-28):
+ * in-class days are labelled (a non-test lesson on an in-class day grades into
+ * Participation, which is the gradebook's rule, so she should see it before
+ * picking), archived submissions count as already turned in, the pickers lock
+ * while photos upload, and no due date is stored so a paper test uploaded
+ * after its due date never shows as late.
  */
 
 const client = generateClient()
@@ -46,6 +56,7 @@ const listPlansForCourseQuery = /* GraphQL */`
             dayOfWeek
             dueTime
             isPublished
+            isInClass
             lessonTemplateId
             lesson { id title order }
           }
@@ -70,6 +81,7 @@ type PlanItem = {
   dayOfWeek: string
   dueTime: string | null
   isPublished: boolean | null
+  isInClass: boolean | null
   lessonTemplateId: string | null
   lesson: { id: string; title: string; order: number | null } | null
 }
@@ -90,6 +102,7 @@ type Option = {
   dayOfWeek: string
   dueDateTime: string | null
   dayDate: string // YYYY-MM-DD of the assigned day, for sorting + "today"
+  inClass: boolean
 }
 type Uploaded = { name: string; key: string }
 
@@ -106,7 +119,7 @@ function dayDateOf(weekStartDate: string, dayOfWeek: string): string {
   return isNaN(base.getTime()) ? weekStartDate : ymd(base)
 }
 
-/** Same derivation as the student lesson page, so late checks agree. */
+/** Same derivation as the student lesson page; stored for reference only (see turnIn). */
 function dueDateTimeOf(item: PlanItem, weekStartDate: string): string | null {
   const raw = item.dueTime
   if (!raw) return null
@@ -125,10 +138,20 @@ function isAssignedTo(plan: Plan, s: Student): boolean {
   } catch { return true }
 }
 
+/** Same rule as the gradebook: an unset flag on a Friday means in-class. */
+function isInClassItem(item: PlanItem): boolean {
+  return item.isInClass === true || (item.isInClass == null && item.dayOfWeek === 'Friday')
+}
+
 function optionLabel(o: Option): string {
   const d = new Date(o.dayDate + 'T00:00:00')
   const when = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
-  return `${when}: ${o.lessonTitle}`
+  return `${when}: ${o.lessonTitle}${o.inClass ? ' (in-class day)' : ''}`
+}
+
+function formatTime(seconds: number): string {
+  const m = Math.floor(seconds / 60), s = seconds % 60
+  return `${m}:${String(s).padStart(2, '0')}`
 }
 
 export default function TurnInForStudent({ onClose, onCreated }: {
@@ -145,10 +168,30 @@ export default function TurnInForStudent({ onClose, onCreated }: {
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [showQr, setShowQr] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const student = students.find(s => s.userId === studentId) || null
   const option = options.find(o => o.itemId === itemId) || null
+
+  // Phone upload: same token flow as the student page and Grade Work's graded
+  // pages, scoped to this student + lesson so the files land in the student's
+  // own folder. The QR is tied to the assignment it was made for: if Melinda
+  // switches assignments, photos still arriving for the old one are ignored.
+  const qrItemRef = useRef<string>('')
+  const qr = useQrUploadToken({
+    body: { lessonId: option?.lessonId || '', forStudentEmail: student?.email || '' },
+    onNewKeys: keys => {
+      if (qrItemRef.current !== itemId) return
+      setFiles(prev => [...prev, ...keys.filter(k => !prev.some(f => f.key === k)).map(k => ({ name: k.split('/').pop() || 'phone photo', key: k }))])
+    },
+  })
+  function startPhoneUpload() {
+    if (!option) return
+    qrItemRef.current = option.itemId
+    setShowQr(true)
+    qr.generate()
+  }
 
   useEffect(() => {
     fetchAllPages<Student>(client, listActiveStudentsQuery, 'listStudentProfiles')
@@ -162,7 +205,7 @@ export default function TurnInForStudent({ onClose, onCreated }: {
   // Picking a student lists their published assignments that have no
   // submission yet, newest first, defaulting to today's.
   useEffect(() => {
-    setOptions([]); setItemId(''); setFiles([]); setError('')
+    setOptions([]); setItemId(''); setFiles([]); setError(''); setShowQr(false)
     if (!student) return
     if (!student.courseId) { setError('This student has no course assigned.'); return }
     let cancelled = false
@@ -175,9 +218,10 @@ export default function TurnInForStudent({ onClose, onCreated }: {
             client, listStudentSubmissionsQuery, 'listSubmissionsByStudentId', { studentId: student.userId }),
         ])
         if (cancelled) return
+        // Archived submissions count too: after an end-of-term archive the
+        // lesson is still turned in, and offering it again invited a duplicate.
         const done = new Set<string>()
         for (const sub of subs) {
-          if (sub.isArchived) continue
           try {
             const c = JSON.parse(sub.content || '{}')
             if (c.weeklyPlanItemId) done.add(c.weeklyPlanItemId)
@@ -200,6 +244,7 @@ export default function TurnInForStudent({ onClose, onCreated }: {
               dayOfWeek: item.dayOfWeek,
               dueDateTime: dueDateTimeOf(item, plan.weekStartDate),
               dayDate: dayDateOf(plan.weekStartDate, item.dayOfWeek),
+              inClass: isInClassItem(item),
             })
           }
         }
@@ -257,7 +302,12 @@ export default function TurnInForStudent({ onClose, onCreated }: {
         courseId: option.courseId,
         courseTitle: option.courseTitle,
         weeklyPlanItemId: option.itemId,
-        dueDateTime: option.dueDateTime,
+        // No due date on a teacher turn-in: the student did the work with
+        // Melinda in person, so uploading it after the assignment's due date
+        // must not show as late anywhere (Grade Work, parent portal, the
+        // student's history). The assignment's due date is kept for reference.
+        dueDateTime: null,
+        assignedDueDateTime: option.dueDateTime,
         lessonTemplateId: option.lessonTemplateId,
         answers: {},
         submittedByTeacher: true,
@@ -296,7 +346,7 @@ export default function TurnInForStudent({ onClose, onCreated }: {
 
         <div style={{ marginBottom: '16px' }}>
           <label style={labelStyle}>Student</label>
-          <select value={studentId} onChange={e => setStudentId(e.target.value)} style={fieldStyle}>
+          <select value={studentId} onChange={e => setStudentId(e.target.value)} disabled={uploading || saving} style={fieldStyle}>
             <option value="">Choose a student…</option>
             {students.map(s => <option key={s.userId} value={s.userId}>{s.lastName}, {s.firstName}</option>)}
           </select>
@@ -310,9 +360,14 @@ export default function TurnInForStudent({ onClose, onCreated }: {
             ) : options.length === 0 ? (
               <div style={{ fontSize: '13px', color: 'var(--gray-mid)' }}>Nothing left to turn in: every assigned lesson already has a submission.</div>
             ) : (
-              <select value={itemId} onChange={e => { setItemId(e.target.value); setFiles([]) }} style={fieldStyle}>
+              <select value={itemId} onChange={e => { setItemId(e.target.value); setFiles([]); setShowQr(false) }} disabled={uploading || saving} style={fieldStyle}>
                 {options.map(o => <option key={o.itemId} value={o.itemId}>{optionLabel(o)}</option>)}
               </select>
+            )}
+            {option?.inClass && (
+              <div style={{ fontSize: '12px', color: '#B45309', marginTop: '6px', lineHeight: 1.5 }}>
+                This is an in-class day. A regular lesson turned in here counts toward Participation. A test still counts as a test.
+              </div>
             )}
           </div>
         )}
@@ -324,10 +379,28 @@ export default function TurnInForStudent({ onClose, onCreated }: {
               <input ref={fileInputRef} type="file" accept="image/*,application/pdf,.heic,.heif" multiple
                 onChange={e => { if (e.target.files && e.target.files.length > 0) uploadFiles(e.target.files) }}
                 style={{ display: 'none' }} />
-              <button onClick={() => fileInputRef.current?.click()} disabled={uploading}
-                style={{ background: 'var(--plum-light)', color: 'var(--plum)', border: '1px solid var(--plum-mid)', borderRadius: '8px', padding: '8px 14px', fontSize: '13px', fontWeight: 600, cursor: uploading ? 'wait' : 'pointer' }}>
-                {uploading ? 'Uploading…' : files.length > 0 ? '+ Add more photos' : '📷 Choose photos'}
-              </button>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button onClick={() => fileInputRef.current?.click()} disabled={uploading}
+                  style={{ background: 'var(--plum-light)', color: 'var(--plum)', border: '1px solid var(--plum-mid)', borderRadius: '8px', padding: '8px 14px', fontSize: '13px', fontWeight: 600, cursor: uploading ? 'wait' : 'pointer' }}>
+                  {uploading ? 'Uploading…' : files.length > 0 ? '+ Add more photos' : '📷 Choose photos'}
+                </button>
+                <button onClick={startPhoneUpload} disabled={uploading || qr.loading}
+                  style={{ background: showQr ? 'var(--plum)' : 'var(--plum-light)', color: showQr ? 'white' : 'var(--plum)', border: '1px solid var(--plum-mid)', borderRadius: '8px', padding: '8px 14px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
+                  {qr.loading ? 'Making a code…' : '📱 Use my phone'}
+                </button>
+              </div>
+              {showQr && qr.error && <div style={{ fontSize: '13px', color: '#dc2626', marginTop: '8px' }}>{qr.error}</div>}
+              {showQr && qr.tokenState && (
+                <div style={{ textAlign: 'center', marginTop: '12px', padding: '12px', border: '1px solid var(--gray-light)', borderRadius: '8px' }}>
+                  <img src={qr.tokenState.qrDataUrl} alt="Scan this QR code with your phone camera" style={{ width: '180px', height: '180px', display: 'block', margin: '0 auto' }} />
+                  <div style={{ fontSize: '13px', color: 'var(--gray-dark)', marginTop: '8px', fontWeight: 600 }}>Scan with your phone camera, then take the photos</div>
+                  <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginTop: '2px' }}>Photos show up in the list below as they arrive. Code expires in {formatTime(qr.timeLeft)}.</div>
+                  <button onClick={startPhoneUpload} style={{ marginTop: '8px', background: 'transparent', color: 'var(--plum)', border: '1px solid var(--gray-light)', borderRadius: '6px', padding: '5px 12px', fontSize: '12px', cursor: 'pointer' }}>Make a new code</button>
+                </div>
+              )}
+              {showQr && !qr.tokenState && !qr.loading && !qr.error && (
+                <div style={{ fontSize: '12px', color: 'var(--gray-mid)', marginTop: '8px' }}>The code expired. Tap Use my phone for a new one.</div>
+              )}
               {files.length > 0 && (
                 <ul style={{ margin: '10px 0 0', padding: 0, listStyle: 'none', fontSize: '13px', color: 'var(--foreground)' }}>
                   {files.map((f, i) => (
