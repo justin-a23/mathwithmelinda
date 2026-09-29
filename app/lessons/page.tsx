@@ -1007,7 +1007,7 @@ function LessonPageInner() {
     // Build question HTML — each question shows its text, diagram (if any), and work box
     const questionsHTML = showWorkQuestions.map(q => {
       if (q.questionType === 'section_header') {
-        return `<div class="section-header">${renderMath(q.questionText || '')}</div>`
+        return `<div class="section-header${(q.questionText || '').includes('\n') ? ' multi' : ''}">${renderMath(q.questionText || '')}</div>`
       }
       const qNumLabel = printLabel(q, printQNum)
       const qBody = renderMath(q.questionText.replace(/^\d+\.\s+/, ''))
@@ -1039,7 +1039,8 @@ function LessonPageInner() {
         .diagram{margin:8px 0 12px;max-width:320px}
         .diagram-img{width:100%;border:1px solid #ccc;border-radius:4px;display:block}
         .work-item{margin-bottom:18px;page-break-inside:avoid}
-        .section-header{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#5b2d8e;border-bottom:2px solid #d8b4fe;padding-bottom:5px;margin:28px 0 16px;page-break-after:avoid}
+        .section-header.multi{text-transform:none;letter-spacing:normal}
+        .section-header{white-space:pre-line;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#5b2d8e;border-bottom:2px solid #d8b4fe;padding-bottom:5px;margin:28px 0 16px;page-break-after:avoid}
         /* Normal inline flow, NOT flex: the body is raw text nodes mixed with
            KaTeX spans, and flex promotes each fragment to its own column —
            long questions with inline math shattered into a broken grid. */
@@ -1341,7 +1342,9 @@ function LessonPageInner() {
                                     <div key={q.id} style={{ marginTop: idx === 0 ? 0 : '28px', marginBottom: '16px' }}>
                                       <div style={{
                                         fontSize: '13px', fontWeight: 700, color: 'var(--plum)',
-                                        textTransform: 'uppercase', letterSpacing: '0.8px',
+                                        // Multi-line headers (rules, directions) keep the teacher's
+                                        // own casing; forced caps made a paragraph unreadable.
+                                        ...(q.questionText.includes('\n') ? {} : { textTransform: 'uppercase' as const, letterSpacing: '0.8px' }),
                                         borderBottom: '2px solid var(--plum-mid)',
                                         paddingBottom: '6px', paddingTop: '4px'
                                       }}>
