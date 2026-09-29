@@ -292,10 +292,12 @@ function NotesSection({ content }: { content: string | null }) {
     return null
   }
   if (!notes) return null
+  // The dialog's default note is the same sentence as the heading; show it once.
+  const body = byTeacher && /^turned in by teacher\.?$/i.test(notes.trim()) ? '' : notes
   return (
     <div style={{ background: 'var(--gray-light)', borderRadius: '6px', padding: '12px 16px', marginBottom: '24px' }}>
-      <div style={{ fontSize: '11px', fontWeight: 500, color: 'var(--gray-mid)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '1px' }}>{byTeacher ? 'Turned in by teacher' : 'Student notes'}</div>
-      <p style={{ fontSize: '14px', color: 'var(--foreground)' }}>{notes}</p>
+      <div style={{ fontSize: '11px', fontWeight: 500, color: 'var(--gray-mid)', marginBottom: body ? '6px' : 0, textTransform: 'uppercase', letterSpacing: '1px' }}>{byTeacher ? 'Turned in by teacher' : 'Student notes'}</div>
+      {body && <p style={{ fontSize: '14px', color: 'var(--foreground)' }}>{body}</p>}
     </div>
   )
 }

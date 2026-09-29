@@ -397,7 +397,7 @@ export default function TurnInForStudent({ onClose, onCreated }: {
                 </button>
               </div>
               {showQr && qr.error && <div style={{ fontSize: '13px', color: '#dc2626', marginTop: '8px' }}>{qr.error}</div>}
-              {showQr && qr.tokenState && (
+              {showQr && qr.tokenState && student && option && qrScopeRef.current === `${student.userId}|${option.itemId}` && (
                 <div style={{ textAlign: 'center', marginTop: '12px', padding: '12px', border: '1px solid var(--gray-light)', borderRadius: '8px' }}>
                   <img src={qr.tokenState.qrDataUrl} alt="Scan this QR code with your phone camera" style={{ width: '180px', height: '180px', display: 'block', margin: '0 auto' }} />
                   <div style={{ fontSize: '13px', color: 'var(--gray-dark)', marginTop: '8px', fontWeight: 600 }}>Scan with your phone camera, then take the photos</div>
