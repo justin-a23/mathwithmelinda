@@ -7,13 +7,15 @@ import { generateClient } from 'aws-amplify/api'
 import TeacherNav from '../../components/TeacherNav'
 import { useRoleGuard } from '../../hooks/useRoleGuard'
 import { apiFetch } from '@/app/lib/apiFetch'
+import { fetchAllPages } from '@/app/lib/fetchAllPages'
 
 const client = generateClient()
 
 const LIST_MESSAGES = /* GraphQL */ `
-  query ListMessages {
-    listMessages(limit: 500) {
-      items { id studentId studentName content sentAt isRead teacherReply repliedAt isArchivedByTeacher }
+  query ListMessages($nextToken: String) {
+    listMessages(limit: 500, nextToken: $nextToken) {
+      items { id studentId studentName content sentAt isRead teacherReply repliedAt isArchivedByTeacher isTeacherInitiated }
+      nextToken
     }
   }
 `
@@ -109,6 +111,7 @@ type Message = {
   teacherReply: string | null
   repliedAt: string | null
   isArchivedByTeacher: boolean | null
+  isTeacherInitiated?: boolean | null
 }
 
 type StudentGroup = {
@@ -350,8 +353,7 @@ export default function TeacherMessagesPage() {
   async function loadMessages() {
     setLoading(true)
     try {
-      const res = await (client.graphql({ query: LIST_MESSAGES }) as any)
-      const items: Message[] = res.data.listMessages.items
+      const items = await fetchAllPages<Message>(client, LIST_MESSAGES, 'listMessages')
       items.sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime())
       setMessages(items)
     } catch (err) {
@@ -440,22 +442,52 @@ export default function TeacherMessagesPage() {
   async function sendReply(msgId: string) {
     const reply = (replyText[msgId] || '').trim()
     if (!reply) return
+    const msg = messages.find(m => m.id === msgId)
+    if (!msg) return
     setSending(prev => ({ ...prev, [msgId]: true }))
     try {
       const repliedAt = new Date().toISOString()
-      await (client.graphql({
-        query: UPDATE_MESSAGE,
-        variables: { input: { id: msgId, teacherReply: reply, repliedAt, isRead: true } },
-      }) as any)
-      setMessages(prev => prev.map(m => m.id === msgId ? { ...m, teacherReply: reply, repliedAt, isRead: true } : m))
+      if (!msg.teacherReply && !msg.isTeacherInitiated) {
+        // First answer to a student's question rides on that message.
+        await (client.graphql({
+          query: UPDATE_MESSAGE,
+          variables: { input: { id: msgId, teacherReply: reply, repliedAt, isRead: true } },
+        }) as any)
+        setMessages(prev => prev.map(m => m.id === msgId ? { ...m, teacherReply: reply, repliedAt, isRead: true } : m))
+      } else {
+        // Any further reply is its own message in the thread. A message holds
+        // only one teacherReply, so writing it again silently replaced earlier
+        // replies (ticket 36f4e866: three replies to Joplin, only the last kept).
+        const result = await (client.graphql({
+          query: CREATE_MESSAGE,
+          variables: {
+            input: {
+              studentId: msg.studentId,
+              studentName: msg.studentName,
+              content: reply,
+              sentAt: repliedAt,
+              isRead: true,
+              isTeacherInitiated: true,
+            },
+          },
+        }) as any)
+        setMessages(prev => [result.data.createMessage, ...prev])
+      }
       setReplyText(prev => ({ ...prev, [msgId]: '' }))
       setExpandedMessageId(null)
 
-      // Email the student — fire and forget
-      const msg = messages.find(m => m.id === msgId)
-      if (msg?.studentId) {
-        const studentEmail = msg.studentId // studentId is loginId (email) for password-auth users
-        const studentName = msg.studentName || 'there'
+      // Email the recipient — fire and forget. studentId holds the Cognito sub
+      // (or parent:<sub>), not an address, so look the email up.
+      const isParent = msg.studentId.startsWith('parent:')
+      const recipient = isParent
+        ? parents.find(p => p.threadId === msg.studentId)
+        : students.find(s => s.userId === msg.studentId)
+      const studentEmail = recipient?.email
+      if (studentEmail) {
+        const studentName = recipient?.name || 'there'
+        const viewUrl = isParent
+          ? 'https://mathwithmelinda.com/parent/messages'
+          : 'https://mathwithmelinda.com/student/messages'
         apiFetch('/api/send-email', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -469,12 +501,12 @@ export default function TeacherMessagesPage() {
                 <div style="background: #f0fdf4; border-left: 4px solid #22c55e; border-radius: 8px; padding: 16px; margin: 16px 0; font-size: 15px; line-height: 1.6; color: #15803d;">
                   ${reply.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br/>')}
                 </div>
-                <a href="https://mathwithmelinda.com/student/messages" style="display: inline-block; background: #7B4FA6; color: white; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: 600;">
+                <a href="${viewUrl}" style="display: inline-block; background: #7B4FA6; color: white; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: 600;">
                   View in Messages
                 </a>
               </div>
             `,
-            text: `Hi ${studentName},\n\nMelinda replied to your message:\n\n"${reply}"\n\nView it at https://mathwithmelinda.com/student/messages`,
+            text: `Hi ${studentName},\n\nMelinda replied to your message:\n\n"${reply}"\n\nView it at ${viewUrl}`,
           }),
         }).catch(() => {}) // silently ignore — reply was still sent
       }
@@ -901,7 +933,7 @@ export default function TeacherMessagesPage() {
                     )}
                     {expandedThreadId !== group.studentId && group.messages[0] && (
                       <span style={{ fontSize: '12px', color: 'var(--gray-mid)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {(group.messages[0].teacherReply && new Date(group.messages[0].repliedAt || 0) > new Date(group.messages[0].sentAt) ? 'You: ' + group.messages[0].teacherReply : group.messages[0].content).replace(/^\[ref:sub=[^\]]+\]\n?/, '').slice(0, 90)}
+                        {(group.messages[0].teacherReply && new Date(group.messages[0].repliedAt || 0) > new Date(group.messages[0].sentAt) ? 'You: ' + group.messages[0].teacherReply : (group.messages[0].isTeacherInitiated ? 'You: ' : '') + group.messages[0].content).replace(/^\[ref:sub=[^\]]+\]\n?/, '').slice(0, 90)}
                       </span>
                     )}
                     <span style={{ fontSize: '12px', color: 'var(--gray-mid)', marginLeft: 'auto', whiteSpace: 'nowrap' }}>
@@ -1002,7 +1034,7 @@ export default function TeacherMessagesPage() {
                           {isExpanded && (
                             <div style={{ borderTop: '1px solid var(--gray-light)', padding: '16px 18px' }}>
                               <div style={{ background: 'rgba(123,79,166,0.04)', borderRadius: '8px', padding: '12px 14px', marginBottom: '16px' }}>
-                                <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--plum)', marginBottom: '6px', letterSpacing: '1px', textTransform: 'uppercase' }}>Question</div>
+                                <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--plum)', marginBottom: '6px', letterSpacing: '1px', textTransform: 'uppercase' }}>{msg.isTeacherInitiated ? 'You sent' : 'Question'}</div>
                                 {(() => {
                                   const refMatch = msg.content.match(/^\[ref:sub=([^\]]+)\]\n?/)
                                   const submissionId = refMatch ? refMatch[1] : null
@@ -1040,7 +1072,7 @@ export default function TeacherMessagesPage() {
                               {tab === 'active' && (
                                 <div>
                                   <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--gray-mid)', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '8px' }}>
-                                    {msg.teacherReply ? 'Update Reply' : 'Reply'}
+                                    {msg.teacherReply || msg.isTeacherInitiated ? 'Send another message' : 'Reply'}
                                   </label>
                                   <textarea
                                     value={replyText[msg.id] || ''}
