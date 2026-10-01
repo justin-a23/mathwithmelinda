@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { machineToken, gqlClient, listAll } from '@/app/lib/machineAuth'
+import { needsGrading } from '@/app/lib/needsGrading'
 
 /**
  * Read-only status feed for Melinda's NAS dashboard (Homepage's customapi
@@ -168,7 +169,8 @@ async function build(): Promise<Summary> {
   // Unread = messages from students awaiting Melinda (teacher-initiated threads
   // are hers; archived ones are off her desk). Mirrors the nav badge's filter.
   const unreadLive = unread.filter((m) => !m.isTeacherInitiated && !m.isArchivedByTeacher)
-  const ungraded = submissions.filter((s) => !s.grade && s.status !== 'returned')
+  // Same rule as the nav badge and Grade Work page (app/lib/needsGrading.ts), so the three numbers agree.
+  const ungraded = submissions.filter(needsGrading)
 
   const out: Record<string, CourseSummary> = {}
   for (const c of courses) {
