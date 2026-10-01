@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import nodemailer from 'nodemailer'
-import { CognitoIdentityProviderClient, InitiateAuthCommand } from '@aws-sdk/client-cognito-identity-provider'
 import { PutObjectCommand } from '@aws-sdk/client-s3'
-import { APPSYNC_ENDPOINT } from '@/app/lib/appsync'
+import { machineToken, gqlClient, listAll } from '@/app/lib/machineAuth'
 import { s3, SUBMISSIONS_BUCKET } from '@/app/lib/s3'
 
 /**
@@ -45,41 +44,6 @@ function secretOk(req: NextRequest): boolean {
   return a.length === b.length && crypto.timingSafeEqual(a, b)
 }
 
-/** Sign in the machine user; returns an access token AppSync accepts. */
-async function machineToken(): Promise<string> {
-  const email = process.env.CRON_COGNITO_EMAIL
-  const password = process.env.CRON_COGNITO_PASSWORD
-  const clientId = process.env.COGNITO_CLIENT_ID
-  if (!email || !password || !clientId) {
-    throw new Error('CRON_COGNITO_EMAIL / CRON_COGNITO_PASSWORD / COGNITO_CLIENT_ID must be set')
-  }
-  const cog = new CognitoIdentityProviderClient({ region: 'us-east-1' })
-  const res = await cog.send(new InitiateAuthCommand({
-    ClientId: clientId,
-    AuthFlow: 'USER_PASSWORD_AUTH',
-    AuthParameters: { USERNAME: email, PASSWORD: password },
-  }))
-  const token = res.AuthenticationResult?.AccessToken
-  if (!token) throw new Error('machine user sign-in returned no token (challenge: ' + res.ChallengeName + ')')
-  return token
-}
-
-/** Same throw-on-errors contract as appsyncClient, but always token-authed. */
-function gqlClient(token: string) {
-  return async function gql<T = any>(query: string, variables: Record<string, unknown> = {}): Promise<T> {
-    const res = await fetch(APPSYNC_ENDPOINT, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: token },
-      body: JSON.stringify({ query, variables }),
-    })
-    const json: any = await res.json()
-    if (json?.errors?.length) {
-      throw new Error(json.errors.map((e: any) => e?.message || 'unknown error').join('; '))
-    }
-    return json?.data as T
-  }
-}
-
 const listActiveStudents = /* GraphQL */ `
   query ListActiveStudents($nextToken: String) {
     listStudentProfiles(filter: { status: { eq: "active" } }, limit: 200, nextToken: $nextToken) {
@@ -113,24 +77,6 @@ const listStudentSubmissions = /* GraphQL */ `
     }
   }
 `
-
-/** Drain a paginated list query. Filtered scans can return empty pages with a
- *  nextToken, so the loop runs until the token is gone, not until a page is empty. */
-async function listAll<T>(
-  gql: ReturnType<typeof gqlClient>,
-  query: string,
-  field: string,
-  variables: Record<string, unknown> = {}
-): Promise<T[]> {
-  const out: T[] = []
-  let nextToken: string | null = null
-  do {
-    const data: any = await gql(query, { ...variables, nextToken })
-    out.push(...(data[field]?.items || []))
-    nextToken = data[field]?.nextToken || null
-  } while (nextToken)
-  return out
-}
 
 // ── Week math (America/Chicago) ──────────────────────────────────────────────
 
@@ -335,7 +281,7 @@ export async function POST(req: NextRequest) {
       // Weekend visibility means a student can finish Monday's lesson on
       // Saturday — don't remind them about work they already submitted.
       try {
-        const subs = await gql(listStudentSubmissions, { studentId: s.userId })
+        const subs = await gql<{ listSubmissionsByStudentId: { items: { content: string | null }[] } }>(listStudentSubmissions, { studentId: s.userId })
         const submitted = new Set<string>()
         for (const sub of subs.listSubmissionsByStudentId?.items || []) {
           try {
