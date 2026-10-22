@@ -42,6 +42,8 @@ import { useRoleGuard } from '../../../hooks/useRoleGuard'
 import MathToolbar from '../../../components/MathToolbar'
 import MathRenderer, { MATH_DELIMITER_SPLIT } from '../../../components/MathRenderer'
 import DiagramRenderer from '../../../components/DiagramRenderer'
+import DiagramVersionToggle, { type DiagramVersions } from '../../../components/DiagramVersionToggle'
+import { cleanDiagramFile } from '../../../lib/cleanDiagramFile'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { lessonBareTitle } from '@/app/lib/lessonTitle'
 import { sortForPrint, teacherPrintSubset } from '@/app/lib/printOrder'
@@ -186,6 +188,9 @@ export default function LessonLibraryPage() {
   const [pendingDiagramPreview, setPendingDiagramPreview] = useState<string | null>(null)
   const [editingDiagramFile, setEditingDiagramFile] = useState<File | null>(null)
   const [editingDiagramPreview, setEditingDiagramPreview] = useState<string | null>(null)
+  // Set when an uploaded photo was auto-cleaned, so the teacher can switch back
+  const [pendingDiagramVersions, setPendingDiagramVersions] = useState<DiagramVersions | null>(null)
+  const [editingDiagramVersions, setEditingDiagramVersions] = useState<DiagramVersions | null>(null)
   const [editingDiagramRemoved, setEditingDiagramRemoved] = useState(false)
   const diagramInputRef = useRef<HTMLInputElement>(null)
   const editDiagramInputRef = useRef<HTMLInputElement>(null)
@@ -377,8 +382,10 @@ export default function LessonLibraryPage() {
     setQuestions([])
     setDiagramUrls({})
     setPendingDiagramFile(null)
+    setPendingDiagramVersions(null)
     setPendingDiagramPreview(null)
     setEditingDiagramFile(null)
+    setEditingDiagramVersions(null)
     setEditingDiagramPreview(null)
     setEditingDiagramRemoved(false)
     setNewQuestion({ questionText: '', questionType: 'number', choices: '', correctAnswer: '' })
@@ -644,6 +651,7 @@ export default function LessonLibraryPage() {
       setIsDirty(true)
       setNewQuestion({ questionText: '', questionType: 'number', choices: '', correctAnswer: '' })
       setPendingDiagramFile(null)
+      setPendingDiagramVersions(null)
       setPendingDiagramPreview(null)
     } catch (err) {
       console.error('Error adding question:', err)
@@ -714,6 +722,7 @@ export default function LessonLibraryPage() {
       correctAnswer: q.correctAnswer || ''
     })
     setEditingDiagramFile(null)
+    setEditingDiagramVersions(null)
     setEditingDiagramPreview(null)
     setEditingDiagramRemoved(false)
   }
@@ -801,6 +810,7 @@ export default function LessonLibraryPage() {
       setIsDirty(true)
       setEditingQuestionId(null)
       setEditingDiagramFile(null)
+      setEditingDiagramVersions(null)
       setEditingDiagramPreview(null)
       setEditingDiagramRemoved(false)
     } catch (err) {
@@ -2092,7 +2102,7 @@ export default function LessonLibraryPage() {
                                                     {editingDiagramPreview ? (
                                                       <div style={{ marginBottom: '8px', maxWidth: '200px', position: 'relative' }}>
                                                         <img src={editingDiagramPreview} alt="New diagram" style={{ width: '100%', borderRadius: '6px', border: '1px solid var(--gray-light)' }} />
-                                                        <button onClick={() => { setEditingDiagramFile(null); setEditingDiagramPreview(null) }}
+                                                        <button onClick={() => { setEditingDiagramFile(null); setEditingDiagramPreview(null); setEditingDiagramVersions(null) }}
                                                           style={{ position: 'absolute', top: '4px', right: '4px', background: '#e05252', color: 'white', border: 'none', borderRadius: '50%', width: '22px', height: '22px', cursor: 'pointer', fontSize: '12px', lineHeight: '22px', textAlign: 'center' }}>
                                                           x
                                                         </button>
@@ -2108,6 +2118,13 @@ export default function LessonLibraryPage() {
                                                     ) : editingDiagramRemoved ? (
                                                       <p style={{ fontSize: '12px', color: '#e05252', margin: '0 0 6px' }}>Diagram will be removed on save.</p>
                                                     ) : null}
+                                                    {editingDiagramVersions && editingDiagramPreview && (
+                                                      <DiagramVersionToggle
+                                                        versions={editingDiagramVersions}
+                                                        current={editingDiagramFile}
+                                                        onPick={(file, url) => { setEditingDiagramFile(file); setEditingDiagramPreview(url) }}
+                                                      />
+                                                    )}
                                                     <input
                                                       ref={editDiagramInputRef}
                                                       type="file"
@@ -2118,9 +2135,19 @@ export default function LessonLibraryPage() {
                                                         if (f) {
                                                           setEditingDiagramFile(f)
                                                           setEditingDiagramRemoved(false)
+                                                          setEditingDiagramVersions(null)
                                                           const url = URL.createObjectURL(f)
                                                           setEditingDiagramPreview(url)
+                                                          cleanDiagramFile(f).then(cleaned => {
+                                                            if (!cleaned) return
+                                                            const cleanedUrl = URL.createObjectURL(cleaned)
+                                                            // Ignore if she already picked a different file
+                                                            setEditingDiagramFile(cur => cur === f ? cleaned : cur)
+                                                            setEditingDiagramPreview(cur => cur === url ? cleanedUrl : cur)
+                                                            setEditingDiagramVersions({ original: f, originalUrl: url, cleaned, cleanedUrl })
+                                                          })
                                                         }
+                                                        e.target.value = ''
                                                       }}
                                                     />
                                                     <button
@@ -2358,11 +2385,18 @@ export default function LessonLibraryPage() {
                                         {pendingDiagramPreview && (
                                           <div style={{ marginBottom: '8px', maxWidth: '200px', position: 'relative' }}>
                                             <img src={pendingDiagramPreview} alt="Diagram preview" style={{ width: '100%', borderRadius: '6px', border: '1px solid var(--gray-light)' }} />
-                                            <button onClick={() => { setPendingDiagramFile(null); setPendingDiagramPreview(null) }}
+                                            <button onClick={() => { setPendingDiagramFile(null); setPendingDiagramPreview(null); setPendingDiagramVersions(null) }}
                                               style={{ position: 'absolute', top: '4px', right: '4px', background: '#e05252', color: 'white', border: 'none', borderRadius: '50%', width: '22px', height: '22px', cursor: 'pointer', fontSize: '12px', lineHeight: '22px', textAlign: 'center' }}>
                                               x
                                             </button>
                                           </div>
+                                        )}
+                                        {pendingDiagramVersions && pendingDiagramPreview && (
+                                          <DiagramVersionToggle
+                                            versions={pendingDiagramVersions}
+                                            current={pendingDiagramFile}
+                                            onPick={(file, url) => { setPendingDiagramFile(file); setPendingDiagramPreview(url) }}
+                                          />
                                         )}
                                         <input
                                           ref={diagramInputRef}
@@ -2373,9 +2407,19 @@ export default function LessonLibraryPage() {
                                             const f = e.target.files?.[0]
                                             if (f) {
                                               setPendingDiagramFile(f)
+                                              setPendingDiagramVersions(null)
                                               const url = URL.createObjectURL(f)
                                               setPendingDiagramPreview(url)
+                                              cleanDiagramFile(f).then(cleaned => {
+                                                if (!cleaned) return
+                                                const cleanedUrl = URL.createObjectURL(cleaned)
+                                                // Ignore if she already picked a different file
+                                                setPendingDiagramFile(cur => cur === f ? cleaned : cur)
+                                                setPendingDiagramPreview(cur => cur === url ? cleanedUrl : cur)
+                                                setPendingDiagramVersions({ original: f, originalUrl: url, cleaned, cleanedUrl })
+                                              })
                                             }
+                                            e.target.value = ''
                                           }}
                                         />
                                         <button
