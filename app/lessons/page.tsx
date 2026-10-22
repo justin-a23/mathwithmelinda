@@ -1012,13 +1012,15 @@ function LessonPageInner() {
       const qNumLabel = printLabel(q, printQNum)
       const qBody = renderMath(q.questionText.replace(/^\d+\.\s+/, ''))
       const diagramSrc = diagramDataUrls[q.id]
+      // An attached image IS the work surface (e.g. a blank number line to
+      // graph on), so it prints wider and replaces the work box
       const diagramHTML = diagramSrc
-        ? `<div class="diagram"><img src="${diagramSrc}" class="diagram-img" /></div>`
+        ? `<div class="diagram work-surface"><img src="${diagramSrc}" class="diagram-img" /></div>`
         : ''
       return `<div class="work-item">
         <div class="work-label"><span class="qnum">${qNumLabel}</span> ${qBody}</div>
         ${diagramHTML}
-        <div class="work-box"></div>
+        ${diagramSrc ? '' : '<div class="work-box"></div>'}
       </div>`
     }).join('')
 
@@ -1038,6 +1040,7 @@ function LessonPageInner() {
         .header .field{flex:1;font-size:13px;color:#333;padding-bottom:3px;border-bottom:1px solid #888}
         .diagram{margin:8px 0 12px;max-width:320px}
         .diagram-img{width:100%;border:1px solid #ccc;border-radius:4px;display:block}
+        .diagram.work-surface{max-width:520px}
         .work-item{margin-bottom:18px;page-break-inside:avoid}
         .section-header.multi{text-transform:none;letter-spacing:normal}
         .section-header{white-space:pre-line;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#5b2d8e;border-bottom:2px solid #d8b4fe;padding-bottom:5px;margin:28px 0 16px;page-break-after:avoid}

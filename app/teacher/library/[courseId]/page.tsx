@@ -929,15 +929,17 @@ export default function LessonLibraryPage() {
       const qNumLabel = bookNumMatch ? bookNumMatch[1] : `${origNums.get(q.id) ?? ''}.`
       const qBody = renderMath(q.questionText.replace(/^\d+\.\s+/, ''))
       const diagramSrc = diagramDataUrls[q.id]
+      // An attached image IS the work surface (e.g. a blank number line to
+      // graph on), so it prints wider and replaces the work box
       const diagramHTML = diagramSrc
-        ? `<div class="diagram"><img src="${diagramSrc}" class="diagram-img" /></div>`
+        ? `<div class="diagram work-surface"><img src="${diagramSrc}" class="diagram-img" /></div>`
         : specSvgs[q.id]
           ? `<div class="diagram diagram-spec">${specSvgs[q.id]}</div>`
           : ''
       return `<div class="work-item">
         <div class="work-label"><span class="qnum">${qNumLabel}</span> ${qBody}</div>
         ${diagramHTML}
-        <div class="work-box"></div>
+        ${diagramSrc ? '' : '<div class="work-box"></div>'}
       </div>`
     }).join('')
 
@@ -960,6 +962,7 @@ export default function LessonLibraryPage() {
         .header .field{flex:1;font-size:13px;color:#333;padding-bottom:3px;border-bottom:1px solid #888}
         .diagram{margin:8px 0 12px;max-width:320px}
         .diagram-img{width:100%;border:1px solid #ccc;border-radius:4px;display:block}
+        .diagram.work-surface{max-width:520px}
         .diagram-spec svg{max-width:100%;height:auto;display:block;background:#fff;border:1px solid #ccc;border-radius:4px}
         .work-item{margin-bottom:18px;page-break-inside:avoid}
         /* Normal inline flow, NOT flex: the body is raw text nodes mixed with
@@ -1057,8 +1060,9 @@ export default function LessonLibraryPage() {
       const qNumLabel = bookNumMatch ? bookNumMatch[1] : `${qNum}.`
       const qBody = renderMath(q.questionText.replace(/^\d+\.\s+/, ''))
       const diagramSrc = diagramDataUrls[q.id]
+      const imageIsWorkSurface = q.questionType === 'show_work' && !!diagramSrc
       const diagramHTML = diagramSrc
-        ? `<div class="diagram"><img src="${diagramSrc}" class="diagram-img" /></div>`
+        ? `<div class="diagram${imageIsWorkSurface ? ' work-surface' : ''}"><img src="${diagramSrc}" class="diagram-img" /></div>`
         : specSvgs[q.id]
           ? `<div class="diagram diagram-spec">${specSvgs[q.id]}</div>`
           : ''
@@ -1073,7 +1077,8 @@ export default function LessonLibraryPage() {
         }).join('')
         answerHTML = `${note}<div class="choices">${choicesHTML}</div>`
       } else if (q.questionType === 'show_work') {
-        answerHTML = '<div class="work-box"></div>'
+        // An attached image is the work surface, so no extra box
+        answerHTML = imageIsWorkSurface ? '' : '<div class="work-box"></div>'
       } else {
         // number / short_text — a shorter blank box replaces the typed input
         answerHTML = '<div class="work-box answer-box"></div>'
@@ -1104,6 +1109,7 @@ export default function LessonLibraryPage() {
         .header .field{flex:1;font-size:13px;color:#333;padding-bottom:3px;border-bottom:1px solid #888}
         .diagram{margin:8px 0 12px;max-width:320px}
         .diagram-img{width:100%;border:1px solid #ccc;border-radius:4px;display:block}
+        .diagram.work-surface{max-width:520px}
         .diagram-spec svg{max-width:100%;height:auto;display:block;background:#fff;border:1px solid #ccc;border-radius:4px}
         .work-item{margin-bottom:18px;page-break-inside:avoid}
         .work-label{margin-bottom:6px;line-height:1.6}
