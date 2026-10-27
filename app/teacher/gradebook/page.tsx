@@ -287,18 +287,30 @@ export default function GradebookPage() {
       }
 
       // 3. Filter to this course + date range (quarter or full semester).
-      // The full-semester floor extends to the earliest active student's
-      // enrollment when that predates the semester start: work assigned
-      // pre-season (early starts, demo weeks) is still this term's work, and a
-      // hard floor at startDate rendered the whole gradebook empty before the
-      // season began. Last year's plans stay out — nobody currently active was
-      // enrolled back then. Explicit quarter selections keep their exact range.
+      //
+      // Quarter view: a week belongs to the quarter that contains its Monday
+      // (weekStartDate), the same rule /teacher/report-card uses for the
+      // per-quarter breakdown. The gradebook used to keep a week if it merely
+      // OVERLAPPED the quarter (week end >= quarter start), so the week that
+      // ended on Q2's first Monday showed under both Q1 and Q2 and its five
+      // lessons were double-listed (Pre-Algebra 40-44, 2026-10-27). Matching
+      // the report card means the two screens agree on which lessons a
+      // quarter holds; report-card computation itself is untouched.
+      //
+      // Full-semester view: the floor extends to the earliest active
+      // student's enrollment when that predates the semester start — work
+      // assigned pre-season (early starts, demo weeks) is still this term's
+      // work, and a hard floor at startDate rendered the whole gradebook empty
+      // before the season began. Last year's plans stay out — nobody
+      // currently active was enrolled back then.
       const quarters = [...(sem.academicYear?.quarters?.items || [])].sort((a, b) => a.order - b.order)
       const selectedQ = quarters.find(q => q.id === selectedQuarterId)
-      const filterEnd = selectedQ ? selectedQ.endDate : sem.endDate
-      let floorMs: number
+      let plansInRange: WeeklyPlan[]
       if (selectedQ) {
-        floorMs = new Date(selectedQ.startDate + 'T00:00:00').getTime()
+        plansInRange = allPlans.filter(p =>
+          p.weekStartDate >= selectedQ.startDate
+          && p.weekStartDate <= selectedQ.endDate
+          && (!sem.courseId || p.courseWeeklyPlansId === sem.courseId))
       } else {
         const semStartMs = new Date(sem.startDate + 'T00:00:00').getTime()
         const stamps = students
@@ -306,16 +318,15 @@ export default function GradebookPage() {
           .filter(Boolean)
           .map(d => new Date(d as string).getTime())
           .filter(n => !isNaN(n))
-        floorMs = stamps.length ? Math.min(semStartMs, Math.min(...stamps)) : semStartMs
+        const floorMs = stamps.length ? Math.min(semStartMs, Math.min(...stamps)) : semStartMs
+        plansInRange = allPlans.filter(p => {
+          if (p.weekStartDate > sem.endDate) return false
+          const ws = new Date(p.weekStartDate + 'T00:00:00')
+          const we = new Date(ws); we.setDate(ws.getDate() + 7)
+          if (we.getTime() < floorMs) return false
+          return !sem.courseId || p.courseWeeklyPlansId === sem.courseId
+        })
       }
-
-      const plansInRange = allPlans.filter(p => {
-        if (p.weekStartDate > filterEnd) return false
-        const ws = new Date(p.weekStartDate + 'T00:00:00')
-        const we = new Date(ws); we.setDate(ws.getDate() + 7)
-        if (we.getTime() < floorMs) return false
-        return !sem.courseId || p.courseWeeklyPlansId === sem.courseId
-      })
 
       // 3. Collect all plan items with lessons + track assigned students per lesson
       // lessonAssignedStudents: lessonId → null (all students) or Set<userId>
