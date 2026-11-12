@@ -1,6 +1,6 @@
 # TODO: Migrate to Amplify Gen 2
 
-**Status**: Planned for Summer 2026
+**Status**: Done. Production cut over on 2026-07-28. What is left is the Gen 1 decommission (step 7) and the "Post-cutover" list.
 **Hard deadline**: Done by Feb 2027 (90 days before AWS EOL on May 1, 2027)
 
 ## Why
@@ -243,6 +243,15 @@ scheduling, submission upload, messaging. Auth-mode fallout lives here.
 
 Only after a full school week on Gen 2. Delete the Gen 1 API last — it is the
 rollback.
+
+**Status 2026-11-12:** the Gen 1 API key has been deleted, so that API rejects
+every request and is no longer a rollback. `scripts/migrate-gen1-to-gen2.mjs`
+and `scripts/verify-gen2-migration.mjs` (steps 4 and 5) were removed in the
+same change because they could only read Gen 1 through that key. They remain
+in git history. Still to do: export and remove the Gen 1 API and its tables.
+Do not use `amplify delete` and do not delete the
+`amplify-mathwithmelinda-dev-fe953` stack: it owns the Cognito user pool that
+`amplify/auth/resource.ts` references.
 
 ## Post-cutover, not blocking
 

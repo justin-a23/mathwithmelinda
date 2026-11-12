@@ -1,7 +1,7 @@
 # TODO: Put the AppSync API behind real authorization
 
-**Status**: Open — found 2026-07-28
-**Severity**: High. Unauthenticated read/write access to student PII in production.
+**Status**: Closed 2026-11-12 (found 2026-07-28). Production moved to Amplify Gen 2 on 2026-07-28, where the default auth mode is the Cognito user pool and the API key can only read invites. The Gen 1 API described below had its key deleted on 2026-11-12 and now rejects every request. Remaining hardening (row-level and field-level rules) is tracked under "Post-cutover" in `TODO-AMPLIFY-GEN-2.md`. The rest of this file is kept as history.
+**Severity when open**: High. Unauthenticated read/write access to student PII in production.
 
 ## The problem
 

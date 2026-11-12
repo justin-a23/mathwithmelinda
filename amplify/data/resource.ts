@@ -708,7 +708,13 @@ export const data = defineData({
     // NOTE: apiKey remains configured ONLY because the invite-redemption flow
     // above uses allow.guest(). Once redemption moves behind a server route,
     // delete this block entirely.
-    apiKeyAuthorizationMode: { expiresInDays: 30 },
+    //
+    // 365, not 30: the expiry is recomputed when a deploy runs and at no other
+    // time. At 30 days, a month without a deploy lets the key lapse, and the
+    // signed-out invite pages (/join, /parent/accept) and /api/invite-confirm
+    // fail Unauthorized while signed-in users notice nothing. In November 2026
+    // it came within two weeks of doing that.
+    apiKeyAuthorizationMode: { expiresInDays: 365 },
   },
 })
 

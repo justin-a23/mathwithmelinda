@@ -14,10 +14,10 @@ Building a custom LMS (Learning Management System) for Melinda, a homeschool mat
 - **Frontend:** Next.js 16 (app router, TypeScript)
 - **Hosting:** AWS Amplify (app ID: dg6hiwssnna5c, branch: main)
 - **Auth:** AWS Cognito — 4 groups: teacher, admin (IT/support, teacher-equivalent), student, parent
-- **Database:** AWS DynamoDB via AppSync GraphQL (Amplify Gen 1)
+- **Database:** AWS DynamoDB via AppSync GraphQL (Amplify Gen 2 since 2026-07-28)
 - **Video hosting:** AWS S3 bucket: mathwithmelinda-videos + CloudFront (dgmfzo1xk5r4e.cloudfront.net)
 - **Submissions:** AWS S3 bucket: mathwithmelinda-submissions
-- **GraphQL endpoint:** https://irzsqprjcjco5kq7w7g72zm7qy.appsync-api.us-east-1.amazonaws.com/graphql
+- **GraphQL endpoint:** read from `amplify_outputs.json` (`data.url`), which the build generates. Never hardcode it. The old Gen 1 endpoint is retired; see `CLAUDE.md`, "DynamoDB / AppSync".
 - **AWS region:** us-east-1
 - **AWS user:** amplify-dev
 - **IAM policy:** MathWithMelindaS3UploadPolicy (covers both S3 buckets)

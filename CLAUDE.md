@@ -47,10 +47,12 @@ The project brief's "What's Left to Build" list is partially outdated. Here's th
 
 ### DynamoDB / AppSync
 - **400KB item size limit** — profile pictures MUST be compressed before base64 encoding. Use the `compressImage()` utility (200×200 JPEG at quality 0.75) already in `app/dashboard/page.tsx`
-- **AppSync API key comes from `APPSYNC_API_KEY`** in `.env.local` (gitignored), read via `app/lib/appsync.ts`. Never hardcode it — this repo is public. Server routes use `appsyncHeaders()`; scripts read it from the `.env.local` parser.
-- **The AppSync API has no `@auth` rules and defaults to `API_KEY` auth**, so the key is bundled into the client JS and is effectively public. Rotating it does not make the API private — see `TODO-APPSYNC-AUTH.md`.
-- AppSync endpoint: `https://irzsqprjcjco5kq7w7g72zm7qy.appsync-api.us-east-1.amazonaws.com/graphql`
-- GraphQL schema: `amplify/backend/api/mathwithmelinda/schema.graphql`
+- **The API is Amplify Gen 2** (cut over 2026-07-28). The endpoint and API key come from `amplify_outputs.json` (`data.url`, `data.api_key`), which the build's backend phase generates and which is gitignored. Never hardcode either: this repo is public.
+- **Default auth is the Cognito user pool.** Server routes call AppSync as the signed-in user with `appsyncClient(auth.token)` from `app/lib/appsync.ts`. That needs `APPSYNC_AUTH_MODE=userPool`, which is set in the Amplify environment and in `.env.local`. Nothing sets `APPSYNC_API_KEY` any more.
+- **The API key is public by design and can only read `StudentInvite` and `ParentInvite`**, for the signed-out `/join/[token]` and `/parent/accept/[token]` pages and `app/api/invite-confirm`. Its expiry (`expiresInDays` in `amplify/data/resource.ts`) is only renewed when a deploy runs.
+- GraphQL schema and auth rules: `amplify/data/resource.ts`
+- Scripts and ad hoc read-only queries sign in as the machine user (`CRON_COGNITO_EMAIL` and `CRON_COGNITO_PASSWORD` in `.env.local`) and send its access token. Copy the pattern in `scripts/student-missing-work.mjs`.
+- **The Gen 1 API (`irzsq...`) is retired.** Its key was deleted on 2026-11-12, it rejects every request, and its tables are a July 2026 snapshot. Do not point anything at it. Do not run `amplify delete` or delete the `amplify-mathwithmelinda-dev-fe953` stack either: that stack still owns the Cognito user pool.
 
 ### Cognito
 - User pool ID: `us-east-1_LvIY8oPmV`
