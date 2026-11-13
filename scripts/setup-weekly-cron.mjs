@@ -17,8 +17,12 @@ const env = Object.fromEntries(
     .filter(l => l.includes('=') && !l.startsWith('#'))
     .map(l => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1)])
 )
-process.env.AWS_ACCESS_KEY_ID = env.AWS_ACCESS_KEY_ID
-process.env.AWS_SECRET_ACCESS_KEY = env.AWS_SECRET_ACCESS_KEY
+// The key in .env.local is the app runtime key and is refused for admin work.
+// To run this with an admin profile: AWS_PROFILE=<profile> node scripts/<this file>
+if (!process.env.AWS_PROFILE) {
+  process.env.AWS_ACCESS_KEY_ID = env.AWS_ACCESS_KEY_ID
+  process.env.AWS_SECRET_ACCESS_KEY = env.AWS_SECRET_ACCESS_KEY
+}
 if (!env.CRON_SECRET) throw new Error('CRON_SECRET missing from .env.local')
 
 const REGION = 'us-east-1'

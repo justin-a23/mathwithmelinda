@@ -19,8 +19,8 @@ Building a custom LMS (Learning Management System) for Melinda, a homeschool mat
 - **Submissions:** AWS S3 bucket: mathwithmelinda-submissions
 - **GraphQL endpoint:** read from `amplify_outputs.json` (`data.url`), which the build generates. Never hardcode it. The old Gen 1 endpoint is retired; see `CLAUDE.md`, "DynamoDB / AppSync".
 - **AWS region:** us-east-1
-- **AWS user:** amplify-dev
-- **IAM policy:** MathWithMelindaS3UploadPolicy (covers both S3 buckets)
+- **AWS user:** amplify-dev (app runtime only; see "AWS Credentials" in `CLAUDE.md`)
+- **IAM policies:** MathWithMelindaS3UploadPolicy (both S3 buckets), mwm-app-cognito (user pool admin calls), MWMUploadTokensDynamoDB (the three `mwm-*` tables)
 
 ## Branding
 - **Primary color:** Plum #7B4FA6

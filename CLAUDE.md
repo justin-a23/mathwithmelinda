@@ -110,9 +110,10 @@ WeeklyPlan → WeeklyPlanItem (scheduled week view)
 - `MathInput` / `MathRenderer` / `MathToolbar` — KaTeX math entry and display
 
 ## AWS Credentials
-- Stored in `.env.local` (gitignored)
-- `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` for server-side routes
-- IAM user: `amplify-dev`, policy: `MathWithMelindaS3UploadPolicy`
+- `.env.local` (gitignored) holds `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` for the server-side routes. Production gets the same key as `MWM_ACCESS_KEY_ID` + `MWM_SECRET_ACCESS_KEY` on the Amplify branch.
+- That key belongs to IAM user `amplify-dev`, which is the app runtime identity and nothing more. It can get, put and list in the two S3 buckets, make the Cognito admin calls the routes use on the user pool, and read and write the `mwm-upload-tokens`, `mwm-payments` and `mwm-payment-schedules` tables. It is refused for everything else, including the Gen 2 model tables, IAM, Amplify, AppSync, Lambda and CloudFormation.
+- A route that needs a new AWS permission will fail with AccessDenied until the policy is widened on purpose. Widen the policy; do not swap in a broader key.
+- Admin work (the setup scripts in `scripts/`, sandbox deploys, direct table fixes) needs a separate admin profile that is not in this repo or in `.env.local`. Those scripts honor `AWS_PROFILE`. To read production data, sign in as the machine user instead (see "DynamoDB / AppSync").
 
 ## S3 Buckets
 - Videos: `mathwithmelinda-videos` (CloudFront: `dgmfzo1xk5r4e.cloudfront.net`)
